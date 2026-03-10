@@ -8,148 +8,179 @@
   <style>
     :root {
       --bg: #f7f1e8;
-      --panel: rgba(255, 252, 247, 0.96);
+      --panel: rgba(255, 251, 245, 0.96);
       --ink: #1c2434;
-      --muted: #647089;
-      --line: #e5d7c4;
+      --muted: #667287;
+      --line: #e4d7c6;
       --orange: #ff845d;
-      --yellow: #ffd76a;
+      --yellow: #ffd86c;
       --blue: #6fb5ff;
-      --green: #4db78f;
-      --pink: #ffb7b0;
-      --shadow: 0 18px 40px rgba(28, 36, 52, 0.09);
+      --green: #4eb88f;
+      --pink: #ffb8b0;
+      --shadow: 0 24px 50px rgba(28, 36, 52, 0.1);
     }
 
     * { box-sizing: border-box; }
-    html { scroll-behavior: smooth; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      overflow: hidden;
+    }
 
     body {
-      margin: 0;
       color: var(--ink);
       font-family: "Segoe UI", "Malgun Gothic", sans-serif;
       background:
-        radial-gradient(circle at top left, rgba(255, 132, 93, 0.16), transparent 22%),
-        radial-gradient(circle at top right, rgba(111, 181, 255, 0.16), transparent 24%),
-        linear-gradient(180deg, #fffaf3 0%, #f5ecdf 100%);
+        radial-gradient(circle at top left, rgba(255, 132, 93, 0.18), transparent 20%),
+        radial-gradient(circle at top right, rgba(111, 181, 255, 0.18), transparent 22%),
+        linear-gradient(180deg, #fffaf3 0%, #f4ecdf 100%);
     }
 
     a { color: inherit; }
+    h1, h2, h3, p { margin: 0; }
 
-    .wrap {
-      width: min(1240px, calc(100% - 28px));
+    .deck {
+      height: 100vh;
+      padding: 18px;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 14px;
+    }
+
+    .topbar,
+    .controls,
+    .slide {
+      width: min(1320px, 100%);
       margin: 0 auto;
-      padding: 20px 0 48px;
+    }
+
+    .topbar,
+    .controls,
+    .slide {
+      background: var(--panel);
+      border: 2px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+
+    .topbar,
+    .controls {
+      border-radius: 24px;
     }
 
     .topbar {
-      position: sticky;
-      top: 0;
-      z-index: 20;
+      padding: 12px 16px;
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       justify-content: space-between;
-      gap: 10px;
-      padding: 12px 16px;
-      margin-bottom: 18px;
-      border: 2px solid var(--line);
-      border-radius: 22px;
-      backdrop-filter: blur(16px);
-      background: rgba(255, 248, 239, 0.86);
+      gap: 12px;
     }
 
-    .topbar strong { font-size: 18px; }
-
-    .topnav {
+    .brand {
       display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-
-    .topnav a {
-      text-decoration: none;
-      background: #fff;
-      border: 2px solid var(--line);
-      border-radius: 999px;
-      padding: 10px 14px;
-      font-size: 14px;
-      font-weight: 800;
-    }
-
-    .hero,
-    .grid {
-      display: grid;
-      gap: 18px;
-      margin-bottom: 18px;
-    }
-
-    .hero { grid-template-columns: 1.25fr 0.75fr; }
-    .grid { grid-template-columns: repeat(12, 1fr); }
-    .span-3 { grid-column: span 3; }
-    .span-4 { grid-column: span 4; }
-    .span-5 { grid-column: span 5; }
-    .span-6 { grid-column: span 6; }
-    .span-7 { grid-column: span 7; }
-    .span-8 { grid-column: span 8; }
-    .span-12 { grid-column: span 12; }
-
-    .panel,
-    .stage,
-    .device,
-    .step,
-    .app,
-    .key,
-    .practice,
-    .clean-card,
-    .question,
-    .mini-flow {
-      background: var(--panel);
-      border: 2px solid var(--line);
-      border-radius: 28px;
-      box-shadow: var(--shadow);
-    }
-
-    .panel { padding: 26px; }
-    h1, h2, h3, p { margin: 0; }
-
-    .eyebrow {
-      display: inline-flex;
       align-items: center;
-      gap: 8px;
-      padding: 8px 12px;
-      margin-bottom: 16px;
-      border: 2px solid var(--line);
-      border-radius: 999px;
-      background: #fff;
-      font-size: 14px;
+      gap: 10px;
+      font-size: 18px;
       font-weight: 800;
     }
 
-    h1 {
-      font-size: clamp(46px, 8vw, 90px);
-      line-height: 0.95;
-      letter-spacing: -0.05em;
-      margin-bottom: 16px;
+    .badge {
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 2px solid var(--line);
+      background: #fff;
+      font-size: 13px;
+      font-weight: 900;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
     }
 
-    .hero p {
-      max-width: 18em;
-      font-size: clamp(20px, 2.5vw, 28px);
-      line-height: 1.35;
+    .helper {
+      font-size: 14px;
+      font-weight: 700;
       color: var(--muted);
     }
 
-    .section-title {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 18px;
+    .viewport {
+      position: relative;
+      width: min(1320px, 100%);
+      margin: 0 auto;
+      overflow: hidden;
+      border-radius: 34px;
     }
 
-    .num {
-      width: 54px;
-      height: 54px;
-      border-radius: 18px;
+    .slides {
+      height: 100%;
+      display: flex;
+      transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+      will-change: transform;
+    }
+
+    .slide {
+      flex: 0 0 100%;
+      height: calc(100vh - 184px);
+      border-radius: 34px;
+      padding: 34px;
+      display: grid;
+      gap: 18px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .slide::before,
+    .slide::after {
+      content: "";
+      position: absolute;
+      border-radius: 50%;
+      z-index: 0;
+      opacity: 0.85;
+    }
+
+    .slide::before {
+      width: 260px;
+      height: 260px;
+      top: -90px;
+      right: -50px;
+      background: rgba(255, 216, 108, 0.45);
+    }
+
+    .slide::after {
+      width: 220px;
+      height: 220px;
+      left: -80px;
+      bottom: -90px;
+      background: rgba(111, 181, 255, 0.26);
+    }
+
+    .slide > * {
+      position: relative;
+      z-index: 1;
+    }
+
+    .slide-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .slide-kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 2px solid var(--line);
+      background: #fff;
+      font-size: 14px;
+      font-weight: 900;
+    }
+
+    .slide-number {
+      width: 58px;
+      height: 58px;
+      border-radius: 20px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -160,65 +191,123 @@
       flex: none;
     }
 
-    .section-title h2 {
-      font-size: clamp(28px, 4vw, 42px);
-      letter-spacing: -0.03em;
+    .slide-title {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .slide-title h1,
+    .slide-title h2 {
+      font-size: clamp(34px, 4.8vw, 68px);
+      line-height: 0.96;
+      letter-spacing: -0.04em;
+    }
+
+    .slide-title.compact h2 {
+      font-size: clamp(28px, 4vw, 52px);
     }
 
     .sub {
-      margin-bottom: 16px;
-      font-size: 20px;
-      line-height: 1.45;
+      font-size: clamp(18px, 2vw, 26px);
+      line-height: 1.35;
+      color: var(--muted);
+    }
+
+    .hero-grid,
+    .two-col,
+    .three-col,
+    .four-col,
+    .five-col,
+    .six-col {
+      display: grid;
+      gap: 16px;
+    }
+
+    .hero-grid { grid-template-columns: 1.1fr 0.9fr; }
+    .two-col { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .three-col { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .four-col { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .five-col { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    .six-col { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+
+    .card,
+    .stat,
+    .device,
+    .flow,
+    .key,
+    .step,
+    .final-card {
+      background: #fff;
+      border: 2px solid var(--line);
+      border-radius: 28px;
+      padding: 20px;
+      min-height: 150px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .icon {
+      width: 82px;
+      height: 82px;
+      border-radius: 24px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #fff5d5, #ffe2d9);
+      border: 2px solid var(--line);
+      font-size: 40px;
+      margin-bottom: 14px;
+    }
+
+    .card strong,
+    .stat strong,
+    .device strong,
+    .flow strong,
+    .key strong,
+    .step strong,
+    .final-card strong {
+      display: block;
+      font-size: 26px;
+      line-height: 1.15;
+    }
+
+    .card span,
+    .stat span,
+    .device span,
+    .flow span,
+    .key span,
+    .step span,
+    .final-card span {
+      font-size: 18px;
+      line-height: 1.35;
       color: var(--muted);
     }
 
     .hero-visual {
-      min-height: 360px;
+      min-height: 100%;
+      display: grid;
+      place-items: center;
+    }
+
+    .teacher-board {
+      width: min(100%, 420px);
+      min-height: 100%;
+      border-radius: 34px;
+      padding: 24px;
+      background: linear-gradient(180deg, #fff 0%, #f6fbff 100%);
+      border: 3px solid var(--ink);
       position: relative;
       overflow: hidden;
     }
 
-    .blob {
-      position: absolute;
-      border-radius: 50%;
-    }
-
-    .blob.one {
-      width: 170px;
-      height: 170px;
-      left: 20px;
-      top: 18px;
-      background: var(--yellow);
-    }
-
-    .blob.two {
-      width: 210px;
-      height: 210px;
-      right: 12px;
-      bottom: 12px;
-      background: rgba(111, 181, 255, 0.55);
-    }
-
-    .teacher,
-    .screen,
-    .bubble {
-      position: absolute;
-      background: #fff;
-      border: 3px solid var(--ink);
-      border-radius: 24px;
-    }
-
-    .teacher {
-      inset: 58px 44px 92px 40px;
-      padding: 22px;
-    }
-
     .face {
-      width: 92px;
-      height: 92px;
-      margin-bottom: 16px;
+      width: 110px;
+      height: 110px;
       border-radius: 50%;
-      background: linear-gradient(180deg, #243352 0 28%, #ffd7b4 28% 100%);
+      margin-bottom: 18px;
+      background: linear-gradient(180deg, #22324c 0 28%, #ffd8b9 28% 100%);
       position: relative;
     }
 
@@ -226,162 +315,66 @@
     .face::after {
       content: "";
       position: absolute;
-      top: 38px;
-      width: 8px;
-      height: 8px;
+      top: 44px;
+      width: 9px;
+      height: 9px;
       border-radius: 50%;
-      background: #243352;
+      background: #22324c;
     }
 
-    .face::before { left: 26px; }
-    .face::after { right: 26px; }
+    .face::before { left: 30px; }
+    .face::after { right: 30px; }
 
-    .teacher h2 {
-      font-size: 32px;
-      margin-bottom: 8px;
+    .teacher-board h3 {
+      font-size: 38px;
+      line-height: 1;
+      margin-bottom: 10px;
     }
 
-    .teacher p {
-      font-size: 18px;
-      line-height: 1.45;
+    .teacher-board p {
+      font-size: 20px;
+      line-height: 1.4;
       color: var(--muted);
     }
 
-    .screen {
-      right: 22px;
-      bottom: 24px;
-      width: 180px;
-      height: 110px;
-      padding: 16px;
-      background: linear-gradient(180deg, #5ca6ff 0%, #cfe7ff 100%);
-      font-size: 22px;
-      font-weight: 900;
-      transform: rotate(-6deg);
-    }
-
-    .bubble {
-      right: 128px;
-      top: 40px;
-      width: 150px;
-      padding: 14px;
-      font-size: 26px;
-      text-align: center;
-      background: linear-gradient(180deg, #ffb7b0 0%, #ffe2dc 100%);
-      transform: rotate(8deg);
-    }
-
-    .goal-stack,
-    .question-row,
-    .app-row,
-    .device-row,
-    .step-row,
-    .key-row,
-    .practice-row,
-    .clean-row,
-    .flow-row {
-      display: grid;
-      gap: 12px;
-    }
-
-    .goal-stack { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .question-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .app-row { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-    .device-row { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-    .step-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    .key-row { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-    .practice-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    .clean-row { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-    .flow-row { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-
-    .stage,
-    .question,
-    .app,
-    .device,
-    .step,
-    .key,
-    .practice,
-    .clean-card,
-    .mini-flow {
-      padding: 18px;
-      min-height: 150px;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-    }
-
-    .big-icon {
-      width: 84px;
-      height: 84px;
+    .sticker,
+    .speech {
+      position: absolute;
       border-radius: 24px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 42px;
+      border: 3px solid var(--ink);
       background: #fff;
-      border: 2px solid var(--line);
-      margin-bottom: 14px;
+      font-weight: 900;
+      box-shadow: 0 12px 24px rgba(28, 36, 52, 0.12);
     }
 
-    .stage strong,
-    .question strong,
-    .app strong,
-    .device strong,
-    .step strong,
-    .key strong,
-    .practice strong,
-    .clean-card strong,
-    .mini-flow strong {
-      display: block;
-      font-size: 26px;
-      line-height: 1.15;
+    .speech {
+      right: 20px;
+      top: 20px;
+      padding: 14px 18px;
+      font-size: 28px;
+      background: linear-gradient(180deg, #ffd76c, #fff2bb);
+      transform: rotate(6deg);
     }
 
-    .stage span,
-    .question span,
-    .app span,
-    .device span,
-    .step span,
-    .key span,
-    .practice span,
-    .clean-card span,
-    .mini-flow span,
-    .tagline,
-    .timer {
-      display: block;
-      font-size: 18px;
-      line-height: 1.35;
-      color: var(--muted);
-    }
-
-    .timer-card {
-      display: grid;
-      gap: 12px;
-    }
-
-    .timer,
-    .tagline {
+    .sticker {
+      right: 18px;
+      bottom: 20px;
       padding: 16px 18px;
-      border-radius: 20px;
-      background: #fff;
-      border: 2px solid var(--line);
-      font-weight: 800;
-    }
-
-    .life-phone {
-      min-height: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      font-size: 24px;
+      background: linear-gradient(180deg, #6fb5ff, #d8ecff);
+      transform: rotate(-6deg);
+      text-align: center;
     }
 
     .phone {
-      width: min(100%, 300px);
+      width: min(100%, 360px);
       aspect-ratio: 10 / 18;
       padding: 18px;
-      border-radius: 34px;
-      background: #1e273a;
+      margin: 0 auto;
+      border-radius: 38px;
+      background: #1f2739;
+      box-shadow: inset 0 0 0 3px #394763;
       position: relative;
-      box-shadow: inset 0 0 0 3px #31405b;
     }
 
     .phone::before {
@@ -390,17 +383,17 @@
       left: 50%;
       top: 10px;
       transform: translateX(-50%);
-      width: 92px;
-      height: 10px;
+      width: 110px;
+      height: 12px;
       border-radius: 999px;
       background: #111827;
     }
 
     .phone-screen {
       height: 100%;
+      border-radius: 28px;
       padding: 16px;
-      border-radius: 24px;
-      background: linear-gradient(180deg, #fff8ec 0%, #eef6ff 100%);
+      background: linear-gradient(180deg, #fff7ee 0%, #eef6ff 100%);
       display: grid;
       gap: 12px;
       align-content: start;
@@ -410,12 +403,12 @@
       display: flex;
       align-items: center;
       gap: 12px;
-      padding: 12px;
+      padding: 12px 14px;
       border-radius: 18px;
       background: #fff;
       border: 2px solid var(--line);
+      font-size: 20px;
       font-weight: 800;
-      font-size: 18px;
     }
 
     .app-dot {
@@ -425,161 +418,147 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      font-size: 22px;
+      font-size: 20px;
     }
 
     .concept {
-      min-height: 320px;
       display: grid;
       place-items: center;
-      overflow: hidden;
+      min-height: 100%;
     }
 
     .computer-scene {
-      width: min(100%, 560px);
+      width: min(100%, 760px);
       display: grid;
       grid-template-columns: 1fr auto 1fr;
-      align-items: center;
       gap: 18px;
+      align-items: center;
     }
 
-    .input-column {
+    .stack {
       display: grid;
       gap: 12px;
     }
 
-    .tool-card,
-    .center-card {
-      border-radius: 24px;
-      background: #fff;
+    .tool,
+    .center-screen {
       border: 3px solid var(--ink);
-      padding: 18px;
+      border-radius: 28px;
+      background: #fff;
+      padding: 24px;
       text-align: center;
+      font-size: 30px;
       font-weight: 900;
     }
 
-    .tool-card {
-      min-height: 132px;
+    .center-screen {
+      min-height: 240px;
       display: grid;
       place-items: center;
-      font-size: 28px;
-    }
-
-    .center-card {
-      min-height: 220px;
-      min-width: 200px;
-      display: grid;
-      place-items: center;
-      font-size: 32px;
-      background: linear-gradient(180deg, #6fb5ff 0%, #dceeff 100%);
+      background: linear-gradient(180deg, #71b8ff 0%, #dceeff 100%);
     }
 
     .arrow {
-      font-size: 48px;
+      font-size: 60px;
       font-weight: 900;
       color: var(--orange);
-      text-align: center;
     }
 
-    .typing-hero {
-      min-height: 260px;
-      display: grid;
-      place-items: center;
-    }
-
-    .typing-board {
-      width: min(100%, 620px);
+    .typing-pills {
       display: grid;
       gap: 14px;
+      width: min(100%, 760px);
+      margin: 0 auto;
     }
 
     .typing-pill {
       display: flex;
       align-items: center;
-      gap: 12px;
-      padding: 16px 18px;
-      border-radius: 24px;
-      background: #fff;
+      gap: 14px;
+      padding: 18px 20px;
+      border-radius: 26px;
       border: 2px solid var(--line);
-      font-size: 26px;
+      background: #fff;
+      font-size: clamp(24px, 2.4vw, 36px);
       font-weight: 900;
     }
 
     .typing-pill .dot {
-      width: 56px;
-      height: 56px;
+      width: 60px;
+      height: 60px;
       border-radius: 18px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       background: linear-gradient(135deg, var(--yellow), var(--orange));
       font-size: 28px;
+      flex: none;
     }
 
     .device-figure {
+      height: 100px;
       margin-bottom: 12px;
-      height: 92px;
       position: relative;
     }
 
-    .monitor-fig,
-    .tower-fig,
-    .mouse-fig,
-    .keyboard-fig {
+    .monitor,
+    .tower,
+    .mouse,
+    .keyboard {
       position: absolute;
       inset: 0;
       margin: auto;
     }
 
-    .monitor-fig {
-      width: 120px;
-      height: 72px;
-      border-radius: 12px;
-      background: linear-gradient(180deg, #5ca6ff 0%, #d7ebff 100%);
+    .monitor {
+      width: 132px;
+      height: 78px;
+      border-radius: 14px;
       border: 4px solid var(--ink);
+      background: linear-gradient(180deg, #6fb5ff, #dceeff);
     }
 
-    .monitor-fig::before {
+    .monitor::before {
       content: "";
       position: absolute;
       left: 50%;
       bottom: -18px;
       transform: translateX(-50%);
-      width: 38px;
+      width: 42px;
       height: 10px;
-      background: var(--ink);
       border-radius: 8px;
+      background: var(--ink);
     }
 
-    .tower-fig {
-      width: 74px;
-      height: 98px;
+    .tower {
+      width: 80px;
+      height: 102px;
       border-radius: 18px;
-      background: linear-gradient(180deg, #ffd76a 0%, #ffe8a8 100%);
       border: 4px solid var(--ink);
+      background: linear-gradient(180deg, #ffd86c, #fff0b6);
     }
 
-    .tower-fig::before {
+    .tower::before {
       content: "";
       position: absolute;
-      top: 16px;
+      top: 18px;
       left: 50%;
       transform: translateX(-50%);
-      width: 24px;
-      height: 24px;
+      width: 26px;
+      height: 26px;
       border-radius: 50%;
       border: 4px solid var(--ink);
     }
 
-    .mouse-fig {
-      width: 70px;
-      height: 96px;
-      border-radius: 36px;
+    .mouse {
+      width: 74px;
+      height: 100px;
+      border-radius: 40px;
       border: 4px solid var(--ink);
       background: #fff;
     }
 
-    .mouse-fig::before {
+    .mouse::before {
       content: "";
       position: absolute;
       top: 12px;
@@ -591,712 +570,806 @@
       background: var(--ink);
     }
 
-    .keyboard-fig {
-      width: 136px;
-      height: 74px;
+    .keyboard {
+      width: 150px;
+      height: 80px;
       padding: 10px;
       border-radius: 18px;
-      background: #1e273a;
+      background: #1f2739;
       display: grid;
       grid-template-columns: repeat(6, 1fr);
       gap: 6px;
     }
 
-    .keyboard-fig span {
-      border-radius: 7px;
+    .keyboard span {
+      border-radius: 8px;
       background: #fff;
     }
 
-    .power-steps,
-    .shutdown-steps {
+    .break-card {
+      min-height: 100%;
       display: grid;
-      gap: 12px;
-    }
-
-    .power-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    .shutdown-steps { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-
-    .rest-banner {
-      padding: 24px 28px;
-      border-radius: 32px;
-      border: 2px dashed #d6b78f;
+      place-items: center;
+      border-radius: 36px;
+      border: 3px dashed #d4b68f;
       background:
-        linear-gradient(135deg, rgba(255, 215, 106, 0.45), rgba(255, 255, 255, 0.72)),
-        #fff7df;
+        linear-gradient(135deg, rgba(255, 216, 108, 0.55), rgba(255, 255, 255, 0.74)),
+        #fff8e2;
       text-align: center;
-      box-shadow: var(--shadow);
     }
 
-    .rest-banner strong {
+    .break-card strong {
       display: block;
-      margin-bottom: 8px;
-      font-size: clamp(32px, 5vw, 54px);
+      font-size: clamp(54px, 7vw, 94px);
+      line-height: 0.9;
+      margin-bottom: 12px;
     }
 
-    .rest-banner span {
-      font-size: 22px;
-      font-weight: 800;
+    .break-card span {
+      font-size: clamp(26px, 3vw, 42px);
+      font-weight: 900;
       color: var(--muted);
     }
 
     .key {
-      min-height: 180px;
-      text-align: center;
       align-items: center;
+      text-align: center;
+      min-height: 180px;
     }
 
     .key-cap {
-      min-width: 110px;
+      min-width: 130px;
       padding: 18px 16px;
       margin-bottom: 14px;
       border-radius: 22px;
-      background: #fff;
       border: 3px solid var(--ink);
+      background: #fff;
       font-size: 26px;
       font-weight: 900;
     }
 
-    .practice {
-      min-height: 220px;
-    }
-
     .practice ol {
       margin: 0;
-      padding-left: 24px;
-      color: var(--muted);
-      font-size: 18px;
+      padding-left: 22px;
+      font-size: 20px;
       line-height: 1.55;
       font-weight: 700;
+      color: var(--muted);
     }
 
-    .site-link {
+    .link-box {
       display: inline-flex;
       align-items: center;
       gap: 10px;
-      margin-top: 12px;
-      padding: 12px 16px;
-      border-radius: 16px;
-      background: #fff;
+      padding: 14px 18px;
+      border-radius: 18px;
       border: 2px solid var(--line);
+      background: #fff;
       font-size: 18px;
       font-weight: 800;
       text-decoration: none;
     }
 
-    .flow-row .mini-flow {
-      min-height: 170px;
-      text-align: center;
+    .controls {
+      padding: 12px 16px;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
       align-items: center;
+      gap: 12px;
     }
 
-    .mini-flow .big-icon {
-      margin-bottom: 10px;
+    .nav-btn {
+      min-width: 120px;
+      padding: 12px 16px;
+      border: 0;
+      border-radius: 16px;
+      background: var(--ink);
+      color: #fff;
+      font-size: 16px;
+      font-weight: 900;
+      cursor: pointer;
     }
 
-    .footer-note {
-      padding: 18px;
-      text-align: center;
-      font-size: 18px;
+    .nav-btn:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
+
+    .dots {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .dot-btn {
+      width: 14px;
+      height: 14px;
+      padding: 0;
+      border: 0;
+      border-radius: 999px;
+      background: #d3d9e4;
+      cursor: pointer;
+    }
+
+    .dot-btn.active {
+      width: 40px;
+      background: var(--orange);
+    }
+
+    .page {
+      font-size: 16px;
+      font-weight: 800;
       color: var(--muted);
+      text-align: right;
     }
 
     @media (max-width: 1100px) {
-      .hero,
-      .grid {
-        grid-template-columns: 1fr;
+      .slide {
+        padding: 26px;
       }
 
-      .span-3,
-      .span-4,
-      .span-5,
-      .span-6,
-      .span-7,
-      .span-8,
-      .span-12 {
-        grid-column: span 1;
-      }
-
-      .app-row,
-      .device-row,
-      .key-row,
-      .clean-row,
-      .flow-row,
-      .practice-row,
-      .step-row,
-      .question-row,
-      .goal-stack,
-      .power-steps,
-      .shutdown-steps {
+      .hero-grid,
+      .two-col,
+      .three-col,
+      .four-col,
+      .five-col,
+      .six-col,
+      .computer-scene {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .arrow {
+        display: none;
       }
     }
 
     @media (max-width: 760px) {
-      .wrap {
-        width: min(100%, calc(100% - 18px));
+      .deck {
+        padding: 10px;
       }
 
-      .topbar {
-        border-radius: 18px;
-        padding: 12px;
-      }
-
-      .panel,
-      .stage,
-      .device,
-      .step,
-      .app,
-      .key,
-      .practice,
-      .clean-card,
-      .question,
-      .mini-flow {
+      .topbar,
+      .controls,
+      .slide {
         border-radius: 22px;
       }
 
-      .goal-stack,
-      .question-row,
-      .app-row,
-      .device-row,
-      .step-row,
-      .key-row,
-      .practice-row,
-      .clean-row,
-      .flow-row,
-      .power-steps,
-      .shutdown-steps,
-      .computer-scene {
+      .slide {
+        height: calc(100vh - 166px);
+        padding: 18px;
+        overflow: auto;
+      }
+
+      .slide-head {
+        align-items: flex-start;
+      }
+
+      .slide-title h1,
+      .slide-title h2 {
+        font-size: clamp(28px, 8vw, 46px);
+      }
+
+      .hero-grid,
+      .two-col,
+      .three-col,
+      .four-col,
+      .five-col,
+      .six-col,
+      .computer-scene,
+      .controls {
         grid-template-columns: 1fr;
       }
 
-      .computer-scene {
-        gap: 10px;
+      .controls {
+        justify-items: stretch;
       }
 
-      .arrow {
-        transform: rotate(90deg);
+      .page {
+        text-align: center;
+      }
+
+      .nav-btn {
+        width: 100%;
       }
     }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="topbar">
-      <strong><a href="../../" style="text-decoration:none;">Dasarang Class</a> / 260314 첫수업</strong>
-      <nav class="topnav">
-        <a href="#start">시작</a>
-        <a href="#life">한국 생활</a>
-        <a href="#input">입력</a>
-        <a href="#devices">장치</a>
-        <a href="#typing">타자</a>
-        <a href="#finish">정리</a>
-      </nav>
-    </div>
+  <div class="deck">
+    <header class="topbar">
+      <div class="brand">
+        <a href="../../" style="text-decoration:none;">Dasarang Class</a>
+        <span>/</span>
+        <span>260314 첫수업</span>
+      </div>
+      <div class="badge">Slide Lesson</div>
+      <div class="helper">← → / Space / 클릭</div>
+    </header>
 
-    <section class="hero">
-      <div class="panel">
-        <div class="eyebrow">Lesson 01 · LOOK · FOLLOW · DO</div>
-        <h1>첫 컴퓨터 수업</h1>
-        <p>말은 짧게. 그림은 크게. 보고 따라하면서 바로 시작합니다.</p>
-        <div class="goal-stack" style="margin-top:20px;">
-          <div class="stage">
-            <div class="big-icon">🧭</div>
-            <strong>한국 생활 도움</strong>
-            <span>map · translate · search · shop</span>
+    <main class="viewport">
+      <div class="slides" id="slides">
+        <section class="slide">
+          <div class="slide-head">
+            <div class="slide-kicker">Lesson 01 · LOOK · FOLLOW · DO</div>
           </div>
-          <div class="stage">
-            <div class="big-icon">⌨️</div>
-            <strong>입력 = 시작</strong>
-            <span>mouse + keyboard</span>
+          <div class="hero-grid">
+            <div>
+              <div class="slide-title">
+                <span class="slide-number">1</span>
+                <h1>첫 컴퓨터 수업</h1>
+              </div>
+              <p class="sub" style="margin-top:14px;">말은 짧게. 그림은 크게. 보고 따라하면서 시작.</p>
+              <div class="two-col" style="margin-top:18px;">
+                <article class="stat">
+                  <div class="icon">🧭</div>
+                  <strong>한국 생활 도움</strong>
+                  <span>map · translate · search · shop</span>
+                </article>
+                <article class="stat">
+                  <div class="icon">⌨️</div>
+                  <strong>입력 = 시작</strong>
+                  <span>mouse + keyboard</span>
+                </article>
+                <article class="stat">
+                  <div class="icon">✍️</div>
+                  <strong>가장 중요한 기술</strong>
+                  <span>typing</span>
+                </article>
+                <article class="stat">
+                  <div class="icon">🧹</div>
+                  <strong>끝까지 정리</strong>
+                  <span>close · shut down · clean up</span>
+                </article>
+              </div>
+            </div>
+            <div class="hero-visual">
+              <div class="teacher-board">
+                <div class="face"></div>
+                <h3>WELCOME</h3>
+                <p>Teacher 소개<br>Student 소개<br>Computer 경험?</p>
+                <div class="speech">👋🙂</div>
+                <div class="sticker">1h 50m<br>break</div>
+              </div>
+            </div>
           </div>
-          <div class="stage">
-            <div class="big-icon">✍️</div>
-            <strong>가장 중요한 기술</strong>
-            <span>typing</span>
-          </div>
-          <div class="stage">
-            <div class="big-icon">🧹</div>
-            <strong>끝까지 정리</strong>
-            <span>close · shut down · clean up</span>
-          </div>
-        </div>
-      </div>
+        </section>
 
-      <div class="panel hero-visual">
-        <div class="blob one"></div>
-        <div class="blob two"></div>
-        <div class="teacher">
-          <div class="face"></div>
-          <h2>WELCOME</h2>
-          <p>Teacher 소개<br>Student 소개<br>Computer 경험?</p>
-        </div>
-        <div class="bubble">👋🙂</div>
-        <div class="screen">1h 50m<br>break<br>10-15m</div>
-      </div>
-    </section>
+        <section class="slide">
+          <div class="slide-head">
+            <div class="slide-title compact">
+              <span class="slide-number">2</span>
+              <h2>아이스브레이킹</h2>
+            </div>
+            <div class="slide-kicker">10 min</div>
+          </div>
+          <p class="sub">짧은 질문 · 손들기 · 자기소개</p>
+          <div class="two-col">
+            <article class="card">
+              <div class="icon">💻</div>
+              <strong>컴퓨터 해봤어요?</strong>
+              <span>Yes / No</span>
+            </article>
+            <article class="card">
+              <div class="icon">▶️</div>
+              <strong>YouTube 봤어요?</strong>
+              <span>Yes / No</span>
+            </article>
+            <article class="card">
+              <div class="icon">👩‍🏫</div>
+              <strong>Teacher</strong>
+              <span>이름 소개</span>
+            </article>
+            <article class="card">
+              <div class="icon">🧑</div>
+              <strong>Student</strong>
+              <span>이름 소개</span>
+            </article>
+          </div>
+        </section>
 
-    <section id="start" class="grid">
-      <div class="panel span-8">
-        <div class="section-title">
-          <span class="num">1</span>
-          <h2>아이스브레이킹</h2>
-        </div>
-        <p class="sub">짧은 질문, 손들기, 간단한 자기소개</p>
-        <div class="question-row">
-          <div class="question">
-            <div class="big-icon">💻</div>
-            <strong>컴퓨터 해봤어요?</strong>
-            <span>Yes / No</span>
+        <section class="slide">
+          <div class="slide-head">
+            <div class="slide-title compact">
+              <span class="slide-number">3</span>
+              <h2>컴퓨터로 할 수 있는 것</h2>
+            </div>
+            <div class="slide-kicker">한국 생활</div>
           </div>
-          <div class="question">
-            <div class="big-icon">▶️</div>
-            <strong>YouTube 봤어요?</strong>
-            <span>Yes / No</span>
+          <div class="hero-grid">
+            <div class="five-col">
+              <article class="card">
+                <div class="icon">🗺️</div>
+                <strong>길 찾기</strong>
+                <span>Naver Map</span>
+              </article>
+              <article class="card">
+                <div class="icon">🌐</div>
+                <strong>번역</strong>
+                <span>Papago</span>
+              </article>
+              <article class="card">
+                <div class="icon">🔎</div>
+                <strong>정보 찾기</strong>
+                <span>Google</span>
+              </article>
+              <article class="card">
+                <div class="icon">🍜</div>
+                <strong>가게 찾기</strong>
+                <span>restaurant</span>
+              </article>
+              <article class="card">
+                <div class="icon">🛒</div>
+                <strong>쇼핑</strong>
+                <span>Coupang</span>
+              </article>
+            </div>
+            <div class="hero-visual">
+              <div class="phone">
+                <div class="phone-screen">
+                  <div class="app-chip"><span class="app-dot" style="background:#d8efff;">🗺️</span>Map</div>
+                  <div class="app-chip"><span class="app-dot" style="background:#dff6e9;">🌐</span>Translate</div>
+                  <div class="app-chip"><span class="app-dot" style="background:#fff1cf;">🔎</span>Search</div>
+                  <div class="app-chip"><span class="app-dot" style="background:#ffe1d8;">🍜</span>Food</div>
+                  <div class="app-chip"><span class="app-dot" style="background:#e5e3ff;">🛒</span>Shop</div>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
-      <div class="panel span-4">
-        <div class="section-title">
-          <span class="num">⏱</span>
-          <h2>수업 시간</h2>
-        </div>
-        <div class="timer-card">
-          <div class="timer">총 1시간 50분</div>
-          <div class="timer">중간 휴식 10~15분</div>
-          <div class="tagline">천천히 · 크게 · 같이</div>
-        </div>
-      </div>
-    </section>
+        </section>
 
-    <section id="life" class="grid">
-      <div class="panel span-7">
-        <div class="section-title">
-          <span class="num">2</span>
-          <h2>컴퓨터로 할 수 있는 것</h2>
-        </div>
-        <p class="sub">한국 생활에 바로 쓰는 5가지</p>
-        <div class="app-row">
-          <div class="app">
-            <div class="big-icon">🗺️</div>
-            <strong>길 찾기</strong>
-            <span>Naver Map</span>
+        <section class="slide">
+          <div class="slide-head">
+            <div class="slide-title compact">
+              <span class="slide-number">4</span>
+              <h2>핵심 메시지</h2>
+            </div>
+            <div class="slide-kicker">important</div>
           </div>
-          <div class="app">
-            <div class="big-icon">🌐</div>
-            <strong>번역</strong>
-            <span>Papago</span>
+          <div class="six-col" style="margin-top:18px;">
+            <article class="flow">
+              <div class="icon">🏠</div>
+              <strong>생활</strong>
+              <span>daily life</span>
+            </article>
+            <article class="flow">
+              <div class="icon">➡️</div>
+              <strong>도움</strong>
+              <span>help</span>
+            </article>
+            <article class="flow">
+              <div class="icon">🖥️</div>
+              <strong>컴퓨터</strong>
+              <span>computer</span>
+            </article>
+            <article class="flow">
+              <div class="icon">➡️</div>
+              <strong>입력</strong>
+              <span>input</span>
+            </article>
+            <article class="flow">
+              <div class="icon">⌨️</div>
+              <strong>키보드</strong>
+              <span>keyboard</span>
+            </article>
+            <article class="flow">
+              <div class="icon">✍️</div>
+              <strong>타이핑</strong>
+              <span>typing</span>
+            </article>
           </div>
-          <div class="app">
-            <div class="big-icon">🔎</div>
-            <strong>정보 찾기</strong>
-            <span>Google</span>
-          </div>
-          <div class="app">
-            <div class="big-icon">🍜</div>
-            <strong>가게 찾기</strong>
-            <span>restaurant</span>
-          </div>
-          <div class="app">
-            <div class="big-icon">🛒</div>
-            <strong>쇼핑</strong>
-            <span>Coupang</span>
-          </div>
-        </div>
-      </div>
-      <div class="panel span-5 life-phone">
-        <div class="phone">
-          <div class="phone-screen">
-            <div class="app-chip"><span class="app-dot" style="background:#d6f0ff;">🗺️</span>Map</div>
-            <div class="app-chip"><span class="app-dot" style="background:#d9f5e8;">🌐</span>Translate</div>
-            <div class="app-chip"><span class="app-dot" style="background:#fff0c8;">🔎</span>Search</div>
-            <div class="app-chip"><span class="app-dot" style="background:#ffe0d8;">🍜</span>Food</div>
-            <div class="app-chip"><span class="app-dot" style="background:#e4e3ff;">🛒</span>Shop</div>
-          </div>
-        </div>
-      </div>
-    </section>
+        </section>
 
-    <section class="grid">
-      <div class="panel span-12">
-        <div class="section-title">
-          <span class="num">핵심</span>
-          <h2>컴퓨터는 한국 생활을 도와줍니다</h2>
-        </div>
-        <div class="flow-row">
-          <div class="mini-flow">
-            <div class="big-icon">🏠</div>
-            <strong>생활</strong>
-            <span>daily life</span>
+        <section class="slide">
+          <div class="slide-head">
+            <div class="slide-title compact">
+              <span class="slide-number">5</span>
+              <h2>컴퓨터는 입력이 필요해요</h2>
+            </div>
+            <div class="slide-kicker">mouse + keyboard</div>
           </div>
-          <div class="mini-flow">
-            <div class="big-icon">➡️</div>
-            <strong>도움</strong>
-            <span>help</span>
+          <div class="hero-grid">
+            <div class="two-col">
+              <article class="card">
+                <div class="icon">🧠</div>
+                <strong>생각만 하면</strong>
+                <span>computer does not know</span>
+              </article>
+              <article class="card">
+                <div class="icon">🖱️</div>
+                <strong>마우스</strong>
+                <span>click</span>
+              </article>
+              <article class="card">
+                <div class="icon">⌨️</div>
+                <strong>키보드</strong>
+                <span>type</span>
+              </article>
+              <article class="card">
+                <div class="icon">✅</div>
+                <strong>입력하면</strong>
+                <span>computer works</span>
+              </article>
+            </div>
+            <div class="concept">
+              <div class="computer-scene">
+                <div class="stack">
+                  <div class="tool">🖱️<br>CLICK</div>
+                  <div class="tool">⌨️<br>TYPE</div>
+                </div>
+                <div class="arrow">→</div>
+                <div class="center-screen">🖥️<br>COMPUTER</div>
+              </div>
+            </div>
           </div>
-          <div class="mini-flow">
-            <div class="big-icon">🖥️</div>
-            <strong>컴퓨터</strong>
-            <span>computer</span>
-          </div>
-          <div class="mini-flow">
-            <div class="big-icon">➡️</div>
-            <strong>입력</strong>
-            <span>input</span>
-          </div>
-          <div class="mini-flow">
-            <div class="big-icon">⌨️</div>
-            <strong>키보드</strong>
-            <span>keyboard</span>
-          </div>
-          <div class="mini-flow">
-            <div class="big-icon">✍️</div>
-            <strong>타이핑</strong>
-            <span>typing</span>
-          </div>
-        </div>
-      </div>
-    </section>
+        </section>
 
-    <section id="input" class="grid">
-      <div class="panel span-5">
-        <div class="section-title">
-          <span class="num">3</span>
-          <h2>컴퓨터는 입력이 필요해요</h2>
-        </div>
-        <p class="sub">컴퓨터는 생각을 읽지 못합니다</p>
-        <div class="goal-stack">
-          <div class="stage">
-            <div class="big-icon">🧠</div>
-            <strong>생각만 하면</strong>
-            <span>computer does not know</span>
+        <section class="slide">
+          <div class="slide-head">
+            <div class="slide-title compact">
+              <span class="slide-number">6</span>
+              <h2>가장 중요한 기술 = 타이핑</h2>
+            </div>
+            <div class="slide-kicker">5 min</div>
           </div>
-          <div class="stage">
-            <div class="big-icon">🖱️</div>
-            <strong>마우스</strong>
-            <span>click</span>
-          </div>
-          <div class="stage">
-            <div class="big-icon">⌨️</div>
-            <strong>키보드</strong>
-            <span>type</span>
-          </div>
-          <div class="stage">
-            <div class="big-icon">✅</div>
-            <strong>입력하면</strong>
-            <span>computer works</span>
-          </div>
-        </div>
-      </div>
-      <div class="panel span-7 concept">
-        <div class="computer-scene">
-          <div class="input-column">
-            <div class="tool-card">🖱️<br>CLICK</div>
-            <div class="tool-card">⌨️<br>TYPE</div>
-          </div>
-          <div class="arrow">→</div>
-          <div class="center-card">🖥️<br>COMPUTER</div>
-        </div>
-      </div>
-    </section>
-
-    <section class="grid">
-      <div class="panel span-12">
-        <div class="section-title">
-          <span class="num">4</span>
-          <h2>가장 중요한 기술 = 타이핑</h2>
-        </div>
-        <div class="typing-hero">
-          <div class="typing-board">
+          <div class="typing-pills">
             <div class="typing-pill"><span class="dot">🔎</span>검색 = 글자 입력</div>
             <div class="typing-pill"><span class="dot">🌐</span>번역 = 글자 입력</div>
             <div class="typing-pill"><span class="dot">🛒</span>쇼핑 = 글자 입력</div>
             <div class="typing-pill"><span class="dot">⭐</span>컴퓨터 핵심 = 타이핑</div>
           </div>
-        </div>
-      </div>
-    </section>
+        </section>
 
-    <section id="devices" class="grid">
-      <div class="panel span-12">
-        <div class="section-title">
-          <span class="num">5</span>
-          <h2>컴퓨터 기본 장치</h2>
-        </div>
-        <p class="sub">보고 찾기: 어디에 있나요?</p>
-        <div class="device-row">
-          <div class="device">
-            <div class="device-figure"><div class="monitor-fig"></div></div>
-            <strong>모니터</strong>
-            <span>monitor</span>
+        <section class="slide">
+          <div class="slide-head">
+            <div class="slide-title compact">
+              <span class="slide-number">7</span>
+              <h2>컴퓨터 기본 장치</h2>
+            </div>
+            <div class="slide-kicker">10 min</div>
           </div>
-          <div class="device">
-            <div class="device-figure">
-              <div class="keyboard-fig">
-                <span></span><span></span><span></span><span></span><span></span><span></span>
-                <span></span><span></span><span></span><span></span><span></span><span></span>
-                <span></span><span></span><span></span><span></span><span></span><span></span>
+          <p class="sub">보고 찾기: 어디에 있나요?</p>
+          <div class="four-col">
+            <article class="device">
+              <div class="device-figure"><div class="monitor"></div></div>
+              <strong>모니터</strong>
+              <span>monitor</span>
+            </article>
+            <article class="device">
+              <div class="device-figure">
+                <div class="keyboard">
+                  <span></span><span></span><span></span><span></span><span></span><span></span>
+                  <span></span><span></span><span></span><span></span><span></span><span></span>
+                  <span></span><span></span><span></span><span></span><span></span><span></span>
+                </div>
+              </div>
+              <strong>키보드</strong>
+              <span>keyboard</span>
+            </article>
+            <article class="device">
+              <div class="device-figure"><div class="mouse"></div></div>
+              <strong>마우스</strong>
+              <span>mouse</span>
+            </article>
+            <article class="device">
+              <div class="device-figure"><div class="tower"></div></div>
+              <strong>본체</strong>
+              <span>computer</span>
+            </article>
+          </div>
+        </section>
+
+        <section class="slide">
+          <div class="slide-head">
+            <div class="slide-title compact">
+              <span class="slide-number">8</span>
+              <h2>컴퓨터 켜기</h2>
+            </div>
+            <div class="slide-kicker">10 min</div>
+          </div>
+          <div class="three-col" style="margin-top:18px;">
+            <article class="step">
+              <div class="icon">🔘</div>
+              <strong>1. 버튼 찾기</strong>
+              <span>power</span>
+            </article>
+            <article class="step">
+              <div class="icon">☝️</div>
+              <strong>2. 한 번 누르기</strong>
+              <span>one click</span>
+            </article>
+            <article class="step">
+              <div class="icon">👀</div>
+              <strong>3. 화면 보기</strong>
+              <span>screen on</span>
+            </article>
+          </div>
+        </section>
+
+        <section class="slide">
+          <div class="slide-head">
+            <div class="slide-title compact">
+              <span class="slide-number">9</span>
+              <h2>휴식</h2>
+            </div>
+            <div class="slide-kicker">10-15 min</div>
+          </div>
+          <div class="break-card">
+            <div>
+              <strong>☕ BREAK</strong>
+              <span>10 ~ 15 min</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="slide">
+          <div class="slide-head">
+            <div class="slide-title compact">
+              <span class="slide-number">10</span>
+              <h2>키보드 기본 키</h2>
+            </div>
+            <div class="slide-kicker">10 min</div>
+          </div>
+          <div class="five-col">
+            <article class="key">
+              <div class="key-cap">한/영</div>
+              <strong>언어</strong>
+              <span>Korean / English</span>
+            </article>
+            <article class="key">
+              <div class="key-cap">Space</div>
+              <strong>띄어쓰기</strong>
+              <span>space</span>
+            </article>
+            <article class="key">
+              <div class="key-cap">Enter</div>
+              <strong>확인 / 다음 줄</strong>
+              <span>enter</span>
+            </article>
+            <article class="key">
+              <div class="key-cap">Backspace</div>
+              <strong>지우기</strong>
+              <span>delete one</span>
+            </article>
+            <article class="key">
+              <div class="key-cap">ABC / 가나</div>
+              <strong>글자 입력</strong>
+              <span>typing start</span>
+            </article>
+          </div>
+        </section>
+
+        <section class="slide">
+          <div class="slide-head">
+            <div class="slide-title compact">
+              <span class="slide-number">11</span>
+              <h2>타자 연습 시작</h2>
+            </div>
+            <div class="slide-kicker">30 min</div>
+          </div>
+          <div class="hero-grid">
+            <div class="three-col">
+              <article class="practice card">
+                <div class="icon">1</div>
+                <strong>연습 순서 A</strong>
+                <ol>
+                  <li>자리연습</li>
+                  <li>기본자리</li>
+                  <li>왼손 윗자리</li>
+                </ol>
+              </article>
+              <article class="practice card">
+                <div class="icon">2</div>
+                <strong>연습 순서 B</strong>
+                <ol>
+                  <li>왼손 아랫자리</li>
+                  <li>가운데 자리</li>
+                  <li>오른손 윗자리</li>
+                </ol>
+              </article>
+              <article class="practice card">
+                <div class="icon">3</div>
+                <strong>연습 순서 C</strong>
+                <ol>
+                  <li>오른손 아랫자리</li>
+                  <li>전체 자리</li>
+                  <li>숫자 자리</li>
+                </ol>
+              </article>
+            </div>
+            <div class="two-col">
+              <article class="card">
+                <div class="icon">🐢</div>
+                <strong>목표</strong>
+                <span>속도보다 키 위치 익숙해지기</span>
+              </article>
+              <article class="card">
+                <div class="icon">🔗</div>
+                <strong>연습 사이트</strong>
+                <span><a class="link-box" href="https://tt.hancomtaja.com/ko/" target="_blank" rel="noreferrer">tt.hancomtaja.com/ko/</a></span>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="slide">
+          <div class="slide-head">
+            <div class="slide-title compact">
+              <span class="slide-number">12</span>
+              <h2>정리 시간</h2>
+            </div>
+            <div class="slide-kicker">10 min</div>
+          </div>
+          <div class="two-col">
+            <div>
+              <p class="sub" style="margin-bottom:14px;">올바른 종료</p>
+              <div class="four-col">
+                <article class="card">
+                  <div class="icon">❎</div>
+                  <strong>프로그램 닫기</strong>
+                  <span>close</span>
+                </article>
+                <article class="card">
+                  <div class="icon">🪟</div>
+                  <strong>시작 버튼</strong>
+                  <span>start</span>
+                </article>
+                <article class="card">
+                  <div class="icon">⏻</div>
+                  <strong>전원</strong>
+                  <span>power</span>
+                </article>
+                <article class="card">
+                  <div class="icon">🌙</div>
+                  <strong>종료</strong>
+                  <span>shut down</span>
+                </article>
               </div>
             </div>
-            <strong>키보드</strong>
-            <span>keyboard</span>
+            <div>
+              <p class="sub" style="margin-bottom:14px;">자리 정리</p>
+              <div class="four-col">
+                <article class="card">
+                  <div class="icon">🖱️</div>
+                  <strong>마우스 정리</strong>
+                  <span>mouse</span>
+                </article>
+                <article class="card">
+                  <div class="icon">⌨️</div>
+                  <strong>키보드 확인</strong>
+                  <span>keyboard</span>
+                </article>
+                <article class="card">
+                  <div class="icon">💻</div>
+                  <strong>노트북 닫기</strong>
+                  <span>laptop</span>
+                </article>
+                <article class="card">
+                  <div class="icon">🪑</div>
+                  <strong>자리 정리</strong>
+                  <span>clean desk</span>
+                </article>
+              </div>
+            </div>
           </div>
-          <div class="device">
-            <div class="device-figure"><div class="mouse-fig"></div></div>
-            <strong>마우스</strong>
-            <span>mouse</span>
-          </div>
-          <div class="device">
-            <div class="device-figure"><div class="tower-fig"></div></div>
-            <strong>본체</strong>
-            <span>computer</span>
-          </div>
-        </div>
-      </div>
-    </section>
+        </section>
 
-    <section class="grid">
-      <div class="panel span-6">
-        <div class="section-title">
-          <span class="num">6</span>
-          <h2>컴퓨터 켜기</h2>
-        </div>
-        <div class="power-steps">
-          <div class="step">
-            <div class="big-icon">🔘</div>
-            <strong>1. 버튼 찾기</strong>
-            <span>power</span>
+        <section class="slide">
+          <div class="slide-head">
+            <div class="slide-title compact">
+              <span class="slide-number">13</span>
+              <h2>마지막 메시지</h2>
+            </div>
+            <div class="slide-kicker">5 min</div>
           </div>
-          <div class="step">
-            <div class="big-icon">☝️</div>
-            <strong>2. 한 번 누르기</strong>
-            <span>one click</span>
+          <div class="six-col">
+            <article class="final-card">
+              <div class="icon">⌨️</div>
+              <strong>타이핑</strong>
+              <span>important</span>
+            </article>
+            <article class="final-card">
+              <div class="icon">📈</div>
+              <strong>타이핑 ↑</strong>
+              <span>computer skill ↑</span>
+            </article>
+            <article class="final-card">
+              <div class="icon">🔁</div>
+              <strong>매 수업 시작</strong>
+              <span>typing practice</span>
+            </article>
+            <article class="final-card">
+              <div class="icon">가</div>
+              <strong>한국어 이해 ↑</strong>
+              <span>typing easier</span>
+            </article>
+            <article class="final-card">
+              <div class="icon">🧭</div>
+              <strong>한국 생활 도움</strong>
+              <span>real life</span>
+            </article>
+            <article class="final-card">
+              <div class="icon">👏</div>
+              <strong>오늘 끝</strong>
+              <span>good job</span>
+            </article>
           </div>
-          <div class="step">
-            <div class="big-icon">👀</div>
-            <strong>3. 화면 보기</strong>
-            <span>screen on</span>
-          </div>
-        </div>
+        </section>
       </div>
-      <div class="panel span-6">
-        <div class="section-title">
-          <span class="num">휴식</span>
-          <h2>중간 쉬는 시간</h2>
-        </div>
-        <div class="rest-banner">
-          <strong>☕ BREAK</strong>
-          <span>10 ~ 15 min</span>
-        </div>
-      </div>
-    </section>
+    </main>
 
-    <section class="grid">
-      <div class="panel span-12">
-        <div class="section-title">
-          <span class="num">7</span>
-          <h2>키보드 기본 키</h2>
-        </div>
-        <div class="key-row">
-          <div class="key">
-            <div class="key-cap">한/영</div>
-            <strong>언어</strong>
-            <span>Korean / English</span>
-          </div>
-          <div class="key">
-            <div class="key-cap">Space</div>
-            <strong>띄어쓰기</strong>
-            <span>space</span>
-          </div>
-          <div class="key">
-            <div class="key-cap">Enter</div>
-            <strong>확인 / 다음 줄</strong>
-            <span>enter</span>
-          </div>
-          <div class="key">
-            <div class="key-cap">Backspace</div>
-            <strong>지우기</strong>
-            <span>delete one</span>
-          </div>
-          <div class="key">
-            <div class="key-cap">ABC / 가나</div>
-            <strong>글자 입력</strong>
-            <span>typing start</span>
-          </div>
-        </div>
+    <nav class="controls">
+      <button class="nav-btn" id="prevBtn" type="button">← 이전</button>
+      <div class="dots" id="dots"></div>
+      <div style="display:flex; align-items:center; justify-content:flex-end; gap:12px;">
+        <div class="page" id="pageInfo">1 / 13</div>
+        <button class="nav-btn" id="nextBtn" type="button">다음 →</button>
       </div>
-    </section>
-
-    <section id="typing" class="grid">
-      <div class="panel span-8">
-        <div class="section-title">
-          <span class="num">8</span>
-          <h2>타자 연습 시작</h2>
-        </div>
-        <p class="sub">속도보다 위치 익숙해지기</p>
-        <div class="practice-row">
-          <div class="practice">
-            <div class="big-icon">1</div>
-            <strong>연습 순서 A</strong>
-            <ol>
-              <li>자리연습</li>
-              <li>기본자리</li>
-              <li>왼손 윗자리</li>
-            </ol>
-          </div>
-          <div class="practice">
-            <div class="big-icon">2</div>
-            <strong>연습 순서 B</strong>
-            <ol>
-              <li>왼손 아랫자리</li>
-              <li>가운데 자리</li>
-              <li>오른손 윗자리</li>
-            </ol>
-          </div>
-          <div class="practice">
-            <div class="big-icon">3</div>
-            <strong>연습 순서 C</strong>
-            <ol>
-              <li>오른손 아랫자리</li>
-              <li>전체 자리</li>
-              <li>숫자 자리</li>
-            </ol>
-          </div>
-        </div>
-        <a class="site-link" href="https://tt.hancomtaja.com/ko/" target="_blank" rel="noreferrer">🔗 tt.hancomtaja.com/ko/</a>
-      </div>
-      <div class="panel span-4">
-        <div class="section-title">
-          <span class="num">목표</span>
-          <h2>오늘 목표</h2>
-        </div>
-        <div class="goal-stack">
-          <div class="stage">
-            <div class="big-icon">👀</div>
-            <strong>키 위치 보기</strong>
-            <span>look</span>
-          </div>
-          <div class="stage">
-            <div class="big-icon">☝️</div>
-            <strong>손가락 움직이기</strong>
-            <span>move</span>
-          </div>
-          <div class="stage">
-            <div class="big-icon">🐢</div>
-            <strong>천천히</strong>
-            <span>slow is okay</span>
-          </div>
-          <div class="stage">
-            <div class="big-icon">📍</div>
-            <strong>위치 익숙해지기</strong>
-            <span>not speed</span>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section id="finish" class="grid">
-      <div class="panel span-7">
-        <div class="section-title">
-          <span class="num">9</span>
-          <h2>정리 시간</h2>
-        </div>
-        <p class="sub">올바르게 끄고, 자리도 정리하기</p>
-        <div class="shutdown-steps">
-          <div class="clean-card">
-            <div class="big-icon">❎</div>
-            <strong>프로그램 닫기</strong>
-            <span>close</span>
-          </div>
-          <div class="clean-card">
-            <div class="big-icon">🪟</div>
-            <strong>시작 버튼</strong>
-            <span>start</span>
-          </div>
-          <div class="clean-card">
-            <div class="big-icon">⏻</div>
-            <strong>전원</strong>
-            <span>power</span>
-          </div>
-          <div class="clean-card">
-            <div class="big-icon">🌙</div>
-            <strong>종료</strong>
-            <span>shut down</span>
-          </div>
-        </div>
-      </div>
-      <div class="panel span-5">
-        <div class="section-title">
-          <span class="num">10</span>
-          <h2>자리 정리</h2>
-        </div>
-        <div class="clean-row">
-          <div class="clean-card">
-            <div class="big-icon">🖱️</div>
-            <strong>마우스 정리</strong>
-            <span>mouse</span>
-          </div>
-          <div class="clean-card">
-            <div class="big-icon">⌨️</div>
-            <strong>키보드 확인</strong>
-            <span>keyboard</span>
-          </div>
-          <div class="clean-card">
-            <div class="big-icon">💻</div>
-            <strong>노트북 닫기</strong>
-            <span>laptop</span>
-          </div>
-          <div class="clean-card">
-            <div class="big-icon">🪑</div>
-            <strong>자리 정리</strong>
-            <span>clean desk</span>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="grid">
-      <div class="panel span-12">
-        <div class="section-title">
-          <span class="num">마침</span>
-          <h2>마지막 메시지</h2>
-        </div>
-        <div class="flow-row">
-          <div class="mini-flow">
-            <div class="big-icon">⌨️</div>
-            <strong>타이핑</strong>
-            <span>important</span>
-          </div>
-          <div class="mini-flow">
-            <div class="big-icon">📈</div>
-            <strong>타이핑 ↑</strong>
-            <span>computer skill ↑</span>
-          </div>
-          <div class="mini-flow">
-            <div class="big-icon">🔁</div>
-            <strong>매 수업 시작</strong>
-            <span>typing practice</span>
-          </div>
-          <div class="mini-flow">
-            <div class="big-icon">가</div>
-            <strong>한국어 이해 ↑</strong>
-            <span>typing easier</span>
-          </div>
-          <div class="mini-flow">
-            <div class="big-icon">🧭</div>
-            <strong>한국 생활 도움</strong>
-            <span>real life</span>
-          </div>
-          <div class="mini-flow">
-            <div class="big-icon">👏</div>
-            <strong>오늘 끝</strong>
-            <span>good job</span>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <div class="footer-note">이미지 중심 첫 수업 자료</div>
+    </nav>
   </div>
+
+  <script>
+    const slides = Array.from(document.querySelectorAll(".slide"));
+    const slidesTrack = document.getElementById("slides");
+    const dots = document.getElementById("dots");
+    const prevBtn = document.getElementById("prevBtn");
+    const nextBtn = document.getElementById("nextBtn");
+    const pageInfo = document.getElementById("pageInfo");
+    let current = 0;
+
+    const renderDots = () => {
+      dots.innerHTML = "";
+      slides.forEach((_, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "dot-btn";
+        button.setAttribute("aria-label", `슬라이드 ${index + 1}`);
+        button.addEventListener("click", () => goTo(index));
+        dots.appendChild(button);
+      });
+    };
+
+    const update = () => {
+      slidesTrack.style.transform = `translateX(-${current * 100}%)`;
+      const dotButtons = dots.querySelectorAll(".dot-btn");
+      dotButtons.forEach((dot, index) => {
+        dot.classList.toggle("active", index === current);
+      });
+      prevBtn.disabled = current === 0;
+      nextBtn.disabled = current === slides.length - 1;
+      pageInfo.textContent = `${current + 1} / ${slides.length}`;
+    };
+
+    const goTo = (index) => {
+      current = Math.max(0, Math.min(index, slides.length - 1));
+      update();
+    };
+
+    prevBtn.addEventListener("click", () => goTo(current - 1));
+    nextBtn.addEventListener("click", () => goTo(current + 1));
+
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowRight" || event.key === " " || event.key === "PageDown") {
+        event.preventDefault();
+        goTo(current + 1);
+      }
+      if (event.key === "ArrowLeft" || event.key === "PageUp") {
+        event.preventDefault();
+        goTo(current - 1);
+      }
+      if (event.key === "Home") {
+        event.preventDefault();
+        goTo(0);
+      }
+      if (event.key === "End") {
+        event.preventDefault();
+        goTo(slides.length - 1);
+      }
+    });
+
+    renderDots();
+    update();
+  </script>
   <script defer src="../../shared/sidebar.js"></script>
 </body>
 </html>
