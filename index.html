@@ -1,102 +1,252 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>다사랑 강의 허브</title>
   <style>
-    :root { --bg:#f6f0e8; --panel:rgba(255,250,243,.94); --ink:#17253d; --muted:#5e6b82; --line:#e7d8c6; }
+    :root {
+      --bg: #f4efe7;
+      --panel: #fffdf8;
+      --line: #ddd2c2;
+      --ink: #1e293b;
+      --muted: #6b7280;
+      --accent: #e76f51;
+    }
+
     * { box-sizing: border-box; }
-    body { margin:0; font-family:"Segoe UI","Malgun Gothic",sans-serif; color:var(--ink); background:radial-gradient(circle at top left, rgba(255,122,89,.18), transparent 24%), radial-gradient(circle at bottom right, rgba(45,109,246,.14), transparent 24%), var(--bg); }
-    .wrap { width:min(1240px, calc(100% - 28px)); margin:0 auto; padding:28px 0 56px; }
-    .panel { background:rgba(255,250,243,.94); border:2px solid var(--line); border-radius:28px; padding:28px; box-shadow:0 16px 36px rgba(23,37,61,.08); }
-    .hero { display:grid; grid-template-columns:1.2fr .8fr; gap:18px; margin-bottom:18px; }
-    h1,h2,p { margin:0; }
-    .eyebrow { display:inline-block; padding:8px 12px; border-radius:999px; background:#fff; border:2px solid var(--line); font-size:14px; font-weight:800; margin-bottom:14px; }
-    h1 { font-size:clamp(40px,7vw,84px); line-height:.94; letter-spacing:-.04em; margin-bottom:16px; }
-    .lead { font-size:clamp(20px,2.3vw,28px); line-height:1.45; max-width:22em; }
-    .chips,.quick,.overview,.courses { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px,1fr)); gap:12px; }
-    .chips { margin-top:20px; }
-    .chip,.quick a,.overview div,.courses div { background:#fff; border:2px solid var(--line); border-radius:18px; padding:16px; font-weight:700; text-decoration:none; color:inherit; }
-    .art { min-height:320px; position:relative; overflow:hidden; }
-    .blob { position:absolute; border-radius:50%; }
-    .blob.a { width:180px; height:180px; background:#ffd468; left:24px; top:20px; }
-    .blob.b { width:220px; height:220px; background:#b8dcff; right:18px; bottom:18px; }
-    .board { position:absolute; inset:42px 36px; background:#fff; border:4px solid var(--ink); border-radius:28px; padding:22px; display:flex; flex-direction:column; justify-content:space-between; }
-    .board strong { font-size:32px; line-height:1.1; }
-    .board span { font-size:18px; color:var(--muted); line-height:1.45; }
-    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-bottom:18px; }
-    .section-title { font-size:30px; margin-bottom:16px; letter-spacing:-.03em; }
-    .overview strong,.courses strong { display:block; font-size:22px; margin-bottom:8px; }
-    .overview span,.courses span { display:block; font-size:17px; color:var(--muted); line-height:1.45; }
-    .month-list { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px,1fr)); gap:12px; }
-    .month-list a { display:block; background:#fff; border:2px solid var(--line); border-radius:18px; padding:16px; text-decoration:none; color:inherit; font-weight:800; }
-    .footer-note { text-align:center; color:var(--muted); padding:8px 0 0; }
-    @media (max-width:920px) { .hero,.grid2 { grid-template-columns:1fr; } }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Malgun Gothic", sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      padding: 24px;
+      background: #f8f2e8;
+      border-right: 1px solid var(--line);
+      overflow-y: auto;
+    }
+
+    .brand {
+      margin-bottom: 24px;
+    }
+
+    .brand h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      line-height: 1.1;
+    }
+
+    .brand p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .nav-group {
+      margin-bottom: 22px;
+    }
+
+    .nav-title {
+      margin: 0 0 10px;
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--muted);
+    }
+
+    .nav-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .nav-list a {
+      display: block;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .main {
+      padding: 28px;
+    }
+
+    .section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 22px;
+      margin-bottom: 18px;
+    }
+
+    .section h2 {
+      margin: 0 0 14px;
+      font-size: 24px;
+    }
+
+    .section p {
+      margin: 0;
+      line-height: 1.6;
+      color: var(--muted);
+    }
+
+    .link-list,
+    .info-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .link-list a,
+    .info-item {
+      display: block;
+      padding: 14px 16px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: #ffffff;
+    }
+
+    .link-list strong,
+    .info-item strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 16px;
+    }
+
+    .link-list span,
+    .info-item span {
+      display: block;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .notice {
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    @media (max-width: 920px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        position: static;
+        height: auto;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .main {
+        padding: 18px;
+      }
+    }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <section class="hero">
-      <div class="panel">
-        <div class="eyebrow">개인 강의 허브</div>
-        <h1>다사랑<br>개인 강의 페이지</h1>
-        <p class="lead">수업 자료, 학기 시간표, 수업 방향, 진행 메모를 한 곳에서 관리하는 개인 강의 허브입니다.</p>
-        <div class="chips">
-          <div class="chip">14~24세 외국인 학생 대상</div>
-          <div class="chip">큰 화면 발표형 수업 자료</div>
-          <div class="chip">교사용 관리 페이지</div>
-          <div class="chip">기초 · 실생활 활용 · AI 결과물</div>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <h1>다사랑<br>강의 허브</h1>
+        <p>수업 자료와 강의 항목을 빠르게 여는 교사용 페이지</p>
+      </div>
+
+      <div class="nav-group">
+        <p class="nav-title">바로가기</p>
+        <div class="nav-list">
+          <a href="./260314_%EC%B2%AB%EC%88%98%EC%97%85/materials/index.html">첫 수업 자료</a>
+          <a href="./classes/index.html">2026년 1학기 강의 목록</a>
+          <a href="./README.md">운영 기준</a>
         </div>
       </div>
-      <div class="panel art">
-        <div class="blob a"></div>
-        <div class="blob b"></div>
-        <div class="board">
-          <strong>2026년 1학기<br>컴퓨터 수업 허브</strong>
-          <span>시간표 기준으로 수업 항목을 먼저 만들고, 각 항목에 실제 강의 자료를 계속 채워 넣는 구조입니다.</span>
+
+      <div class="nav-group">
+        <p class="nav-title">월별 이동</p>
+        <div class="nav-list">
+          <a href="./classes/index.html#month-3">3월</a>
+          <a href="./classes/index.html#month-4">4월</a>
+          <a href="./classes/index.html#month-5">5월</a>
+          <a href="./classes/index.html#month-6">6월</a>
+          <a href="./classes/index.html#month-7">7월</a>
         </div>
       </div>
-    </section>
-    <section class="grid2">
-      <div class="panel">
-        <h2 class="section-title">운영 방향</h2>
-        <div class="overview">
-          <div><strong>수업 목표</strong><span>컴퓨터 기초부터 실생활 활용, AI 활용까지 단계적으로 연결</span></div>
-          <div><strong>자료 원칙</strong><span>짧게, 크게, 같이. 긴 설명보다 이미지와 핵심 문장 중심</span></div>
-          <div><strong>언어 원칙</strong><span>학생용 강의 자료에서만 핵심 단어와 문장을 번역하여 사용</span></div>
-          <div><strong>운영 메모</strong><span>시간표, 수업 방향, 강의 자료를 한 공간에서 관리하여 흐름을 잃지 않기</span></div>
+    </aside>
+
+    <main class="main">
+      <section class="section">
+        <h2>현재 사용</h2>
+        <div class="link-list">
+          <a href="./260314_%EC%B2%AB%EC%88%98%EC%97%85/materials/index.html">
+            <strong>첫 수업 자료 열기</strong>
+            <span>학생들에게 바로 보여줄 첫 수업 페이지</span>
+          </a>
+          <a href="./classes/index.html">
+            <strong>강의 항목 열기</strong>
+            <span>시간표 기준으로 만든 전체 강의 목록</span>
+          </a>
         </div>
-      </div>
-      <div class="panel">
-        <h2 class="section-title">빠른 접근</h2>
-        <div class="quick">
-          <a href="./260314_%EC%B2%AB%EC%88%98%EC%97%85/materials/index.html">첫 수업 자료 열기</a>
-          <a href="./classes/index.html">2026년 1학기 강의 항목 보기</a>
-          <a href="./README.md">프로젝트 운영 기준 보기</a>
+      </section>
+
+      <section class="section">
+        <h2>학기 구성</h2>
+        <div class="info-list">
+          <div class="info-item">
+            <strong>토요일 컴퓨터 A반</strong>
+            <span>13:00~14:50</span>
+          </div>
+          <div class="info-item">
+            <strong>토요일 컴퓨터 B반</strong>
+            <span>15:00~16:50</span>
+          </div>
+          <div class="info-item">
+            <strong>7월 컴퓨터1</strong>
+            <span>화/목 오전 10:00~11:50</span>
+          </div>
+          <div class="info-item">
+            <strong>7월 컴퓨터2</strong>
+            <span>화/목 오후 17:00~18:30</span>
+          </div>
         </div>
-      </div>
-    </section>
-    <section class="panel" style="margin-bottom:18px;">
-      <h2 class="section-title">시간표 요약</h2>
-      <div class="courses">
-        <div><strong>토요일 컴퓨터 A반</strong><span>13:00-14:50, 3월~7월 정규 수업</span></div>
-        <div><strong>토요일 컴퓨터 B반</strong><span>15:00-16:50, 3월~7월 정규 수업</span></div>
-        <div><strong>7월 컴퓨터1</strong><span>화/목 오전 10:00-11:50 추가 운영</span></div>
-        <div><strong>7월 컴퓨터2</strong><span>화/목 오후 17:00-18:30 방과후 운영</span></div>
-      </div>
-    </section>
-    <section class="panel">
-      <h2 class="section-title">월별 항목 바로가기</h2>
-      <div class="month-list">
-        <a href="./classes/index.html#month-3">3월 강의</a>
-        <a href="./classes/index.html#month-4">4월 강의</a>
-        <a href="./classes/index.html#month-5">5월 강의</a>
-        <a href="./classes/index.html#month-6">6월 강의</a>
-        <a href="./classes/index.html#month-7">7월 강의</a>
-      </div>
-    </section>
-    <div class="footer-note">GitHub Pages 기준 메인 허브 페이지</div>
+      </section>
+
+      <section class="section">
+        <h2>메모</h2>
+        <div class="info-list">
+          <div class="info-item">
+            <strong>이 페이지 용도</strong>
+            <span>교사용 접근 페이지이므로 목록과 관리 정보 위주로 간단하게 유지</span>
+          </div>
+          <div class="info-item">
+            <strong>번역 사용 위치</strong>
+            <span>학생에게 보여주는 실제 강의 자료에서만 번역 사용</span>
+          </div>
+          <div class="info-item">
+            <strong>현재 상태</strong>
+            <span class="notice">강의 항목은 먼저 만들어 둔 상태이며, 각 항목에 수업 자료를 계속 연결하면 됨</span>
+          </div>
+        </div>
+      </section>
+    </main>
   </div>
 </body>
 </html>
