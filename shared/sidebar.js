@@ -94,6 +94,11 @@
     return group;
   }
 
+  function syncResponsiveCollapse() {
+    const shouldCollapse = window.innerWidth <= 920 || Boolean(document.fullscreenElement);
+    document.body.classList.toggle("shared-sidebar-collapsed", shouldCollapse);
+  }
+
   const sidebar = document.createElement("aside");
   sidebar.className = "shared-sidebar";
   sidebar.innerHTML = `
@@ -113,4 +118,8 @@
 
   document.body.classList.add("with-shared-sidebar");
   document.body.insertBefore(sidebar, document.body.firstChild);
+
+  syncResponsiveCollapse();
+  window.addEventListener("resize", syncResponsiveCollapse);
+  document.addEventListener("fullscreenchange", syncResponsiveCollapse);
 })();
