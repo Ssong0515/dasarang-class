@@ -1,0 +1,125 @@
+.with-shared-sidebar {
+  padding-left: 280px;
+}
+
+.shared-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 280px;
+  overflow-y: auto;
+  background: #efefef;
+  border-right: 1px solid #d2d2d2;
+  color: #505050;
+  font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  z-index: 1000;
+}
+
+.shared-sidebar__inner {
+  padding: 18px 16px 24px;
+}
+
+.shared-sidebar__filter {
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  background: #e3e3e3;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.shared-sidebar__brand {
+  padding: 2px 12px 18px;
+  border-bottom: 1px solid #d2d2d2;
+  margin-bottom: 10px;
+}
+
+.shared-sidebar__brand strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 22px;
+  line-height: 1.35;
+  font-weight: 700;
+}
+
+.shared-sidebar__brand span {
+  display: block;
+  color: #7b7b7b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.shared-sidebar__group {
+  border-top: 1px solid #d2d2d2;
+}
+
+.shared-sidebar__toggle {
+  width: 100%;
+  padding: 18px 10px;
+  border: 0;
+  background: transparent;
+  color: #505050;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.shared-sidebar__arrow {
+  color: #6f6f6f;
+  font-size: 13px;
+}
+
+.shared-sidebar__items {
+  display: none;
+  padding: 0 0 10px;
+}
+
+.shared-sidebar__group.is-open .shared-sidebar__items {
+  display: block;
+}
+
+.shared-sidebar__link {
+  display: block;
+  margin: 0 8px 8px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  color: #505050;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.shared-sidebar__link:hover {
+  background: #e8e8e8;
+}
+
+.shared-sidebar__link.is-active {
+  background: #efd4ae;
+  color: #6d5b43;
+}
+
+.shared-sidebar__link.is-child {
+  margin-left: 18px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+@media (max-width: 920px) {
+  .with-shared-sidebar {
+    padding-left: 0;
+  }
+
+  .shared-sidebar {
+    position: static;
+    width: auto;
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid #d2d2d2;
+  }
+}

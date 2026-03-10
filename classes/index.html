@@ -1,141 +1,43 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="../shared/sidebar.css">
   <title>2026년 1학기 강의 목록</title>
   <style>
-    :root {
-      --bg: #f3f3f3;
-      --sidebar: #efefef;
-      --panel: #ffffff;
-      --line: #d2d2d2;
-      --text: #505050;
-      --muted: #7b7b7b;
-      --accent: #efd4ae;
-      --accent-text: #6d5b43;
-    }
-
-    * { box-sizing: border-box; }
-
     body {
       margin: 0;
-      background: var(--bg);
-      color: var(--text);
+      background: #f3f3f3;
+      color: #505050;
       font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
     }
 
-    a {
-      color: inherit;
-      text-decoration: none;
-    }
-
-    .layout {
-      display: grid;
-      grid-template-columns: 280px 1fr;
-      min-height: 100vh;
-    }
-
-    .sidebar {
-      background: var(--sidebar);
-      border-right: 1px solid var(--line);
-      padding: 18px 0;
-      position: sticky;
-      top: 0;
-      height: 100vh;
-      overflow-y: auto;
-    }
-
-    .sidebar-inner {
-      padding: 0 16px;
-    }
-
-    .filter-box {
-      margin: 0 0 14px;
-      padding: 14px 16px;
-      background: #e3e3e3;
-      border-radius: 8px;
-      font-size: 15px;
-      font-weight: 700;
-    }
-
-    .brand {
-      padding: 2px 12px 18px;
-      border-bottom: 1px solid var(--line);
-      margin-bottom: 10px;
-    }
-
-    .brand strong {
-      display: block;
-      font-size: 22px;
-      line-height: 1.35;
-      margin-bottom: 6px;
-      font-weight: 700;
-    }
-
-    .brand span {
-      display: block;
-      color: var(--muted);
-      font-size: 13px;
-      line-height: 1.5;
-    }
-
-    .menu-group {
-      border-top: 1px solid var(--line);
-      padding: 0;
-    }
-
-    .menu-title {
-      display: block;
-      padding: 18px 10px;
-      font-size: 15px;
-      font-weight: 700;
-    }
-
-    .menu-list {
-      padding: 0 0 10px;
-    }
-
-    .menu-list a {
-      display: block;
-      margin: 0 8px 8px;
-      padding: 12px 14px;
-      border-radius: 14px;
-      font-size: 14px;
-      font-weight: 700;
-      color: var(--text);
-    }
-
-    .menu-list a.active {
-      background: var(--accent);
-      color: var(--accent-text);
-    }
-
-    .main {
+    .page {
       padding: 24px;
     }
 
     .panel {
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 18px;
       margin-bottom: 16px;
+      padding: 18px;
+      border: 1px solid #d2d2d2;
+      border-radius: 12px;
+      background: #ffffff;
     }
 
-    .panel h1,
-    .panel h2 {
-      margin: 0 0 10px;
+    h1,
+    h2 {
+      margin: 0 0 12px;
+      color: #424242;
       font-size: 24px;
       font-weight: 700;
-      color: #424242;
     }
 
-    .panel p {
+    p {
       margin: 0;
-      line-height: 1.7;
-      color: var(--muted);
+      color: #7b7b7b;
       font-size: 14px;
+      line-height: 1.7;
     }
 
     .month {
@@ -143,12 +45,11 @@
     }
 
     .month h2 {
-      margin: 0 0 10px;
       font-size: 20px;
-      font-weight: 700;
+      margin-bottom: 10px;
     }
 
-    .row-list {
+    .rows {
       display: grid;
       gap: 8px;
     }
@@ -159,20 +60,22 @@
       gap: 12px;
       align-items: center;
       padding: 14px 16px;
-      border: 1px solid var(--line);
+      border: 1px solid #d2d2d2;
       border-radius: 10px;
       background: #fafafa;
+      color: inherit;
+      text-decoration: none;
       font-size: 14px;
       font-weight: 700;
     }
 
     .row span {
-      color: var(--muted);
+      color: #7b7b7b;
       font-weight: 400;
     }
 
     .row .status-main {
-      color: var(--accent-text);
+      color: #6d5b43;
       font-weight: 700;
     }
 
@@ -183,141 +86,99 @@
     }
 
     @media (max-width: 920px) {
-      .layout {
-        grid-template-columns: 1fr;
-      }
-
-      .sidebar {
-        position: static;
-        height: auto;
-        border-right: 0;
-        border-bottom: 1px solid var(--line);
-      }
-
-      .main {
+      .page {
         padding: 16px;
       }
     }
   </style>
 </head>
 <body>
-  <div class="layout">
-    <aside class="sidebar">
-      <div class="sidebar-inner">
-        <div class="filter-box">필터</div>
+  <main class="page">
+    <section class="panel">
+      <h1>2026년 1학기 강의 목록</h1>
+      <p>왼쪽 사이드바는 모든 페이지에서 동일하게 유지됩니다. 항목을 접고 펼쳐서 원하는 수업으로 이동할 수 있습니다.</p>
+    </section>
 
-        <div class="brand">
-          <strong>2026년 1학기<br>강의 목록</strong>
-          <span>왼쪽에서 월별로 바로 이동</span>
-        </div>
-
-        <div class="menu-group">
-          <span class="menu-title">개요</span>
-          <div class="menu-list">
-            <a href="../index.html">메인 허브</a>
-            <a href="../classes/260314_computer-a_01/index.html">3월 14일 A반 첫 수업</a>
-          </div>
-        </div>
-
-        <div class="menu-group">
-          <span class="menu-title">월별 목록</span>
-          <div class="menu-list">
-            <a class="active" href="#month-3">3월</a>
-            <a href="#month-4">4월</a>
-            <a href="#month-5">5월</a>
-            <a href="#month-6">6월</a>
-            <a href="#month-7">7월</a>
-          </div>
-        </div>
+    <section class="panel month" id="month-3">
+      <h2>3월</h2>
+      <div class="rows">
+        <a class="row" href="./260314_computer-a_01/index.html">260314_컴퓨터A_01 <span>컴퓨터 A반</span> <span>2026-03-14</span> <span class="status-main">첫 수업 연결</span></a>
+        <a class="row" href="./260314_computer-b_01/index.html">260314_컴퓨터B_01 <span>컴퓨터 B반</span> <span>2026-03-14</span> <span>진행 예정</span></a>
+        <a class="row" href="./260321_computer-a_02/index.html">260321_컴퓨터A_02 <span>컴퓨터 A반</span> <span>2026-03-21</span> <span>진행 예정</span></a>
+        <a class="row" href="./260321_computer-b_02/index.html">260321_컴퓨터B_02 <span>컴퓨터 B반</span> <span>2026-03-21</span> <span>진행 예정</span></a>
+        <a class="row" href="./260328_computer-a_03/index.html">260328_컴퓨터A_03 <span>컴퓨터 A반</span> <span>2026-03-28</span> <span>진행 예정</span></a>
+        <a class="row" href="./260328_computer-b_03/index.html">260328_컴퓨터B_03 <span>컴퓨터 B반</span> <span>2026-03-28</span> <span>진행 예정</span></a>
       </div>
-    </aside>
+    </section>
 
-    <main class="main">
-      <section class="panel">
-        <h1>강의 목록</h1>
-        <p>각 항목을 누르면 해당 수업 페이지로 이동합니다. 첫 수업은 3월 14일 컴퓨터 A반에 연결되어 있습니다.</p>
-      </section>
+    <section class="panel month" id="month-4">
+      <h2>4월</h2>
+      <div class="rows">
+        <a class="row" href="./260404_computer-a_04/index.html">260404_컴퓨터A_04 <span>컴퓨터 A반</span> <span>2026-04-04</span> <span>진행 예정</span></a>
+        <a class="row" href="./260404_computer-b_04/index.html">260404_컴퓨터B_04 <span>컴퓨터 B반</span> <span>2026-04-04</span> <span>진행 예정</span></a>
+        <a class="row" href="./260411_computer-a_05/index.html">260411_컴퓨터A_05 <span>컴퓨터 A반</span> <span>2026-04-11</span> <span>진행 예정</span></a>
+        <a class="row" href="./260411_computer-b_05/index.html">260411_컴퓨터B_05 <span>컴퓨터 B반</span> <span>2026-04-11</span> <span>진행 예정</span></a>
+        <a class="row" href="./260418_computer-a_06/index.html">260418_컴퓨터A_06 <span>컴퓨터 A반</span> <span>2026-04-18</span> <span>진행 예정</span></a>
+        <a class="row" href="./260418_computer-b_06/index.html">260418_컴퓨터B_06 <span>컴퓨터 B반</span> <span>2026-04-18</span> <span>진행 예정</span></a>
+        <a class="row" href="./260425_computer-a_07/index.html">260425_컴퓨터A_07 <span>컴퓨터 A반</span> <span>2026-04-25</span> <span>진행 예정</span></a>
+        <a class="row" href="./260425_computer-b_07/index.html">260425_컴퓨터B_07 <span>컴퓨터 B반</span> <span>2026-04-25</span> <span>진행 예정</span></a>
+      </div>
+    </section>
 
-      <section class="month panel" id="month-3">
-        <h2>3월</h2>
-        <div class="row-list">
-          <a class="row" href="./260314_computer-a_01/index.html">260314_컴퓨터A_01 <span>컴퓨터 A반</span> <span>2026-03-14</span> <span class="status-main">첫 수업 연결</span></a>
-          <a class="row" href="./260314_computer-b_01/index.html">260314_컴퓨터B_01 <span>컴퓨터 B반</span> <span>2026-03-14</span> <span>진행 예정</span></a>
-          <a class="row" href="./260321_computer-a_02/index.html">260321_컴퓨터A_02 <span>컴퓨터 A반</span> <span>2026-03-21</span> <span>진행 예정</span></a>
-          <a class="row" href="./260321_computer-b_02/index.html">260321_컴퓨터B_02 <span>컴퓨터 B반</span> <span>2026-03-21</span> <span>진행 예정</span></a>
-          <a class="row" href="./260328_computer-a_03/index.html">260328_컴퓨터A_03 <span>컴퓨터 A반</span> <span>2026-03-28</span> <span>진행 예정</span></a>
-          <a class="row" href="./260328_computer-b_03/index.html">260328_컴퓨터B_03 <span>컴퓨터 B반</span> <span>2026-03-28</span> <span>진행 예정</span></a>
-        </div>
-      </section>
+    <section class="panel month" id="month-5">
+      <h2>5월</h2>
+      <div class="rows">
+        <a class="row" href="./260502_computer-a_08/index.html">260502_컴퓨터A_08 <span>컴퓨터 A반</span> <span>2026-05-02</span> <span>진행 예정</span></a>
+        <a class="row" href="./260502_computer-b_08/index.html">260502_컴퓨터B_08 <span>컴퓨터 B반</span> <span>2026-05-02</span> <span>진행 예정</span></a>
+        <a class="row" href="./260509_computer-a_09/index.html">260509_컴퓨터A_09 <span>컴퓨터 A반</span> <span>2026-05-09</span> <span>진행 예정</span></a>
+        <a class="row" href="./260509_computer-b_09/index.html">260509_컴퓨터B_09 <span>컴퓨터 B반</span> <span>2026-05-09</span> <span>진행 예정</span></a>
+        <a class="row" href="./260516_computer-a_10/index.html">260516_컴퓨터A_10 <span>컴퓨터 A반</span> <span>2026-05-16</span> <span>진행 예정</span></a>
+        <a class="row" href="./260516_computer-b_10/index.html">260516_컴퓨터B_10 <span>컴퓨터 B반</span> <span>2026-05-16</span> <span>진행 예정</span></a>
+        <a class="row" href="./260523_computer-a_11/index.html">260523_컴퓨터A_11 <span>컴퓨터 A반</span> <span>2026-05-23</span> <span>진행 예정</span></a>
+        <a class="row" href="./260523_computer-b_11/index.html">260523_컴퓨터B_11 <span>컴퓨터 B반</span> <span>2026-05-23</span> <span>진행 예정</span></a>
+        <a class="row" href="./260530_computer-a_12/index.html">260530_컴퓨터A_12 <span>컴퓨터 A반</span> <span>2026-05-30</span> <span>진행 예정</span></a>
+        <a class="row" href="./260530_computer-b_12/index.html">260530_컴퓨터B_12 <span>컴퓨터 B반</span> <span>2026-05-30</span> <span>진행 예정</span></a>
+      </div>
+    </section>
 
-      <section class="month panel" id="month-4">
-        <h2>4월</h2>
-        <div class="row-list">
-          <a class="row" href="./260404_computer-a_04/index.html">260404_컴퓨터A_04 <span>컴퓨터 A반</span> <span>2026-04-04</span> <span>진행 예정</span></a>
-          <a class="row" href="./260404_computer-b_04/index.html">260404_컴퓨터B_04 <span>컴퓨터 B반</span> <span>2026-04-04</span> <span>진행 예정</span></a>
-          <a class="row" href="./260411_computer-a_05/index.html">260411_컴퓨터A_05 <span>컴퓨터 A반</span> <span>2026-04-11</span> <span>진행 예정</span></a>
-          <a class="row" href="./260411_computer-b_05/index.html">260411_컴퓨터B_05 <span>컴퓨터 B반</span> <span>2026-04-11</span> <span>진행 예정</span></a>
-          <a class="row" href="./260418_computer-a_06/index.html">260418_컴퓨터A_06 <span>컴퓨터 A반</span> <span>2026-04-18</span> <span>진행 예정</span></a>
-          <a class="row" href="./260418_computer-b_06/index.html">260418_컴퓨터B_06 <span>컴퓨터 B반</span> <span>2026-04-18</span> <span>진행 예정</span></a>
-          <a class="row" href="./260425_computer-a_07/index.html">260425_컴퓨터A_07 <span>컴퓨터 A반</span> <span>2026-04-25</span> <span>진행 예정</span></a>
-          <a class="row" href="./260425_computer-b_07/index.html">260425_컴퓨터B_07 <span>컴퓨터 B반</span> <span>2026-04-25</span> <span>진행 예정</span></a>
-        </div>
-      </section>
+    <section class="panel month" id="month-6">
+      <h2>6월</h2>
+      <div class="rows">
+        <a class="row" href="./260613_computer-a_13/index.html">260613_컴퓨터A_13 <span>컴퓨터 A반</span> <span>2026-06-13</span> <span>진행 예정</span></a>
+        <a class="row" href="./260613_computer-b_13/index.html">260613_컴퓨터B_13 <span>컴퓨터 B반</span> <span>2026-06-13</span> <span>진행 예정</span></a>
+        <a class="row" href="./260620_computer-a_14/index.html">260620_컴퓨터A_14 <span>컴퓨터 A반</span> <span>2026-06-20</span> <span>진행 예정</span></a>
+        <a class="row" href="./260620_computer-b_14/index.html">260620_컴퓨터B_14 <span>컴퓨터 B반</span> <span>2026-06-20</span> <span>진행 예정</span></a>
+        <a class="row" href="./260627_computer-a_15/index.html">260627_컴퓨터A_15 <span>컴퓨터 A반</span> <span>2026-06-27</span> <span>진행 예정</span></a>
+        <a class="row" href="./260627_computer-b_15/index.html">260627_컴퓨터B_15 <span>컴퓨터 B반</span> <span>2026-06-27</span> <span>진행 예정</span></a>
+      </div>
+    </section>
 
-      <section class="month panel" id="month-5">
-        <h2>5월</h2>
-        <div class="row-list">
-          <a class="row" href="./260502_computer-a_08/index.html">260502_컴퓨터A_08 <span>컴퓨터 A반</span> <span>2026-05-02</span> <span>진행 예정</span></a>
-          <a class="row" href="./260502_computer-b_08/index.html">260502_컴퓨터B_08 <span>컴퓨터 B반</span> <span>2026-05-02</span> <span>진행 예정</span></a>
-          <a class="row" href="./260509_computer-a_09/index.html">260509_컴퓨터A_09 <span>컴퓨터 A반</span> <span>2026-05-09</span> <span>진행 예정</span></a>
-          <a class="row" href="./260509_computer-b_09/index.html">260509_컴퓨터B_09 <span>컴퓨터 B반</span> <span>2026-05-09</span> <span>진행 예정</span></a>
-          <a class="row" href="./260516_computer-a_10/index.html">260516_컴퓨터A_10 <span>컴퓨터 A반</span> <span>2026-05-16</span> <span>진행 예정</span></a>
-          <a class="row" href="./260516_computer-b_10/index.html">260516_컴퓨터B_10 <span>컴퓨터 B반</span> <span>2026-05-16</span> <span>진행 예정</span></a>
-          <a class="row" href="./260523_computer-a_11/index.html">260523_컴퓨터A_11 <span>컴퓨터 A반</span> <span>2026-05-23</span> <span>진행 예정</span></a>
-          <a class="row" href="./260523_computer-b_11/index.html">260523_컴퓨터B_11 <span>컴퓨터 B반</span> <span>2026-05-23</span> <span>진행 예정</span></a>
-          <a class="row" href="./260530_computer-a_12/index.html">260530_컴퓨터A_12 <span>컴퓨터 A반</span> <span>2026-05-30</span> <span>진행 예정</span></a>
-          <a class="row" href="./260530_computer-b_12/index.html">260530_컴퓨터B_12 <span>컴퓨터 B반</span> <span>2026-05-30</span> <span>진행 예정</span></a>
-        </div>
-      </section>
-
-      <section class="month panel" id="month-6">
-        <h2>6월</h2>
-        <div class="row-list">
-          <a class="row" href="./260613_computer-a_13/index.html">260613_컴퓨터A_13 <span>컴퓨터 A반</span> <span>2026-06-13</span> <span>진행 예정</span></a>
-          <a class="row" href="./260613_computer-b_13/index.html">260613_컴퓨터B_13 <span>컴퓨터 B반</span> <span>2026-06-13</span> <span>진행 예정</span></a>
-          <a class="row" href="./260620_computer-a_14/index.html">260620_컴퓨터A_14 <span>컴퓨터 A반</span> <span>2026-06-20</span> <span>진행 예정</span></a>
-          <a class="row" href="./260620_computer-b_14/index.html">260620_컴퓨터B_14 <span>컴퓨터 B반</span> <span>2026-06-20</span> <span>진행 예정</span></a>
-          <a class="row" href="./260627_computer-a_15/index.html">260627_컴퓨터A_15 <span>컴퓨터 A반</span> <span>2026-06-27</span> <span>진행 예정</span></a>
-          <a class="row" href="./260627_computer-b_15/index.html">260627_컴퓨터B_15 <span>컴퓨터 B반</span> <span>2026-06-27</span> <span>진행 예정</span></a>
-        </div>
-      </section>
-
-      <section class="month panel" id="month-7">
-        <h2>7월</h2>
-        <div class="row-list">
-          <a class="row" href="./260704_computer-a_16/index.html">260704_컴퓨터A_16 <span>컴퓨터 A반</span> <span>2026-07-04</span> <span>진행 예정</span></a>
-          <a class="row" href="./260704_computer-b_16/index.html">260704_컴퓨터B_16 <span>컴퓨터 B반</span> <span>2026-07-04</span> <span>진행 예정</span></a>
-          <a class="row" href="./260707_computer1_01/index.html">260707_컴퓨터1_01 <span>컴퓨터1</span> <span>2026-07-07</span> <span>진행 예정</span></a>
-          <a class="row" href="./260707_computer2_01/index.html">260707_컴퓨터2_01 <span>컴퓨터2</span> <span>2026-07-07</span> <span>진행 예정</span></a>
-          <a class="row" href="./260709_computer1_02/index.html">260709_컴퓨터1_02 <span>컴퓨터1</span> <span>2026-07-09</span> <span>진행 예정</span></a>
-          <a class="row" href="./260709_computer2_02/index.html">260709_컴퓨터2_02 <span>컴퓨터2</span> <span>2026-07-09</span> <span>진행 예정</span></a>
-          <a class="row" href="./260711_computer-a_17/index.html">260711_컴퓨터A_17 <span>컴퓨터 A반</span> <span>2026-07-11</span> <span>진행 예정</span></a>
-          <a class="row" href="./260711_computer-b_17/index.html">260711_컴퓨터B_17 <span>컴퓨터 B반</span> <span>2026-07-11</span> <span>진행 예정</span></a>
-          <a class="row" href="./260714_computer1_03/index.html">260714_컴퓨터1_03 <span>컴퓨터1</span> <span>2026-07-14</span> <span>진행 예정</span></a>
-          <a class="row" href="./260714_computer2_03/index.html">260714_컴퓨터2_03 <span>컴퓨터2</span> <span>2026-07-14</span> <span>진행 예정</span></a>
-          <a class="row" href="./260716_computer1_04/index.html">260716_컴퓨터1_04 <span>컴퓨터1</span> <span>2026-07-16</span> <span>진행 예정</span></a>
-          <a class="row" href="./260716_computer2_04/index.html">260716_컴퓨터2_04 <span>컴퓨터2</span> <span>2026-07-16</span> <span>진행 예정</span></a>
-          <a class="row" href="./260718_computer-a_18/index.html">260718_컴퓨터A_18 <span>컴퓨터 A반</span> <span>2026-07-18</span> <span>진행 예정</span></a>
-          <a class="row" href="./260718_computer-b_18/index.html">260718_컴퓨터B_18 <span>컴퓨터 B반</span> <span>2026-07-18</span> <span>진행 예정</span></a>
-          <a class="row" href="./260721_computer1_05/index.html">260721_컴퓨터1_05 <span>컴퓨터1</span> <span>2026-07-21</span> <span>진행 예정</span></a>
-          <a class="row" href="./260721_computer2_05/index.html">260721_컴퓨터2_05 <span>컴퓨터2</span> <span>2026-07-21</span> <span>진행 예정</span></a>
-          <a class="row" href="./260723_computer1_06/index.html">260723_컴퓨터1_06 <span>컴퓨터1</span> <span>2026-07-23</span> <span>진행 예정</span></a>
-          <a class="row" href="./260723_computer2_06/index.html">260723_컴퓨터2_06 <span>컴퓨터2</span> <span>2026-07-23</span> <span>진행 예정</span></a>
-          <a class="row" href="./260725_computer-a_19/index.html">260725_컴퓨터A_19 <span>컴퓨터 A반</span> <span>2026-07-25</span> <span>진행 예정</span></a>
-          <a class="row" href="./260725_computer-b_19/index.html">260725_컴퓨터B_19 <span>컴퓨터 B반</span> <span>2026-07-25</span> <span>진행 예정</span></a>
-        </div>
-      </section>
-    </main>
-  </div>
+    <section class="panel month" id="month-7">
+      <h2>7월</h2>
+      <div class="rows">
+        <a class="row" href="./260704_computer-a_16/index.html">260704_컴퓨터A_16 <span>컴퓨터 A반</span> <span>2026-07-04</span> <span>진행 예정</span></a>
+        <a class="row" href="./260704_computer-b_16/index.html">260704_컴퓨터B_16 <span>컴퓨터 B반</span> <span>2026-07-04</span> <span>진행 예정</span></a>
+        <a class="row" href="./260707_computer1_01/index.html">260707_컴퓨터1_01 <span>컴퓨터1</span> <span>2026-07-07</span> <span>진행 예정</span></a>
+        <a class="row" href="./260707_computer2_01/index.html">260707_컴퓨터2_01 <span>컴퓨터2</span> <span>2026-07-07</span> <span>진행 예정</span></a>
+        <a class="row" href="./260709_computer1_02/index.html">260709_컴퓨터1_02 <span>컴퓨터1</span> <span>2026-07-09</span> <span>진행 예정</span></a>
+        <a class="row" href="./260709_computer2_02/index.html">260709_컴퓨터2_02 <span>컴퓨터2</span> <span>2026-07-09</span> <span>진행 예정</span></a>
+        <a class="row" href="./260711_computer-a_17/index.html">260711_컴퓨터A_17 <span>컴퓨터 A반</span> <span>2026-07-11</span> <span>진행 예정</span></a>
+        <a class="row" href="./260711_computer-b_17/index.html">260711_컴퓨터B_17 <span>컴퓨터 B반</span> <span>2026-07-11</span> <span>진행 예정</span></a>
+        <a class="row" href="./260714_computer1_03/index.html">260714_컴퓨터1_03 <span>컴퓨터1</span> <span>2026-07-14</span> <span>진행 예정</span></a>
+        <a class="row" href="./260714_computer2_03/index.html">260714_컴퓨터2_03 <span>컴퓨터2</span> <span>2026-07-14</span> <span>진행 예정</span></a>
+        <a class="row" href="./260716_computer1_04/index.html">260716_컴퓨터1_04 <span>컴퓨터1</span> <span>2026-07-16</span> <span>진행 예정</span></a>
+        <a class="row" href="./260716_computer2_04/index.html">260716_컴퓨터2_04 <span>컴퓨터2</span> <span>2026-07-16</span> <span>진행 예정</span></a>
+        <a class="row" href="./260718_computer-a_18/index.html">260718_컴퓨터A_18 <span>컴퓨터 A반</span> <span>2026-07-18</span> <span>진행 예정</span></a>
+        <a class="row" href="./260718_computer-b_18/index.html">260718_컴퓨터B_18 <span>컴퓨터 B반</span> <span>2026-07-18</span> <span>진행 예정</span></a>
+        <a class="row" href="./260721_computer1_05/index.html">260721_컴퓨터1_05 <span>컴퓨터1</span> <span>2026-07-21</span> <span>진행 예정</span></a>
+        <a class="row" href="./260721_computer2_05/index.html">260721_컴퓨터2_05 <span>컴퓨터2</span> <span>2026-07-21</span> <span>진행 예정</span></a>
+        <a class="row" href="./260723_computer1_06/index.html">260723_컴퓨터1_06 <span>컴퓨터1</span> <span>2026-07-23</span> <span>진행 예정</span></a>
+        <a class="row" href="./260723_computer2_06/index.html">260723_컴퓨터2_06 <span>컴퓨터2</span> <span>2026-07-23</span> <span>진행 예정</span></a>
+        <a class="row" href="./260725_computer-a_19/index.html">260725_컴퓨터A_19 <span>컴퓨터 A반</span> <span>2026-07-25</span> <span>진행 예정</span></a>
+        <a class="row" href="./260725_computer-b_19/index.html">260725_컴퓨터B_19 <span>컴퓨터 B반</span> <span>2026-07-25</span> <span>진행 예정</span></a>
+      </div>
+    </section>
+  </main>
+  <script defer src="../shared/sidebar.js"></script>
 </body>
 </html>
