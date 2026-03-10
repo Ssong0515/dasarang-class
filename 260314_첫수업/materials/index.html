@@ -102,6 +102,14 @@
       color: var(--muted);
     }
 
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
     .viewport {
       position: relative;
       width: min(1320px, 100%);
@@ -670,6 +678,18 @@
       cursor: pointer;
     }
 
+    .top-btn {
+      min-width: 132px;
+      padding: 11px 16px;
+      border: 2px solid var(--line);
+      border-radius: 16px;
+      background: #fff;
+      color: var(--ink);
+      font-size: 15px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
     .nav-btn:disabled {
       opacity: 0.35;
       cursor: default;
@@ -702,6 +722,28 @@
       font-weight: 800;
       color: var(--muted);
       text-align: right;
+    }
+
+    :fullscreen .deck,
+    :-webkit-full-screen .deck {
+      padding: 10px;
+    }
+
+    :fullscreen .shared-sidebar,
+    :-webkit-full-screen .shared-sidebar {
+      display: none !important;
+    }
+
+    :fullscreen body,
+    :fullscreen .with-shared-sidebar,
+    :-webkit-full-screen body,
+    :-webkit-full-screen .with-shared-sidebar {
+      padding-left: 0 !important;
+    }
+
+    :fullscreen .slide,
+    :-webkit-full-screen .slide {
+      height: calc(100vh - 146px);
     }
 
     @media (max-width: 1100px) {
@@ -769,6 +811,11 @@
         text-align: center;
       }
 
+      .top-actions {
+        justify-content: stretch;
+      }
+
+      .top-btn,
       .nav-btn {
         width: 100%;
       }
@@ -783,8 +830,11 @@
         <span>/</span>
         <span>260314 첫수업</span>
       </div>
-      <div class="badge">Slide Lesson</div>
-      <div class="helper">← → / Space / 클릭</div>
+      <div class="top-actions">
+        <div class="badge">Slide Lesson</div>
+        <button class="top-btn" id="fullscreenBtn" type="button">전체보기</button>
+        <div class="helper">← → / Space / Esc</div>
+      </div>
     </header>
 
     <main class="viewport">
@@ -1315,6 +1365,7 @@
     const prevBtn = document.getElementById("prevBtn");
     const nextBtn = document.getElementById("nextBtn");
     const pageInfo = document.getElementById("pageInfo");
+    const fullscreenBtn = document.getElementById("fullscreenBtn");
     let current = 0;
 
     const renderDots = () => {
@@ -1348,6 +1399,23 @@
     prevBtn.addEventListener("click", () => goTo(current - 1));
     nextBtn.addEventListener("click", () => goTo(current + 1));
 
+    const syncFullscreenButton = () => {
+      const isFullscreen = Boolean(document.fullscreenElement);
+      fullscreenBtn.textContent = isFullscreen ? "전체보기 종료" : "전체보기";
+      fullscreenBtn.setAttribute("aria-pressed", String(isFullscreen));
+    };
+
+    fullscreenBtn.addEventListener("click", async () => {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+        return;
+      }
+
+      await document.documentElement.requestFullscreen();
+    });
+
+    document.addEventListener("fullscreenchange", syncFullscreenButton);
+
     window.addEventListener("keydown", (event) => {
       if (event.key === "ArrowRight" || event.key === " " || event.key === "PageDown") {
         event.preventDefault();
@@ -1369,6 +1437,7 @@
 
     renderDots();
     update();
+    syncFullscreenButton();
   </script>
   <script defer src="../../shared/sidebar.js"></script>
 </body>
