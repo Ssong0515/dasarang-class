@@ -22,7 +22,8 @@ const updatedParts = new Intl.DateTimeFormat("ko-KR", {
 const getPart = (type: Intl.DateTimeFormatPartTypes) =>
   updatedParts.find((part) => part.type === type)?.value ?? "";
 
-const updatedLabel = `${getPart("year")}년${getPart("month")}월${getPart("day")}일(${getPart("weekday")}) ${getPart("dayPeriod")} ${getPart("hour")}:${getPart("minute")}:${getPart("second")}`;
+const updatedDateLine = `${getPart("year")}년 ${getPart("month")}월 ${getPart("day")}일 (${getPart("weekday")})`;
+const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart("minute")} : ${getPart("second")}`;
 ---
 
 <aside class="sidebar" id="shared-sidebar">
@@ -30,7 +31,8 @@ const updatedLabel = `${getPart("year")}년${getPart("month")}월${getPart("day"
     <div class="sidebar__top">
       <div class="sidebar__brand">
         <strong>다사랑 강의 허브</strong>
-        <span>{updatedLabel}</span>
+        <span>{updatedDateLine}</span>
+        <span>{updatedTimeLine}</span>
       </div>
       <button
         class="sidebar__collapse"
