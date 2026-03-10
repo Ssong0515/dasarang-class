@@ -1,0 +1,199 @@
+---
+const currentPath = Astro.url.pathname;
+const base = import.meta.env.BASE_URL;
+
+const isActive = (path: string) => currentPath === path;
+const inSection = (paths: string[]) => paths.some((path) => currentPath.startsWith(path));
+
+const sections = [
+  {
+    title: "개요",
+    open: inSection([`${base}`]),
+    items: [
+      { label: "메인 허브", href: `${base}`, active: isActive(`${base}`) },
+      { label: "프로젝트 기준", href: `${base}README.md`, active: false },
+    ],
+  },
+  {
+    title: "수업 자료",
+    open: inSection([
+      `${base}classes/260314_computer-a_01/`,
+      `${base}260314_%EC%B2%AB%EC%88%98%EC%97%85/materials/`,
+    ]),
+    items: [
+      {
+        label: "3월 14일 A반 첫 수업",
+        href: `${base}classes/260314_computer-a_01/`,
+        active: isActive(`${base}classes/260314_computer-a_01/`),
+      },
+      {
+        label: "학생용 첫 수업 페이지",
+        href: `${base}260314_%EC%B2%AB%EC%88%98%EC%97%85/materials/`,
+        active: isActive(`${base}260314_%EC%B2%AB%EC%88%98%EC%97%85/materials/`),
+      },
+    ],
+  },
+  {
+    title: "강의 목록",
+    open: currentPath.startsWith(`${base}classes/`),
+    items: [
+      { label: "전체 강의 목록", href: `${base}classes/`, active: isActive(`${base}classes/`) },
+      { label: "3월", href: `${base}classes/#month-3`, active: false, child: true },
+      { label: "4월", href: `${base}classes/#month-4`, active: false, child: true },
+      { label: "5월", href: `${base}classes/#month-5`, active: false, child: true },
+      { label: "6월", href: `${base}classes/#month-6`, active: false, child: true },
+      { label: "7월", href: `${base}classes/#month-7`, active: false, child: true },
+    ],
+  },
+];
+---
+
+<aside class="sidebar">
+  <div class="sidebar__inner">
+    <div class="sidebar__filter">필터</div>
+
+    <div class="sidebar__brand">
+      <strong>다사랑 강의 허브</strong>
+      <span>어느 페이지에서도 같은 사이드바를 사용합니다.</span>
+    </div>
+
+    {sections.map((section) => (
+      <details class="sidebar__group" open={section.open}>
+        <summary class="sidebar__summary">
+          <span>{section.title}</span>
+          <span class="sidebar__arrow" aria-hidden="true"></span>
+        </summary>
+        <div class="sidebar__items">
+          {section.items.map((item) => (
+            <a
+              class:list={[
+                "sidebar__link",
+                item.active && "is-active",
+                item.child && "is-child",
+              ]}
+              href={item.href}
+            >
+              {item.label}
+            </a>
+          ))}
+        </div>
+      </details>
+    ))}
+  </div>
+</aside>
+
+<style>
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 280px;
+    overflow-y: auto;
+    background: #efefef;
+    border-right: 1px solid #d2d2d2;
+  }
+
+  .sidebar__inner {
+    padding: 18px 16px 24px;
+  }
+
+  .sidebar__filter {
+    margin-bottom: 14px;
+    padding: 14px 16px;
+    background: #e3e3e3;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  .sidebar__brand {
+    padding: 2px 12px 18px;
+    border-bottom: 1px solid #d2d2d2;
+    margin-bottom: 10px;
+  }
+
+  .sidebar__brand strong {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 22px;
+    line-height: 1.35;
+    font-weight: 700;
+  }
+
+  .sidebar__brand span {
+    display: block;
+    color: #7b7b7b;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .sidebar__group {
+    border-top: 1px solid #d2d2d2;
+  }
+
+  .sidebar__summary {
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 10px;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  .sidebar__summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .sidebar__arrow::before {
+    content: "▸";
+    color: #6f6f6f;
+    font-size: 13px;
+  }
+
+  .sidebar__group[open] .sidebar__arrow::before {
+    content: "▾";
+  }
+
+  .sidebar__items {
+    padding: 0 0 10px;
+  }
+
+  .sidebar__link {
+    display: block;
+    margin: 0 8px 8px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    color: #505050;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .sidebar__link:hover {
+    background: #e8e8e8;
+  }
+
+  .sidebar__link.is-active {
+    background: #efd4ae;
+    color: #6d5b43;
+  }
+
+  .sidebar__link.is-child {
+    margin-left: 18px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  @media (max-width: 920px) {
+    .sidebar {
+      position: static;
+      width: auto;
+      border-right: 0;
+      border-bottom: 1px solid #d2d2d2;
+    }
+  }
+</style>
+

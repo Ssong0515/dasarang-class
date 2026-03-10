@@ -1,0 +1,77 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { sessionsByMonth } from "../../data/schedule";
+---
+
+<BaseLayout title="2026년 1학기 강의 목록">
+  <section class="panel">
+    <h1>2026년 1학기 강의 목록</h1>
+    <p>강의 항목은 시간표 기준으로 자동 생성합니다. 새 수업을 추가할 때는 데이터 파일만 바꾸면 목록과 개별 페이지가 함께 반영됩니다.</p>
+  </section>
+
+  {sessionsByMonth.map(({ month, sessions }) => (
+    <section class="panel month" id={`month-${month.replace("월", "")}`}>
+      <h2>{month}</h2>
+      <div class="rows">
+        {sessions.map((session) => (
+          <a class="row" href={`${import.meta.env.BASE_URL}classes/${session.slug}/`}>
+            <strong>{session.label}</strong>
+            <span>{session.course}</span>
+            <span>{session.date}</span>
+            <span class:list={["status", session.isFirstLesson && "is-main"]}>{session.status}</span>
+          </a>
+        ))}
+      </div>
+    </section>
+  ))}
+</BaseLayout>
+
+<style>
+  .month {
+    margin-bottom: 18px;
+  }
+
+  .month h2 {
+    font-size: 20px;
+  }
+
+  .rows {
+    display: grid;
+    gap: 8px;
+  }
+
+  .row {
+    display: grid;
+    grid-template-columns: 1.2fr 0.9fr 0.9fr 0.8fr;
+    gap: 12px;
+    align-items: center;
+    padding: 14px 16px;
+    border: 1px solid #d2d2d2;
+    border-radius: 10px;
+    background: #fafafa;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .row strong {
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .row span {
+    color: #7b7b7b;
+    font-size: 14px;
+  }
+
+  .status.is-main {
+    color: #6d5b43;
+    font-weight: 700;
+  }
+
+  @media (max-width: 1100px) {
+    .row {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+

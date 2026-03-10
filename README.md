@@ -38,8 +38,9 @@
 
 - 이 프로젝트는 정적 사이트로 운영합니다.
 - GitHub Pages로 배포합니다.
-- 루트의 `index.html`이 메인 허브 페이지입니다.
-- GitHub Actions가 `main` 브랜치 푸시 시 사이트를 자동 배포합니다.
+- Astro 기반 정적 사이트로 관리합니다.
+- 메인 페이지와 강의 페이지는 `src/pages/`에서 관리합니다.
+- GitHub Actions가 `main` 브랜치 푸시 시 `npm run build` 후 `dist/`를 자동 배포합니다.
 - 한글 폴더 이름과 정적 파일 구조를 유지하기 위해 `.nojekyll` 파일을 포함합니다.
 
 ## 권장 수업 폴더 구조

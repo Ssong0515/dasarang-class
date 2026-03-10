@@ -1,0 +1,29 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+---
+
+<BaseLayout title="다사랑 강의 허브">
+  <section class="panel">
+    <h1>다사랑 강의 허브</h1>
+    <p>수업 자료와 강의 항목을 컴포넌트와 라우팅 구조로 관리하는 메인 페이지입니다. 왼쪽 사이드바는 모든 페이지에서 동일하게 유지됩니다.</p>
+  </section>
+
+  <section class="panel">
+    <h2>빠른 이동</h2>
+    <div class="list">
+      <a class="item" href={`${import.meta.env.BASE_URL}classes/260314_computer-a_01/`}>
+        <strong>3월 14일 A반 첫 수업</strong>
+        <span>현재 첫 수업 연결 위치</span>
+      </a>
+      <a class="item" href={`${import.meta.env.BASE_URL}classes/`}>
+        <strong>2026년 1학기 강의 목록</strong>
+        <span>시간표 기준으로 만든 전체 강의 항목</span>
+      </a>
+      <a class="item" href={`${import.meta.env.BASE_URL}260314_%EC%B2%AB%EC%88%98%EC%97%85/materials/`}>
+        <strong>학생용 첫 수업 페이지</strong>
+        <span>실제 수업 화면</span>
+      </a>
+    </div>
+  </section>
+</BaseLayout>
+
