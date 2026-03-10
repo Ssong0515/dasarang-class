@@ -101,10 +101,6 @@ const { title } = Astro.props;
       }
 
       @media (max-width: 920px) {
-        .page-shell {
-          padding-left: 0;
-        }
-
         .page-main {
           padding: 16px;
         }
@@ -122,6 +118,7 @@ const { title } = Astro.props;
       const toggleButtons = document.querySelectorAll("[data-sidebar-toggle]");
       const sidebar = document.getElementById("shared-sidebar");
       const storageKey = "dasarang-sidebar-collapsed";
+      const mobileBreakpoint = 920;
 
       const closeAllSidebarGroups = () => {
         sidebar?.querySelectorAll("details").forEach((group) => {
@@ -137,6 +134,9 @@ const { title } = Astro.props;
         }
       };
 
+      const isForcedCollapsed = () =>
+        window.innerWidth <= mobileBreakpoint || Boolean(document.fullscreenElement);
+
       const applySidebarState = (collapsed) => {
         document.body.classList.toggle("sidebar-collapsed", collapsed);
         if (collapsed) {
@@ -150,16 +150,27 @@ const { title } = Astro.props;
         });
       };
 
-      const saved = window.localStorage.getItem(storageKey) === "true";
-      applySidebarState(saved);
+      const syncSidebarState = () => {
+        const saved = window.localStorage.getItem(storageKey) === "true";
+        applySidebarState(isForcedCollapsed() || saved);
+      };
+
+      syncSidebarState();
 
       toggleButtons.forEach((button) => {
         button.addEventListener("click", () => {
+          if (isForcedCollapsed()) {
+            return;
+          }
+
           const collapsed = !document.body.classList.contains("sidebar-collapsed");
           window.localStorage.setItem(storageKey, String(collapsed));
           applySidebarState(collapsed);
         });
       });
+
+      window.addEventListener("resize", syncSidebarState);
+      document.addEventListener("fullscreenchange", syncSidebarState);
 
       sidebar?.addEventListener("click", (event) => {
         if (!document.body.classList.contains("sidebar-collapsed")) {
