@@ -6,14 +6,6 @@ const base = import.meta.env.BASE_URL;
 
 const isActive = (path: string) => currentPath === path;
 const startsWith = (path: string) => currentPath.startsWith(path);
-const courseIcon = (course: string) => {
-  if (course.includes("A반")) return "A";
-  if (course.includes("B반")) return "B";
-  if (course.includes("1")) return "1";
-  if (course.includes("2")) return "2";
-  return "•";
-};
-
 const updatedParts = new Intl.DateTimeFormat("ko-KR", {
   timeZone: "Asia/Seoul",
   year: "numeric",
@@ -56,18 +48,16 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
     <details class="sidebar__group" open={isActive(base)}>
       <summary class="sidebar__summary">
         <span class="sidebar__label-wrap">
-          <span class="sidebar__icon">⌂</span>
+          <span class="sidebar__icon sidebar__icon--overview">⌂</span>
           <span class="sidebar__text">개요</span>
         </span>
         <span class="sidebar__arrow" aria-hidden="true"></span>
       </summary>
       <div class="sidebar__items">
         <a class:list={["sidebar__link", isActive(base) && "is-active"]} href={base}>
-          <span class="sidebar__icon">⌂</span>
           <span class="sidebar__text">메인 허브</span>
         </a>
         <a class="sidebar__link" href={`${base}README.md`}>
-          <span class="sidebar__icon">⚙</span>
           <span class="sidebar__text">프로젝트 기준</span>
         </a>
       </div>
@@ -79,7 +69,7 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
     >
       <summary class="sidebar__summary">
         <span class="sidebar__label-wrap">
-          <span class="sidebar__icon">🖥</span>
+          <span class="sidebar__icon sidebar__icon--materials">🖥</span>
           <span class="sidebar__text">수업 자료</span>
         </span>
         <span class="sidebar__arrow" aria-hidden="true"></span>
@@ -92,7 +82,6 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
           ]}
           href={`${base}classes/260314_computer-a_01/`}
         >
-          <span class="sidebar__icon">A</span>
           <span class="sidebar__text">3월 14일 A반 첫 수업</span>
         </a>
         <a
@@ -102,7 +91,6 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
           ]}
           href={`${base}260314_%EC%B2%AB%EC%88%98%EC%97%85/materials/`}
         >
-          <span class="sidebar__icon">📄</span>
           <span class="sidebar__text">학생용 첫 수업 페이지</span>
         </a>
       </div>
@@ -111,14 +99,13 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
     <details class="sidebar__group" open={startsWith(`${base}classes/`)}>
       <summary class="sidebar__summary">
         <span class="sidebar__label-wrap">
-          <span class="sidebar__icon">🗂</span>
+          <span class="sidebar__icon sidebar__icon--classes">🗂</span>
           <span class="sidebar__text">강의 목록</span>
         </span>
         <span class="sidebar__arrow" aria-hidden="true"></span>
       </summary>
       <div class="sidebar__items">
         <a class:list={["sidebar__link", isActive(`${base}classes/`) && "is-active"]} href={`${base}classes/`}>
-          <span class="sidebar__icon">🗂</span>
           <span class="sidebar__text">전체 강의 목록</span>
         </a>
 
@@ -131,7 +118,6 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
             <details class="sidebar__subgroup" open={monthOpen}>
               <summary class="sidebar__subsummary">
                 <span class="sidebar__link is-month">
-                  <span class="sidebar__icon">📅</span>
                   <span class="sidebar__text">{month}</span>
                 </span>
                 <span class="sidebar__subarrow" aria-hidden="true"></span>
@@ -146,7 +132,6 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
                     <details class="sidebar__subgroup sidebar__subgroup--course" open={courseOpen}>
                       <summary class="sidebar__subsummary sidebar__subsummary--course">
                         <span class="sidebar__link is-course">
-                          <span class="sidebar__icon">{courseIcon(course)}</span>
                           <span class="sidebar__text">{course}</span>
                         </span>
                         <span class="sidebar__subarrow" aria-hidden="true"></span>
@@ -161,7 +146,6 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
                             ]}
                             href={`${base}classes/${session.slug}/`}
                           >
-                            <span class="sidebar__icon">{courseIcon(course)}</span>
                             <span class="sidebar__text">{session.label}</span>
                           </a>
                         ))}
@@ -188,7 +172,9 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
     overflow-y: auto;
     background: #efefef;
     border-right: 1px solid #d2d2d2;
-    transition: width 0.18s ease;
+    transition:
+      width 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 0.28s ease;
   }
 
   :global(body.sidebar-collapsed) .sidebar {
@@ -197,6 +183,7 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
 
   .sidebar__inner {
     padding: 18px 16px 24px;
+    transition: padding 0.28s cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   .sidebar__top {
@@ -264,6 +251,7 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
     cursor: pointer;
     font-size: 15px;
     font-weight: 700;
+    transition: padding 0.24s ease;
   }
 
   .sidebar__subsummary {
@@ -310,14 +298,43 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
     text-decoration: none;
     font-size: 14px;
     font-weight: 700;
+    transition:
+      background 0.2s ease,
+      color 0.2s ease,
+      padding 0.24s ease,
+      margin 0.24s ease;
   }
 
   .sidebar__icon {
     flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     width: 18px;
+    height: 18px;
     text-align: center;
     font-size: 15px;
     line-height: 1;
+    transition:
+      width 0.24s ease,
+      height 0.24s ease,
+      font-size 0.24s ease,
+      background 0.24s ease,
+      color 0.24s ease,
+      border-radius 0.24s ease,
+      box-shadow 0.24s ease;
+  }
+
+  .sidebar__icon--overview {
+    color: #7a4d00;
+  }
+
+  .sidebar__icon--materials {
+    color: #0d5f6d;
+  }
+
+  .sidebar__icon--classes {
+    color: #3758a5;
   }
 
   .sidebar__text {
@@ -377,7 +394,7 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
 
   :global(body.sidebar-collapsed) .sidebar__summary,
   :global(body.sidebar-collapsed) .sidebar__subsummary {
-    padding: 10px 0;
+    padding: 12px 0;
     justify-content: center;
   }
 
@@ -390,8 +407,31 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
   :global(body.sidebar-collapsed) .sidebar__link {
     justify-content: center;
     margin: 0 0 8px;
-    padding: 10px;
+    padding: 12px;
     border-radius: 12px;
+  }
+
+  :global(body.sidebar-collapsed) .sidebar__summary > .sidebar__label-wrap > .sidebar__icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 14px;
+    font-size: 22px;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.04);
+  }
+
+  :global(body.sidebar-collapsed) .sidebar__icon--overview {
+    background: #f5dfbf;
+    color: #8f5a00;
+  }
+
+  :global(body.sidebar-collapsed) .sidebar__icon--materials {
+    background: #cfeef2;
+    color: #0b6978;
+  }
+
+  :global(body.sidebar-collapsed) .sidebar__icon--classes {
+    background: #d9e4ff;
+    color: #3356b4;
   }
 
   :global(body.sidebar-collapsed) .sidebar__link.is-month,
