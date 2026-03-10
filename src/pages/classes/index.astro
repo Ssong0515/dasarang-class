@@ -1,25 +1,32 @@
 ---
 import BaseLayout from "../../layouts/BaseLayout.astro";
-import { sessionsByMonth } from "../../data/schedule";
+import { monthGroups } from "../../data/schedule";
 ---
 
 <BaseLayout title="2026년 1학기 강의 목록">
   <section class="panel">
     <h1>2026년 1학기 강의 목록</h1>
-    <p>강의 항목은 시간표 기준으로 자동 생성합니다. 새 수업을 추가할 때는 데이터 파일만 바꾸면 목록과 개별 페이지가 함께 반영됩니다.</p>
+    <p>강의 항목은 시간표 기준으로 자동 생성합니다. 월별로 보고, 그 아래에서 반이나 과정 단위로 정리해서 찾을 수 있습니다.</p>
   </section>
 
-  {sessionsByMonth.map(({ month, sessions }) => (
+  {monthGroups.map(({ month, courses }) => (
     <section class="panel month" id={`month-${month.replace("월", "")}`}>
       <h2>{month}</h2>
-      <div class="rows">
-        {sessions.map((session) => (
-          <a class="row" href={`${import.meta.env.BASE_URL}classes/${session.slug}/`}>
-            <strong>{session.label}</strong>
-            <span>{session.course}</span>
-            <span>{session.date}</span>
-            <span class:list={["status", session.isFirstLesson && "is-main"]}>{session.status}</span>
-          </a>
+      <div class="course-list">
+        {courses.map(({ course, sessions }) => (
+          <div class="course">
+            <h3>{course}</h3>
+            <div class="rows">
+              {sessions.map((session) => (
+                <a class="row" href={`${import.meta.env.BASE_URL}classes/${session.slug}/`}>
+                  <strong>{session.label}</strong>
+                  <span>{session.date}</span>
+                  <span>{session.time}</span>
+                  <span class:list={["status", session.isFirstLesson && "is-main"]}>{session.status}</span>
+                </a>
+              ))}
+            </div>
+          </div>
         ))}
       </div>
     </section>
@@ -33,6 +40,26 @@ import { sessionsByMonth } from "../../data/schedule";
 
   .month h2 {
     font-size: 20px;
+    margin-bottom: 12px;
+  }
+
+  .course-list {
+    display: grid;
+    gap: 16px;
+  }
+
+  .course {
+    padding: 14px;
+    border: 1px solid #dcdcdc;
+    border-radius: 10px;
+    background: #fcfcfc;
+  }
+
+  .course h3 {
+    margin: 0 0 10px;
+    font-size: 16px;
+    font-weight: 700;
+    color: #505050;
   }
 
   .rows {
@@ -42,7 +69,7 @@ import { sessionsByMonth } from "../../data/schedule";
 
   .row {
     display: grid;
-    grid-template-columns: 1.2fr 0.9fr 0.9fr 0.8fr;
+    grid-template-columns: 1.2fr 0.8fr 1fr 0.8fr;
     gap: 12px;
     align-items: center;
     padding: 14px 16px;
@@ -74,4 +101,3 @@ import { sessionsByMonth } from "../../data/schedule";
     }
   }
 </style>
-

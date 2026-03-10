@@ -10,6 +10,16 @@ export type Session = {
   isFirstLesson: boolean;
 };
 
+export type CourseGroup = {
+  course: string;
+  sessions: Session[];
+};
+
+export type MonthGroup = {
+  month: string;
+  courses: CourseGroup[];
+};
+
 const saturdayDates = [
   "2026-03-14",
   "2026-03-21",
@@ -112,7 +122,19 @@ export const sessionsByMonth = monthOrder.map((month) => ({
   sessions: sessions.filter((session) => session.month === month),
 }));
 
+export const monthGroups: MonthGroup[] = monthOrder.map((month) => {
+  const monthSessions = sessions.filter((session) => session.month === month);
+  const courseOrder = Array.from(new Set(monthSessions.map((session) => session.course)));
+
+  return {
+    month,
+    courses: courseOrder.map((course) => ({
+      course,
+      sessions: monthSessions.filter((session) => session.course === course),
+    })),
+  };
+});
+
 export const firstLessonSession = sessions.find(
   (session) => session.slug === "260314_computer-a_01",
 );
-
