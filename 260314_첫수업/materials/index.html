@@ -1,0 +1,863 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>260314 첫수업</title>
+  <style>
+    :root {
+      --bg: #fbf6ef;
+      --panel: rgba(255, 252, 246, 0.95);
+      --ink: #15233b;
+      --muted: #61708a;
+      --line: #e8dcc9;
+      --accent: #ff7a59;
+      --accent-2: #1f8f72;
+      --accent-3: #2d6df6;
+      --yellow: #ffd468;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Malgun Gothic", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(255, 122, 89, 0.18), transparent 24%),
+        radial-gradient(circle at top right, rgba(45, 109, 246, 0.15), transparent 26%),
+        linear-gradient(180deg, #fff9f2 0%, #f8f0e4 100%);
+    }
+
+    a { color: inherit; }
+
+    .wrap {
+      width: min(1220px, calc(100% - 28px));
+      margin: 0 auto;
+      padding: 20px 0 40px;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      backdrop-filter: blur(14px);
+      background: rgba(251, 246, 239, 0.85);
+      border: 2px solid var(--line);
+      border-radius: 22px;
+      padding: 12px 16px;
+      margin-bottom: 18px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .topbar strong {
+      font-size: 18px;
+    }
+
+    .topnav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .topnav a {
+      text-decoration: none;
+      background: #fff;
+      border: 2px solid var(--line);
+      border-radius: 999px;
+      padding: 10px 14px;
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 2px solid var(--line);
+      border-radius: 28px;
+      padding: 26px;
+      box-shadow: 0 16px 36px rgba(21, 35, 59, 0.08);
+    }
+
+    .eyebrow {
+      display: inline-block;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: #fff;
+      border: 2px solid var(--line);
+      font-size: 14px;
+      font-weight: 800;
+      margin-bottom: 14px;
+    }
+
+    h1, h2, h3, p { margin: 0; }
+
+    h1 {
+      font-size: clamp(44px, 8vw, 84px);
+      line-height: 0.94;
+      letter-spacing: -0.04em;
+      margin-bottom: 18px;
+    }
+
+    .hero p {
+      font-size: clamp(20px, 2.5vw, 26px);
+      line-height: 1.4;
+      max-width: 18em;
+    }
+
+    .triples {
+      display: grid;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .triple {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+    }
+
+    .triple span,
+    .pill,
+    .step,
+    .mini-card,
+    .term,
+    .rule,
+    .question {
+      background: #fff;
+      border: 2px solid var(--line);
+      border-radius: 18px;
+    }
+
+    .triple span {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 64px;
+      padding: 14px;
+      font-weight: 800;
+      font-size: clamp(18px, 2vw, 24px);
+      text-align: center;
+    }
+
+    .hero-visual {
+      min-height: 320px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-visual .shape {
+      position: absolute;
+      border-radius: 50%;
+    }
+
+    .shape.one {
+      width: 180px;
+      height: 180px;
+      background: #ffd468;
+      top: 24px;
+      left: 22px;
+    }
+
+    .shape.two {
+      width: 220px;
+      height: 220px;
+      background: #b9dcff;
+      right: 12px;
+      bottom: 18px;
+    }
+
+    .teacher-card,
+    .screen-card,
+    .device-card {
+      position: absolute;
+      background: #fff;
+      border: 3px solid var(--ink);
+      border-radius: 24px;
+      box-shadow: 0 14px 28px rgba(21, 35, 59, 0.12);
+    }
+
+    .teacher-card {
+      inset: 48px 38px 110px 48px;
+      padding: 20px;
+    }
+
+    .teacher-face {
+      width: 84px;
+      height: 84px;
+      border-radius: 50%;
+      margin-bottom: 16px;
+      background: linear-gradient(180deg, #1f2a44 0 28%, #ffd9b8 28% 100%);
+      position: relative;
+    }
+
+    .teacher-face::before,
+    .teacher-face::after {
+      content: "";
+      position: absolute;
+      background: #1f2a44;
+      border-radius: 50%;
+      width: 8px;
+      height: 8px;
+      top: 34px;
+    }
+
+    .teacher-face::before { left: 24px; }
+    .teacher-face::after { right: 24px; }
+
+    .teacher-card h2 {
+      font-size: 30px;
+      margin-bottom: 8px;
+    }
+
+    .teacher-card p {
+      font-size: 18px;
+      line-height: 1.45;
+    }
+
+    .screen-card {
+      right: 24px;
+      bottom: 26px;
+      width: 180px;
+      height: 100px;
+      padding: 12px;
+      background: linear-gradient(180deg, #2d6df6 0%, #9dc4ff 100%);
+      color: #fff;
+      font-weight: 900;
+      font-size: 22px;
+      transform: rotate(-6deg);
+    }
+
+    .device-card {
+      right: 126px;
+      top: 38px;
+      width: 138px;
+      height: 78px;
+      background: linear-gradient(180deg, #ff8c69 0%, #ffd0bf 100%);
+      transform: rotate(8deg);
+    }
+
+    .device-card::before {
+      content: "";
+      position: absolute;
+      inset: 12px;
+      border: 3px solid rgba(255, 255, 255, 0.92);
+      border-radius: 16px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .span-4 { grid-column: span 4; }
+    .span-6 { grid-column: span 6; }
+    .span-8 { grid-column: span 8; }
+    .span-12 { grid-column: span 12; }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .section-title .num {
+      width: 52px;
+      height: 52px;
+      border-radius: 16px;
+      background: var(--accent);
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: 900;
+      flex: none;
+    }
+
+    .section-title h2 {
+      font-size: clamp(28px, 4vw, 42px);
+      letter-spacing: -0.03em;
+    }
+
+    .lead {
+      font-size: 22px;
+      line-height: 1.45;
+      color: var(--muted);
+      margin-bottom: 18px;
+    }
+
+    .pill-row,
+    .step-row,
+    .term-grid,
+    .rule-row,
+    .question-row {
+      display: grid;
+      gap: 12px;
+    }
+
+    .pill-row { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+    .step-row { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+    .term-grid { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+    .rule-row { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+    .question-row { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+
+    .pill,
+    .step,
+    .mini-card,
+    .term,
+    .rule,
+    .question {
+      padding: 18px;
+    }
+
+    .pill strong,
+    .step strong,
+    .term strong,
+    .rule strong,
+    .question strong {
+      display: block;
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+
+    .pill span,
+    .step span,
+    .term span,
+    .rule span,
+    .question span {
+      display: block;
+      font-size: 18px;
+      line-height: 1.45;
+      color: var(--muted);
+    }
+
+    .mini-card {
+      min-height: 180px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .mini-card .icon {
+      width: 84px;
+      height: 84px;
+      border-radius: 22px;
+      background: linear-gradient(135deg, #ffd468, #ff8c69);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 42px;
+      margin-bottom: 18px;
+    }
+
+    .mini-card h3 {
+      font-size: 28px;
+      margin-bottom: 6px;
+    }
+
+    .mini-card p {
+      font-size: 18px;
+      line-height: 1.4;
+      color: var(--muted);
+    }
+
+    .wide-visual {
+      min-height: 220px;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .power-ring,
+    .mouse-visual,
+    .keyboard-visual,
+    .internet-visual {
+      position: relative;
+    }
+
+    .power-ring {
+      width: 180px;
+      height: 180px;
+      border-radius: 50%;
+      border: 14px solid var(--accent);
+    }
+
+    .power-ring::before {
+      content: "";
+      position: absolute;
+      width: 18px;
+      height: 82px;
+      background: var(--accent);
+      border-radius: 999px;
+      left: 50%;
+      top: -6px;
+      transform: translateX(-50%);
+    }
+
+    .mouse-visual {
+      width: 160px;
+      height: 220px;
+      border-radius: 80px;
+      border: 6px solid var(--ink);
+      background: #fff;
+    }
+
+    .mouse-visual::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 24px;
+      transform: translateX(-50%);
+      width: 10px;
+      height: 48px;
+      background: var(--ink);
+      border-radius: 999px;
+    }
+
+    .mouse-visual::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 88px;
+      transform: translateX(-50%);
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: #ffd468;
+    }
+
+    .keyboard-visual {
+      width: min(100%, 520px);
+      padding: 18px;
+      border-radius: 24px;
+      background: #1f2a44;
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      gap: 8px;
+    }
+
+    .keyboard-visual span {
+      min-height: 42px;
+      border-radius: 10px;
+      background: #fff;
+      display: grid;
+      place-items: center;
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--ink);
+      padding: 6px;
+    }
+
+    .keyboard-visual span.wide {
+      grid-column: span 3;
+      background: #ffd468;
+    }
+
+    .internet-visual {
+      width: 220px;
+      height: 220px;
+      border-radius: 50%;
+      border: 6px solid var(--accent-3);
+    }
+
+    .internet-visual::before,
+    .internet-visual::after {
+      content: "";
+      position: absolute;
+      inset: 20px;
+      border: 6px solid var(--accent-3);
+      border-radius: 50%;
+    }
+
+    .internet-visual::after {
+      inset: 0;
+      clip-path: inset(50% 0 0 0);
+      border-color: var(--accent-2);
+    }
+
+    .caption {
+      margin-top: 16px;
+      font-size: 20px;
+      font-weight: 800;
+      text-align: center;
+    }
+
+    .footer-note {
+      text-align: center;
+      padding: 24px;
+      color: var(--muted);
+      font-size: 18px;
+    }
+
+    @media (max-width: 1024px) {
+      .hero,
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .span-4,
+      .span-6,
+      .span-8,
+      .span-12 {
+        grid-column: span 1;
+      }
+
+      .triple {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <strong><a href="../../index.html" style="text-decoration:none;">Dasarang Class</a> / 260314 첫수업</strong>
+      <nav class="topnav">
+        <a href="#intro">소개</a>
+        <a href="#today">오늘 할 것</a>
+        <a href="#words">물건 이름</a>
+        <a href="#power">전원</a>
+        <a href="#mouse">마우스</a>
+        <a href="#keyboard">키보드</a>
+        <a href="#typing">타이핑</a>
+        <a href="#question">질문</a>
+      </nav>
+    </div>
+
+    <section class="hero">
+      <div class="panel">
+        <div class="eyebrow">Lesson 01 / First Computer Class / Первый урок</div>
+        <h1>첫 컴퓨터 수업</h1>
+        <p>보기, 따라하기, 직접하기. 아주 기본적인 것부터 같이 시작합니다.</p>
+        <div class="triples">
+          <div class="triple">
+            <span>컴퓨터</span>
+            <span>Computer</span>
+            <span>Компьютер</span>
+          </div>
+          <div class="triple">
+            <span>짧게</span>
+            <span>크게</span>
+            <span>같이</span>
+          </div>
+        </div>
+      </div>
+      <div class="panel hero-visual">
+        <div class="shape one"></div>
+        <div class="shape two"></div>
+        <div class="teacher-card">
+          <div class="teacher-face"></div>
+          <h2>송은석</h2>
+          <p>컴퓨터 선생님<br>Computer Teacher<br>Учитель компьютера</p>
+        </div>
+        <div class="device-card"></div>
+        <div class="screen-card">LOOK<br>FOLLOW<br>DO</div>
+      </div>
+    </section>
+
+    <section id="intro" class="grid">
+      <div class="panel span-8">
+        <div class="section-title">
+          <span class="num">1</span>
+          <h2>수업 시작 - 자기소개</h2>
+        </div>
+        <p class="lead">학생들이 선생님을 인식하고, 편안하게 수업 분위기를 시작합니다.</p>
+        <div class="pill-row">
+          <div class="pill">
+            <strong>이름</strong>
+            <span>송은석</span>
+          </div>
+          <div class="pill">
+            <strong>역할</strong>
+            <span>컴퓨터 선생님</span>
+          </div>
+          <div class="pill">
+            <strong>수업 방식</strong>
+            <span>1. 보기  2. 따라하기  3. 직접하기</span>
+          </div>
+        </div>
+      </div>
+      <div class="panel span-4">
+        <div class="section-title">
+          <span class="num">핵</span>
+          <h2>핵심 단어</h2>
+        </div>
+        <div class="triple">
+          <span>컴퓨터</span>
+          <span>Computer</span>
+          <span>Компьютер</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="today" class="grid">
+      <div class="panel span-6">
+        <div class="section-title">
+          <span class="num">2</span>
+          <h2>오늘 할 것</h2>
+        </div>
+        <p class="lead">첫 수업 목표는 아주 기본적인 것만 배우기입니다.</p>
+        <div class="step-row">
+          <div class="step"><strong>컴퓨터 켜기</strong><span>Turn on<br>Включить</span></div>
+          <div class="step"><strong>컴퓨터 끄기</strong><span>Turn off<br>Выключить</span></div>
+          <div class="step"><strong>마우스 클릭</strong><span>Click<br>Клик</span></div>
+          <div class="step"><strong>키보드 타이핑</strong><span>Typing<br>Печатать</span></div>
+        </div>
+      </div>
+      <div class="panel span-6">
+        <div class="section-title">
+          <span class="num">원</span>
+          <h2>수업 원칙</h2>
+        </div>
+        <div class="rule-row">
+          <div class="rule"><strong>짧게</strong><span>Short</span></div>
+          <div class="rule"><strong>크게</strong><span>Big</span></div>
+          <div class="rule"><strong>같이</strong><span>Together</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="words" class="grid">
+      <div class="panel span-12">
+        <div class="section-title">
+          <span class="num">3</span>
+          <h2>컴퓨터 물건 이름</h2>
+        </div>
+        <p class="lead">수업에서 계속 사용할 기본 용어입니다.</p>
+        <div class="term-grid">
+          <div class="mini-card">
+            <div class="icon">💻</div>
+            <div>
+              <h3>노트북</h3>
+              <p>Laptop<br>Ноутбук</p>
+            </div>
+          </div>
+          <div class="mini-card">
+            <div class="icon">🖥️</div>
+            <div>
+              <h3>화면</h3>
+              <p>Screen<br>Экран</p>
+            </div>
+          </div>
+          <div class="mini-card">
+            <div class="icon">⌨️</div>
+            <div>
+              <h3>키보드</h3>
+              <p>Keyboard<br>Клавиатура</p>
+            </div>
+          </div>
+          <div class="mini-card">
+            <div class="icon">🖱️</div>
+            <div>
+              <h3>마우스</h3>
+              <p>Mouse<br>Мышь</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="power" class="grid">
+      <div class="panel span-4">
+        <div class="section-title">
+          <span class="num">4</span>
+          <h2>전원 버튼</h2>
+        </div>
+        <div class="triple">
+          <span>전원</span>
+          <span>Power button</span>
+          <span>Кнопка питания</span>
+        </div>
+        <p class="lead" style="margin-top:18px;">컴퓨터를 켜기 위해 누르는 버튼</p>
+      </div>
+      <div class="panel span-8 wide-visual">
+        <div class="power-ring"></div>
+        <div class="caption">전원 버튼은 한 번만 누르기</div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <div class="panel span-6">
+        <div class="section-title">
+          <span class="num">5</span>
+          <h2>컴퓨터 켜기</h2>
+        </div>
+        <div class="step-row">
+          <div class="step"><strong>1</strong><span>전원 버튼 찾기</span></div>
+          <div class="step"><strong>2</strong><span>버튼 누르기</span></div>
+          <div class="step"><strong>3</strong><span>기다리기</span></div>
+        </div>
+        <p class="lead" style="margin-top:18px;">중요: 전원 버튼은 한 번만 누르기</p>
+      </div>
+      <div class="panel span-6">
+        <div class="section-title">
+          <span class="num">6</span>
+          <h2>컴퓨터 끄기</h2>
+        </div>
+        <div class="step-row">
+          <div class="step"><strong>1</strong><span>시작 버튼 클릭</span></div>
+          <div class="step"><strong>2</strong><span>종료 선택</span></div>
+          <div class="step"><strong>3</strong><span>기다리기</span></div>
+        </div>
+        <p class="lead" style="margin-top:18px;">중요: 전원 버튼으로 끄지 않기</p>
+      </div>
+    </section>
+
+    <section id="mouse" class="grid">
+      <div class="panel span-4">
+        <div class="section-title">
+          <span class="num">7</span>
+          <h2>마우스</h2>
+        </div>
+        <div class="triple">
+          <span>클릭</span>
+          <span>Click</span>
+          <span>Клик</span>
+        </div>
+        <p class="lead" style="margin-top:18px;">마우스 왼쪽 버튼을 한 번 누르는 것</p>
+      </div>
+      <div class="panel span-8 wide-visual">
+        <div class="mouse-visual"></div>
+        <div class="caption">왼쪽 버튼 한 번 누르기</div>
+      </div>
+    </section>
+
+    <section id="keyboard" class="grid">
+      <div class="panel span-6">
+        <div class="section-title">
+          <span class="num">8</span>
+          <h2>키보드</h2>
+        </div>
+        <div class="term-grid">
+          <div class="term"><strong>Space</strong><span>띄어쓰기</span></div>
+          <div class="term"><strong>Enter</strong><span>다음 줄</span></div>
+          <div class="term"><strong>Backspace</strong><span>지우기</span></div>
+          <div class="term"><strong>한/영</strong><span>한국어 / 영어 전환</span></div>
+        </div>
+      </div>
+      <div class="panel span-6 wide-visual">
+        <div class="keyboard-visual">
+          <span>Q</span><span>W</span><span>E</span><span>R</span><span>T</span><span>Y</span><span>U</span><span>I</span>
+          <span>A</span><span>S</span><span>D</span><span>F</span><span>G</span><span>H</span><span>J</span><span>K</span>
+          <span>Z</span><span>X</span><span>C</span><span>V</span><span>B</span><span>N</span><span>M</span><span>Enter</span>
+          <span>한/영</span><span>Ctrl</span><span class="wide">Space</span><span>Alt</span><span>Back</span><span>Shift</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="typing" class="grid">
+      <div class="panel span-6">
+        <div class="section-title">
+          <span class="num">9</span>
+          <h2>타이핑 연습</h2>
+        </div>
+        <div class="pill-row">
+          <div class="pill"><strong>첫 연습</strong><span>내 이름 쓰기</span></div>
+          <div class="pill"><strong>목표 1</strong><span>키보드 사용 익숙해지기</span></div>
+          <div class="pill"><strong>목표 2</strong><span>한글 입력 경험하기</span></div>
+        </div>
+      </div>
+      <div class="panel span-6">
+        <div class="section-title">
+          <span class="num">10</span>
+          <h2>컴퓨터로 할 수 있는 것</h2>
+        </div>
+        <div class="term-grid">
+          <div class="mini-card">
+            <div class="icon">✍️</div>
+            <div>
+              <h3>글쓰기</h3>
+              <p>Write<br>Писать</p>
+            </div>
+          </div>
+          <div class="mini-card">
+            <div class="icon">🌐</div>
+            <div>
+              <h3>인터넷</h3>
+              <p>Internet<br>Интернет</p>
+            </div>
+          </div>
+          <div class="mini-card">
+            <div class="icon">🎨</div>
+            <div>
+              <h3>만들기</h3>
+              <p>Create<br>Создавать</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <div class="panel span-6">
+        <div class="section-title">
+          <span class="num">11</span>
+          <h2>수업 분위기</h2>
+        </div>
+        <p class="lead">천천히 해도 괜찮음</p>
+        <div class="term-grid">
+          <div class="term"><strong>보기</strong><span>Look<br>Смотреть</span></div>
+          <div class="term"><strong>듣기</strong><span>Listen<br>Слушать</span></div>
+          <div class="term"><strong>따라하기</strong><span>Follow<br>Повторять</span></div>
+          <div class="term"><strong>손들기</strong><span>Raise hand<br>Поднять руку</span></div>
+        </div>
+      </div>
+      <div class="panel span-6 wide-visual">
+        <div class="internet-visual"></div>
+        <div class="caption">천천히 보고, 듣고, 따라하기</div>
+      </div>
+    </section>
+
+    <section id="question" class="grid">
+      <div class="panel span-12">
+        <div class="section-title">
+          <span class="num">12</span>
+          <h2>질문</h2>
+        </div>
+        <div class="question-row">
+          <div class="question">
+            <strong>컴퓨터 사용해 본 사람?</strong>
+            <span>손 들기</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <div class="panel span-12">
+        <div class="section-title">
+          <span class="num">원</span>
+          <h2>수업 운영 원칙</h2>
+        </div>
+        <div class="rule-row">
+          <div class="rule"><strong>1</strong><span>컴퓨터 명칭을 항상 동일하게 사용</span></div>
+          <div class="rule"><strong>2</strong><span>타자 연습은 매 수업 조금씩 진행</span></div>
+          <div class="rule"><strong>3</strong><span>컴퓨터로 할 수 있는 것을 시각적으로 보여주기</span></div>
+          <div class="rule"><strong>4</strong><span>한국어가 어려운 학생을 위해 영어와 러시아어 병행 사용</span></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer-note">
+      큰 화면으로 띄워 함께 보는 수업 자료
+    </div>
+  </div>
+</body>
+</html>
