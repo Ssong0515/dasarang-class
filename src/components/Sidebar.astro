@@ -10,11 +10,21 @@ const startsWith = (path: string) => currentPath.startsWith(path);
 
 <aside class="sidebar" id="shared-sidebar">
   <div class="sidebar__inner">
-    <div class="sidebar__filter">필터</div>
-
-    <div class="sidebar__brand">
-      <strong>다사랑 강의 허브</strong>
-      <span>어느 페이지에서도 같은 사이드바를 사용합니다.</span>
+    <div class="sidebar__top">
+      <div class="sidebar__brand">
+        <strong>다사랑 강의 허브</strong>
+        <span>어느 페이지에서도 같은 사이드바를 사용합니다.</span>
+      </div>
+      <button
+        class="sidebar__collapse"
+        type="button"
+        data-sidebar-toggle
+        aria-controls="shared-sidebar"
+        aria-label="사이드바 닫기"
+        title="사이드바 닫기"
+      >
+        ✕
+      </button>
     </div>
 
     <details class="sidebar__group" open={isActive(base)}>
@@ -139,19 +149,18 @@ const startsWith = (path: string) => currentPath.startsWith(path);
     padding: 18px 16px 24px;
   }
 
-  .sidebar__filter {
-    margin-bottom: 14px;
-    padding: 14px 16px;
-    background: #e3e3e3;
-    border-radius: 8px;
-    font-size: 15px;
-    font-weight: 700;
-  }
-
-  .sidebar__brand {
+  .sidebar__top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
     padding: 2px 12px 18px;
     border-bottom: 1px solid #d2d2d2;
     margin-bottom: 10px;
+  }
+
+  .sidebar__brand {
+    min-width: 0;
   }
 
   .sidebar__brand strong {
@@ -167,6 +176,20 @@ const startsWith = (path: string) => currentPath.startsWith(path);
     color: #7b7b7b;
     font-size: 13px;
     line-height: 1.5;
+  }
+
+  .sidebar__collapse {
+    flex: none;
+    width: 34px;
+    height: 34px;
+    border: 1px solid #d2d2d2;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #505050;
+    font: inherit;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
   }
 
   .sidebar__group,

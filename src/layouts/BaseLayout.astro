@@ -48,26 +48,29 @@ const { title } = Astro.props;
         padding: 24px;
       }
 
-      .sidebar-toggle {
+      .sidebar-toggle-floating {
         position: fixed;
         top: 16px;
-        left: 296px;
+        left: 16px;
         z-index: 1100;
         border: 1px solid var(--line);
         background: #ffffff;
         color: #505050;
         border-radius: 10px;
-        padding: 10px 12px;
+        width: 40px;
+        height: 40px;
         font: inherit;
-        font-size: 14px;
+        font-size: 18px;
         font-weight: 700;
         cursor: pointer;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-        transition: left 0.18s ease;
+        display: none;
       }
 
-      body.sidebar-collapsed .sidebar-toggle {
-        left: 16px;
+      body.sidebar-collapsed .sidebar-toggle-floating {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
       }
 
       .panel {
@@ -123,13 +126,9 @@ const { title } = Astro.props;
       }
 
       @media (max-width: 920px) {
-        .sidebar-toggle {
+        .sidebar-toggle-floating {
           position: static;
           margin: 16px 16px 0;
-        }
-
-        body.sidebar-collapsed .sidebar-toggle {
-          left: auto;
         }
 
         .page-shell {
@@ -143,8 +142,16 @@ const { title } = Astro.props;
     </style>
   </head>
   <body>
-    <button class="sidebar-toggle" type="button" aria-expanded="true" aria-controls="shared-sidebar">
-      사이드바 닫기
+    <button
+      class="sidebar-toggle-floating"
+      type="button"
+      aria-expanded="false"
+      aria-controls="shared-sidebar"
+      data-sidebar-toggle
+      aria-label="사이드바 열기"
+      title="사이드바 열기"
+    >
+      ☰
     </button>
     <Sidebar />
     <div class="page-shell">
@@ -153,23 +160,32 @@ const { title } = Astro.props;
       </main>
     </div>
     <script>
-      const toggleButton = document.querySelector(".sidebar-toggle");
+      const toggleButtons = document.querySelectorAll("[data-sidebar-toggle]");
       const storageKey = "dasarang-sidebar-collapsed";
       const applySidebarState = (collapsed) => {
         document.body.classList.toggle("sidebar-collapsed", collapsed);
-        toggleButton?.setAttribute("aria-expanded", String(!collapsed));
-        if (toggleButton) {
-          toggleButton.textContent = collapsed ? "사이드바 열기" : "사이드바 닫기";
-        }
+        toggleButtons.forEach((button) => {
+          const isFloating = button.classList.contains("sidebar-toggle-floating");
+          button.setAttribute("aria-expanded", String(!collapsed));
+          if (isFloating) {
+            button.setAttribute("aria-label", "사이드바 열기");
+            button.setAttribute("title", "사이드바 열기");
+          } else {
+            button.setAttribute("aria-label", collapsed ? "사이드바 열기" : "사이드바 닫기");
+            button.setAttribute("title", collapsed ? "사이드바 열기" : "사이드바 닫기");
+          }
+        });
       };
 
       const saved = window.localStorage.getItem(storageKey) === "true";
       applySidebarState(saved);
 
-      toggleButton?.addEventListener("click", () => {
-        const collapsed = !document.body.classList.contains("sidebar-collapsed");
-        window.localStorage.setItem(storageKey, String(collapsed));
-        applySidebarState(collapsed);
+      toggleButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+          const collapsed = !document.body.classList.contains("sidebar-collapsed");
+          window.localStorage.setItem(storageKey, String(collapsed));
+          applySidebarState(collapsed);
+        });
       });
     </script>
   </body>
