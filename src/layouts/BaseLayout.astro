@@ -34,13 +34,40 @@ const { title } = Astro.props;
         font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
       }
 
+      body.sidebar-collapsed .page-shell {
+        padding-left: 0;
+      }
+
       .page-shell {
         padding-left: 280px;
         min-height: 100vh;
+        transition: padding-left 0.18s ease;
       }
 
       .page-main {
         padding: 24px;
+      }
+
+      .sidebar-toggle {
+        position: fixed;
+        top: 16px;
+        left: 296px;
+        z-index: 1100;
+        border: 1px solid var(--line);
+        background: #ffffff;
+        color: #505050;
+        border-radius: 10px;
+        padding: 10px 12px;
+        font: inherit;
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+        transition: left 0.18s ease;
+      }
+
+      body.sidebar-collapsed .sidebar-toggle {
+        left: 16px;
       }
 
       .panel {
@@ -96,6 +123,15 @@ const { title } = Astro.props;
       }
 
       @media (max-width: 920px) {
+        .sidebar-toggle {
+          position: static;
+          margin: 16px 16px 0;
+        }
+
+        body.sidebar-collapsed .sidebar-toggle {
+          left: auto;
+        }
+
         .page-shell {
           padding-left: 0;
         }
@@ -107,12 +143,34 @@ const { title } = Astro.props;
     </style>
   </head>
   <body>
+    <button class="sidebar-toggle" type="button" aria-expanded="true" aria-controls="shared-sidebar">
+      사이드바 닫기
+    </button>
     <Sidebar />
     <div class="page-shell">
       <main class="page-main">
         <slot />
       </main>
     </div>
+    <script>
+      const toggleButton = document.querySelector(".sidebar-toggle");
+      const storageKey = "dasarang-sidebar-collapsed";
+      const applySidebarState = (collapsed) => {
+        document.body.classList.toggle("sidebar-collapsed", collapsed);
+        toggleButton?.setAttribute("aria-expanded", String(!collapsed));
+        if (toggleButton) {
+          toggleButton.textContent = collapsed ? "사이드바 열기" : "사이드바 닫기";
+        }
+      };
+
+      const saved = window.localStorage.getItem(storageKey) === "true";
+      applySidebarState(saved);
+
+      toggleButton?.addEventListener("click", () => {
+        const collapsed = !document.body.classList.contains("sidebar-collapsed");
+        window.localStorage.setItem(storageKey, String(collapsed));
+        applySidebarState(collapsed);
+      });
+    </script>
   </body>
 </html>
-

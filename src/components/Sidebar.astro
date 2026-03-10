@@ -8,7 +8,7 @@ const isActive = (path: string) => currentPath === path;
 const startsWith = (path: string) => currentPath.startsWith(path);
 ---
 
-<aside class="sidebar">
+<aside class="sidebar" id="shared-sidebar">
   <div class="sidebar__inner">
     <div class="sidebar__filter">필터</div>
 
@@ -128,6 +128,11 @@ const startsWith = (path: string) => currentPath.startsWith(path);
     overflow-y: auto;
     background: #efefef;
     border-right: 1px solid #d2d2d2;
+    transition: transform 0.18s ease;
+  }
+
+  :global(body.sidebar-collapsed) .sidebar {
+    transform: translateX(-100%);
   }
 
   .sidebar__inner {
@@ -252,6 +257,7 @@ const startsWith = (path: string) => currentPath.startsWith(path);
       width: auto;
       border-right: 0;
       border-bottom: 1px solid #d2d2d2;
+      transform: none;
     }
   }
 </style>
