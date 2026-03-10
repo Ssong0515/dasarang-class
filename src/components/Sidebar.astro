@@ -123,7 +123,6 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
         </a>
 
         {monthGroups.map(({ month, courses }) => {
-          const monthPath = `${base}classes/#month-${month.replace("월", "")}`;
           const monthOpen = courses.some(({ sessions }) =>
             sessions.some((session) => currentPath === `${base}classes/${session.slug}/`),
           );
@@ -131,10 +130,10 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
           return (
             <details class="sidebar__subgroup" open={monthOpen}>
               <summary class="sidebar__subsummary">
-                <a class="sidebar__link is-month" href={monthPath}>
+                <span class="sidebar__link is-month">
                   <span class="sidebar__icon">📅</span>
                   <span class="sidebar__text">{month}</span>
-                </a>
+                </span>
                 <span class="sidebar__subarrow" aria-hidden="true"></span>
               </summary>
               <div class="sidebar__subitems">
