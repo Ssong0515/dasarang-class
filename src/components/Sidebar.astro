@@ -6,6 +6,13 @@ const base = import.meta.env.BASE_URL;
 
 const isActive = (path: string) => currentPath === path;
 const startsWith = (path: string) => currentPath.startsWith(path);
+const courseIcon = (course: string) => {
+  if (course.includes("A반")) return "A";
+  if (course.includes("B반")) return "B";
+  if (course.includes("1")) return "1";
+  if (course.includes("2")) return "2";
+  return "•";
+};
 
 const updatedParts = new Intl.DateTimeFormat("ko-KR", {
   timeZone: "Asia/Seoul",
@@ -48,12 +55,21 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
 
     <details class="sidebar__group" open={isActive(base)}>
       <summary class="sidebar__summary">
-        <span>개요</span>
+        <span class="sidebar__label-wrap">
+          <span class="sidebar__icon">⌂</span>
+          <span class="sidebar__text">개요</span>
+        </span>
         <span class="sidebar__arrow" aria-hidden="true"></span>
       </summary>
       <div class="sidebar__items">
-        <a class:list={["sidebar__link", isActive(base) && "is-active"]} href={base}>메인 허브</a>
-        <a class="sidebar__link" href={`${base}README.md`}>프로젝트 기준</a>
+        <a class:list={["sidebar__link", isActive(base) && "is-active"]} href={base}>
+          <span class="sidebar__icon">⌂</span>
+          <span class="sidebar__text">메인 허브</span>
+        </a>
+        <a class="sidebar__link" href={`${base}README.md`}>
+          <span class="sidebar__icon">⚙</span>
+          <span class="sidebar__text">프로젝트 기준</span>
+        </a>
       </div>
     </details>
 
@@ -62,7 +78,10 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
       open={startsWith(`${base}classes/260314_computer-a_01/`) || startsWith(`${base}260314_%EC%B2%AB%EC%88%98%EC%97%85/materials/`)}
     >
       <summary class="sidebar__summary">
-        <span>수업 자료</span>
+        <span class="sidebar__label-wrap">
+          <span class="sidebar__icon">🖥</span>
+          <span class="sidebar__text">수업 자료</span>
+        </span>
         <span class="sidebar__arrow" aria-hidden="true"></span>
       </summary>
       <div class="sidebar__items">
@@ -73,7 +92,8 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
           ]}
           href={`${base}classes/260314_computer-a_01/`}
         >
-          3월 14일 A반 첫 수업
+          <span class="sidebar__icon">A</span>
+          <span class="sidebar__text">3월 14일 A반 첫 수업</span>
         </a>
         <a
           class:list={[
@@ -82,19 +102,24 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
           ]}
           href={`${base}260314_%EC%B2%AB%EC%88%98%EC%97%85/materials/`}
         >
-          학생용 첫 수업 페이지
+          <span class="sidebar__icon">📄</span>
+          <span class="sidebar__text">학생용 첫 수업 페이지</span>
         </a>
       </div>
     </details>
 
     <details class="sidebar__group" open={startsWith(`${base}classes/`)}>
       <summary class="sidebar__summary">
-        <span>강의 목록</span>
+        <span class="sidebar__label-wrap">
+          <span class="sidebar__icon">🗂</span>
+          <span class="sidebar__text">강의 목록</span>
+        </span>
         <span class="sidebar__arrow" aria-hidden="true"></span>
       </summary>
       <div class="sidebar__items">
         <a class:list={["sidebar__link", isActive(`${base}classes/`) && "is-active"]} href={`${base}classes/`}>
-          전체 강의 목록
+          <span class="sidebar__icon">🗂</span>
+          <span class="sidebar__text">전체 강의 목록</span>
         </a>
 
         {monthGroups.map(({ month, courses }) => {
@@ -106,7 +131,10 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
           return (
             <details class="sidebar__subgroup" open={monthOpen}>
               <summary class="sidebar__subsummary">
-                <a class="sidebar__link is-month" href={monthPath}>{month}</a>
+                <a class="sidebar__link is-month" href={monthPath}>
+                  <span class="sidebar__icon">📅</span>
+                  <span class="sidebar__text">{month}</span>
+                </a>
                 <span class="sidebar__subarrow" aria-hidden="true"></span>
               </summary>
               <div class="sidebar__subitems">
@@ -118,7 +146,10 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
                   return (
                     <details class="sidebar__subgroup sidebar__subgroup--course" open={courseOpen}>
                       <summary class="sidebar__subsummary sidebar__subsummary--course">
-                        <span class="sidebar__link is-course">{course}</span>
+                        <span class="sidebar__link is-course">
+                          <span class="sidebar__icon">{courseIcon(course)}</span>
+                          <span class="sidebar__text">{course}</span>
+                        </span>
                         <span class="sidebar__subarrow" aria-hidden="true"></span>
                       </summary>
                       <div class="sidebar__subitems">
@@ -131,7 +162,8 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
                             ]}
                             href={`${base}classes/${session.slug}/`}
                           >
-                            {session.label}
+                            <span class="sidebar__icon">{courseIcon(course)}</span>
+                            <span class="sidebar__text">{session.label}</span>
                           </a>
                         ))}
                       </div>
@@ -157,11 +189,11 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
     overflow-y: auto;
     background: #efefef;
     border-right: 1px solid #d2d2d2;
-    transition: transform 0.18s ease;
+    transition: width 0.18s ease;
   }
 
   :global(body.sidebar-collapsed) .sidebar {
-    transform: translateX(-100%);
+    width: 72px;
   }
 
   .sidebar__inner {
@@ -237,6 +269,13 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
     display: none;
   }
 
+  .sidebar__label-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
   .sidebar__arrow::before,
   .sidebar__subarrow::before {
     content: "▸";
@@ -255,7 +294,9 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
   }
 
   .sidebar__link {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 10px;
     margin: 0 8px 8px;
     padding: 12px 14px;
     border-radius: 14px;
@@ -263,6 +304,18 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
     text-decoration: none;
     font-size: 14px;
     font-weight: 700;
+  }
+
+  .sidebar__icon {
+    flex: none;
+    width: 18px;
+    text-align: center;
+    font-size: 15px;
+    line-height: 1;
+  }
+
+  .sidebar__text {
+    min-width: 0;
   }
 
   .sidebar__link:hover {
@@ -293,13 +346,64 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
     font-weight: 600;
   }
 
+  :global(body.sidebar-collapsed) .sidebar__inner {
+    padding-inline: 8px;
+  }
+
+  :global(body.sidebar-collapsed) .sidebar__top {
+    flex-direction: column;
+    align-items: center;
+    padding-inline: 0;
+  }
+
+  :global(body.sidebar-collapsed) .sidebar__brand strong,
+  :global(body.sidebar-collapsed) .sidebar__brand span,
+  :global(body.sidebar-collapsed) .sidebar__text,
+  :global(body.sidebar-collapsed) .sidebar__arrow,
+  :global(body.sidebar-collapsed) .sidebar__subarrow {
+    display: none;
+  }
+
+  :global(body.sidebar-collapsed) .sidebar__collapse {
+    width: 40px;
+    height: 40px;
+  }
+
+  :global(body.sidebar-collapsed) .sidebar__summary,
+  :global(body.sidebar-collapsed) .sidebar__subsummary {
+    padding: 10px 0;
+    justify-content: center;
+  }
+
+  :global(body.sidebar-collapsed) .sidebar__items,
+  :global(body.sidebar-collapsed) .sidebar__subitems {
+    display: block;
+    padding-bottom: 6px;
+  }
+
+  :global(body.sidebar-collapsed) .sidebar__link {
+    justify-content: center;
+    margin: 0 0 8px;
+    padding: 10px;
+    border-radius: 12px;
+  }
+
+  :global(body.sidebar-collapsed) .sidebar__link.is-month,
+  :global(body.sidebar-collapsed) .sidebar__link.is-course,
+  :global(body.sidebar-collapsed) .sidebar__link.is-child {
+    margin-left: 0;
+  }
+
   @media (max-width: 920px) {
     .sidebar {
       position: static;
       width: auto;
       border-right: 0;
       border-bottom: 1px solid #d2d2d2;
-      transform: none;
+    }
+
+    :global(body.sidebar-collapsed) .sidebar {
+      width: auto;
     }
   }
 </style>

@@ -35,7 +35,7 @@ const { title } = Astro.props;
       }
 
       body.sidebar-collapsed .page-shell {
-        padding-left: 0;
+        padding-left: 72px;
       }
 
       .page-shell {
@@ -46,31 +46,6 @@ const { title } = Astro.props;
 
       .page-main {
         padding: 24px;
-      }
-
-      .sidebar-toggle-floating {
-        position: fixed;
-        top: 16px;
-        left: 16px;
-        z-index: 1100;
-        border: 1px solid var(--line);
-        background: #ffffff;
-        color: #505050;
-        border-radius: 10px;
-        width: 40px;
-        height: 40px;
-        font: inherit;
-        font-size: 18px;
-        font-weight: 700;
-        cursor: pointer;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-        display: none;
-      }
-
-      body.sidebar-collapsed .sidebar-toggle-floating {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
       }
 
       .panel {
@@ -126,11 +101,6 @@ const { title } = Astro.props;
       }
 
       @media (max-width: 920px) {
-        .sidebar-toggle-floating {
-          position: static;
-          margin: 16px 16px 0;
-        }
-
         .page-shell {
           padding-left: 0;
         }
@@ -142,17 +112,6 @@ const { title } = Astro.props;
     </style>
   </head>
   <body>
-    <button
-      class="sidebar-toggle-floating"
-      type="button"
-      aria-expanded="false"
-      aria-controls="shared-sidebar"
-      data-sidebar-toggle
-      aria-label="사이드바 열기"
-      title="사이드바 열기"
-    >
-      ☰
-    </button>
     <Sidebar />
     <div class="page-shell">
       <main class="page-main">
@@ -165,15 +124,10 @@ const { title } = Astro.props;
       const applySidebarState = (collapsed) => {
         document.body.classList.toggle("sidebar-collapsed", collapsed);
         toggleButtons.forEach((button) => {
-          const isFloating = button.classList.contains("sidebar-toggle-floating");
           button.setAttribute("aria-expanded", String(!collapsed));
-          if (isFloating) {
-            button.setAttribute("aria-label", "사이드바 열기");
-            button.setAttribute("title", "사이드바 열기");
-          } else {
-            button.setAttribute("aria-label", collapsed ? "사이드바 열기" : "사이드바 닫기");
-            button.setAttribute("title", collapsed ? "사이드바 열기" : "사이드바 닫기");
-          }
+          button.setAttribute("aria-label", collapsed ? "사이드바 열기" : "사이드바 닫기");
+          button.setAttribute("title", collapsed ? "사이드바 열기" : "사이드바 닫기");
+          button.textContent = collapsed ? "☰" : "✕";
         });
       };
 
