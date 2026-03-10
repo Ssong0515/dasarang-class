@@ -28,6 +28,40 @@ const extractHelpLabel = (html: string) => {
   return match[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 };
 
+const framePresetStyle = `
+<style data-slide-frame-preset>
+  html,
+  body {
+    width: 100% !important;
+    height: 100% !important;
+    overflow: hidden !important;
+  }
+
+  body {
+    margin: 0 !important;
+    overscroll-behavior: none !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box !important;
+  }
+</style>
+`.trim();
+
+const withFramePreset = (html: string) => {
+  if (/<\/head>/i.test(html)) {
+    return html.replace(/<\/head>/i, `${framePresetStyle}\n</head>`);
+  }
+
+  if (/<body[^>]*>/i.test(html)) {
+    return html.replace(/<body([^>]*)>/i, `<head>${framePresetStyle}</head><body$1>`);
+  }
+
+  return `<!DOCTYPE html><html lang="ko"><head>${framePresetStyle}</head><body>${html}</body></html>`;
+};
+
 const parseOrder = (fileName: string, index: number) => {
   const match = fileName.match(/^(\d+)/);
   return match ? Number(match[1]) : index + 1;
@@ -41,7 +75,7 @@ const parseSlideDocument = (fileName: string, html: string, index: number): Slid
     order: parseOrder(fileName, index),
     title: extractTagContent(html, "title") || cleanFileName,
     helpLabel: extractHelpLabel(html),
-    html,
+    html: withFramePreset(html),
   };
 };
 
