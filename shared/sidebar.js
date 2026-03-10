@@ -21,12 +21,12 @@
     {
       title: "강의 목록",
       items: [
-        { label: "전체 강의 목록", href: "__ROOT__/classes/index.html" },
-        { label: "3월", href: "__ROOT__/classes/index.html#month-3", child: true },
-        { label: "4월", href: "__ROOT__/classes/index.html#month-4", child: true },
-        { label: "5월", href: "__ROOT__/classes/index.html#month-5", child: true },
-        { label: "6월", href: "__ROOT__/classes/index.html#month-6", child: true },
-        { label: "7월", href: "__ROOT__/classes/index.html#month-7", child: true },
+        { label: "전체 강의 목록", href: "__ROOT__/classes/" },
+        { label: "3월", href: "__ROOT__/classes/#month-3", child: true },
+        { label: "4월", href: "__ROOT__/classes/#month-4", child: true },
+        { label: "5월", href: "__ROOT__/classes/#month-5", child: true },
+        { label: "6월", href: "__ROOT__/classes/#month-6", child: true },
+        { label: "7월", href: "__ROOT__/classes/#month-7", child: true },
       ],
     },
   ];
