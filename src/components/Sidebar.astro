@@ -36,11 +36,11 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
 <aside class="sidebar" id="shared-sidebar">
   <div class="sidebar__inner">
     <div class="sidebar__top">
-      <div class="sidebar__brand">
-        <strong>다사랑 강의 허브</strong>
+      <a class="sidebar__brand" href={base} aria-label="홈으로 이동">
+        <strong>다사랑</strong>
         <span>{updatedDateLine}</span>
         <span>{updatedTimeLine}</span>
-      </div>
+      </a>
       <button
         class="sidebar__collapse"
         type="button"
@@ -211,7 +211,10 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
   }
 
   .sidebar__brand {
+    display: block;
     min-width: 0;
+    color: inherit;
+    text-decoration: none;
   }
 
   .sidebar__brand strong {
@@ -220,6 +223,10 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
     font-size: 22px;
     line-height: 1.35;
     font-weight: 700;
+  }
+
+  .sidebar__brand:hover strong {
+    color: #2f2f2f;
   }
 
   .sidebar__brand span {
