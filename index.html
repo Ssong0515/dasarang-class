@@ -6,21 +6,23 @@
   <title>다사랑 강의 허브</title>
   <style>
     :root {
-      --bg: #f4efe7;
-      --panel: #fffdf8;
-      --line: #ddd2c2;
-      --ink: #1e293b;
-      --muted: #6b7280;
-      --accent: #e76f51;
+      --bg: #f3f3f3;
+      --sidebar: #efefef;
+      --panel: #ffffff;
+      --line: #d2d2d2;
+      --text: #505050;
+      --muted: #7b7b7b;
+      --accent: #efd4ae;
+      --accent-text: #6d5b43;
     }
 
     * { box-sizing: border-box; }
 
     body {
       margin: 0;
-      font-family: "Segoe UI", "Malgun Gothic", sans-serif;
-      color: var(--ink);
       background: var(--bg);
+      color: var(--text);
+      font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
     }
 
     a {
@@ -35,114 +37,136 @@
     }
 
     .sidebar {
+      background: var(--sidebar);
+      border-right: 1px solid var(--line);
+      padding: 18px 0;
       position: sticky;
       top: 0;
       height: 100vh;
-      padding: 24px;
-      background: #f8f2e8;
-      border-right: 1px solid var(--line);
       overflow-y: auto;
     }
 
+    .sidebar-inner {
+      padding: 0 16px;
+    }
+
     .brand {
-      margin-bottom: 24px;
+      padding: 2px 12px 18px;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 10px;
     }
 
-    .brand h1 {
-      margin: 0 0 8px;
-      font-size: 28px;
-      line-height: 1.1;
+    .brand strong {
+      display: block;
+      font-size: 22px;
+      line-height: 1.35;
+      margin-bottom: 6px;
+      font-weight: 700;
     }
 
-    .brand p {
-      margin: 0;
+    .brand span {
+      display: block;
       color: var(--muted);
-      font-size: 14px;
+      font-size: 13px;
       line-height: 1.5;
     }
 
-    .nav-group {
-      margin-bottom: 22px;
-    }
-
-    .nav-title {
-      margin: 0 0 10px;
-      font-size: 13px;
-      font-weight: 800;
-      color: var(--muted);
-    }
-
-    .nav-list {
-      display: grid;
-      gap: 8px;
-    }
-
-    .nav-list a {
-      display: block;
-      padding: 10px 12px;
-      border-radius: 12px;
-      background: var(--panel);
-      border: 1px solid var(--line);
+    .filter-box {
+      margin: 0 0 14px;
+      padding: 14px 16px;
+      background: #e3e3e3;
+      border-radius: 8px;
+      font-size: 15px;
       font-weight: 700;
+    }
+
+    .menu-group {
+      border-top: 1px solid var(--line);
+      padding: 0;
+    }
+
+    .menu-title {
+      display: block;
+      padding: 18px 10px;
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .menu-list {
+      padding: 0 0 10px;
+    }
+
+    .menu-list a {
+      display: block;
+      margin: 0 8px 8px;
+      padding: 12px 14px;
+      border-radius: 14px;
       font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .menu-list a.active {
+      background: var(--accent);
+      color: var(--accent-text);
     }
 
     .main {
-      padding: 28px;
+      padding: 24px;
     }
 
-    .section {
+    .panel {
       background: var(--panel);
       border: 1px solid var(--line);
-      border-radius: 18px;
-      padding: 22px;
-      margin-bottom: 18px;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
     }
 
-    .section h2 {
-      margin: 0 0 14px;
+    .panel h1,
+    .panel h2 {
+      margin: 0 0 12px;
       font-size: 24px;
+      font-weight: 700;
+      color: #424242;
     }
 
-    .section p {
+    .panel p {
       margin: 0;
-      line-height: 1.6;
+      line-height: 1.7;
       color: var(--muted);
+      font-size: 14px;
     }
 
-    .link-list,
+    .quick-list,
     .info-list {
       display: grid;
       gap: 10px;
     }
 
-    .link-list a,
+    .quick-item,
     .info-item {
       display: block;
       padding: 14px 16px;
-      border-radius: 14px;
       border: 1px solid var(--line);
-      background: #ffffff;
+      border-radius: 10px;
+      background: #fafafa;
     }
 
-    .link-list strong,
+    .quick-item strong,
     .info-item strong {
       display: block;
       margin-bottom: 4px;
-      font-size: 16px;
+      font-size: 15px;
+      font-weight: 700;
     }
 
-    .link-list span,
+    .quick-item span,
     .info-item span {
       display: block;
       color: var(--muted);
-      font-size: 14px;
-      line-height: 1.5;
-    }
-
-    .notice {
-      color: var(--accent);
-      font-weight: 700;
+      font-size: 13px;
+      line-height: 1.6;
     }
 
     @media (max-width: 920px) {
@@ -158,7 +182,7 @@
       }
 
       .main {
-        padding: 18px;
+        padding: 16px;
       }
     }
   </style>
@@ -166,83 +190,88 @@
 <body>
   <div class="layout">
     <aside class="sidebar">
-      <div class="brand">
-        <h1>다사랑<br>강의 허브</h1>
-        <p>수업 자료와 강의 항목을 빠르게 여는 교사용 페이지</p>
-      </div>
+      <div class="sidebar-inner">
+        <div class="filter-box">필터</div>
 
-      <div class="nav-group">
-        <p class="nav-title">바로가기</p>
-        <div class="nav-list">
-          <a href="./260314_%EC%B2%AB%EC%88%98%EC%97%85/materials/index.html">첫 수업 자료</a>
-          <a href="./classes/index.html">2026년 1학기 강의 목록</a>
-          <a href="./README.md">운영 기준</a>
+        <div class="brand">
+          <strong>다사랑 강의 허브</strong>
+          <span>교사용 강의 접근 페이지</span>
         </div>
-      </div>
 
-      <div class="nav-group">
-        <p class="nav-title">월별 이동</p>
-        <div class="nav-list">
-          <a href="./classes/index.html#month-3">3월</a>
-          <a href="./classes/index.html#month-4">4월</a>
-          <a href="./classes/index.html#month-5">5월</a>
-          <a href="./classes/index.html#month-6">6월</a>
-          <a href="./classes/index.html#month-7">7월</a>
+        <div class="menu-group">
+          <span class="menu-title">개요</span>
+          <div class="menu-list">
+            <a class="active" href="./index.html">홈</a>
+          </div>
+        </div>
+
+        <div class="menu-group">
+          <span class="menu-title">수업 자료</span>
+          <div class="menu-list">
+            <a href="./classes/260314_computer-a_01/index.html">3월 14일 A반 첫 수업</a>
+            <a href="./260314_%EC%B2%AB%EC%88%98%EC%97%85/materials/index.html">학생용 첫 수업 페이지</a>
+          </div>
+        </div>
+
+        <div class="menu-group">
+          <span class="menu-title">강의 목록</span>
+          <div class="menu-list">
+            <a href="./classes/index.html">전체 강의 목록</a>
+            <a href="./classes/index.html#month-3">3월</a>
+            <a href="./classes/index.html#month-4">4월</a>
+            <a href="./classes/index.html#month-5">5월</a>
+            <a href="./classes/index.html#month-6">6월</a>
+            <a href="./classes/index.html#month-7">7월</a>
+          </div>
+        </div>
+
+        <div class="menu-group">
+          <span class="menu-title">운영 메모</span>
+          <div class="menu-list">
+            <a href="./README.md">프로젝트 기준 보기</a>
+          </div>
         </div>
       </div>
     </aside>
 
     <main class="main">
-      <section class="section">
-        <h2>현재 사용</h2>
-        <div class="link-list">
-          <a href="./classes/260314_computer-a_01/index.html">
-            <strong>첫 수업 자료 열기</strong>
-            <span>3월 14일 컴퓨터 A반 항목으로 이동</span>
+      <section class="panel">
+        <h1>다사랑 강의 허브</h1>
+        <p>왼쪽 사이드바에서 바로 수업 자료와 월별 강의 항목으로 이동할 수 있게 정리한 메인 페이지입니다. 학생에게 보여주는 화면보다 교사용 접근성과 관리 편의성을 우선합니다.</p>
+      </section>
+
+      <section class="panel">
+        <h2>빠른 실행</h2>
+        <div class="quick-list">
+          <a class="quick-item" href="./classes/260314_computer-a_01/index.html">
+            <strong>3월 14일 A반 첫 수업</strong>
+            <span>현재 첫 수업은 A반에 연결되어 있습니다.</span>
           </a>
-          <a href="./classes/index.html">
-            <strong>강의 항목 열기</strong>
-            <span>시간표 기준으로 만든 전체 강의 목록</span>
+          <a class="quick-item" href="./classes/index.html">
+            <strong>2026년 1학기 강의 목록</strong>
+            <span>시간표 기준으로 만든 전체 강의 항목 페이지입니다.</span>
           </a>
         </div>
       </section>
 
-      <section class="section">
+      <section class="panel">
         <h2>학기 구성</h2>
         <div class="info-list">
           <div class="info-item">
             <strong>토요일 컴퓨터 A반</strong>
-            <span>13:00~14:50</span>
+            <span>13:00 ~ 14:50</span>
           </div>
           <div class="info-item">
             <strong>토요일 컴퓨터 B반</strong>
-            <span>15:00~16:50</span>
+            <span>15:00 ~ 16:50</span>
           </div>
           <div class="info-item">
             <strong>7월 컴퓨터1</strong>
-            <span>화/목 오전 10:00~11:50</span>
+            <span>화/목 오전 10:00 ~ 11:50</span>
           </div>
           <div class="info-item">
             <strong>7월 컴퓨터2</strong>
-            <span>화/목 오후 17:00~18:30</span>
-          </div>
-        </div>
-      </section>
-
-      <section class="section">
-        <h2>메모</h2>
-        <div class="info-list">
-          <div class="info-item">
-            <strong>이 페이지 용도</strong>
-            <span>교사용 접근 페이지이므로 목록과 관리 정보 위주로 간단하게 유지</span>
-          </div>
-          <div class="info-item">
-            <strong>번역 사용 위치</strong>
-            <span>학생에게 보여주는 실제 강의 자료에서만 번역 사용</span>
-          </div>
-          <div class="info-item">
-            <strong>현재 상태</strong>
-            <span class="notice">강의 항목은 먼저 만들어 둔 상태이며, 각 항목에 수업 자료를 계속 연결하면 됨</span>
+            <span>화/목 오후 17:00 ~ 18:30</span>
           </div>
         </div>
       </section>
