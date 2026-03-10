@@ -120,9 +120,28 @@ const { title } = Astro.props;
     </div>
     <script>
       const toggleButtons = document.querySelectorAll("[data-sidebar-toggle]");
+      const sidebar = document.getElementById("shared-sidebar");
       const storageKey = "dasarang-sidebar-collapsed";
+
+      const closeAllSidebarGroups = () => {
+        sidebar?.querySelectorAll("details").forEach((group) => {
+          group.open = false;
+        });
+      };
+
+      const openSidebarGroup = (group) => {
+        let current = group;
+        while (current && current.tagName === "DETAILS") {
+          current.open = true;
+          current = current.parentElement?.closest("details");
+        }
+      };
+
       const applySidebarState = (collapsed) => {
         document.body.classList.toggle("sidebar-collapsed", collapsed);
+        if (collapsed) {
+          closeAllSidebarGroups();
+        }
         toggleButtons.forEach((button) => {
           button.setAttribute("aria-expanded", String(!collapsed));
           button.setAttribute("aria-label", collapsed ? "사이드바 열기" : "사이드바 닫기");
@@ -140,6 +159,28 @@ const { title } = Astro.props;
           window.localStorage.setItem(storageKey, String(collapsed));
           applySidebarState(collapsed);
         });
+      });
+
+      sidebar?.addEventListener("click", (event) => {
+        if (!document.body.classList.contains("sidebar-collapsed")) {
+          return;
+        }
+
+        const summary = event.target.closest("summary");
+        if (!summary) {
+          return;
+        }
+
+        const group = summary.parentElement;
+        if (!(group instanceof HTMLDetailsElement)) {
+          return;
+        }
+
+        event.preventDefault();
+        window.localStorage.setItem(storageKey, "false");
+        applySidebarState(false);
+        closeAllSidebarGroups();
+        openSidebarGroup(group);
       });
     </script>
   </body>
