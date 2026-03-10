@@ -1,8 +1,10 @@
 ---
-import { monthGroups } from "../data/schedule";
+import { monthGroups, sessions } from "../data/schedule";
+import { getSlidesForSession } from "../lib/lesson-materials";
 
 const currentPath = Astro.url.pathname;
 const base = import.meta.env.BASE_URL;
+const availableMaterials = sessions.filter((session) => getSlidesForSession(session.slug).slides.length > 0);
 
 const isActive = (path: string) => currentPath === path;
 const startsWith = (path: string) => currentPath.startsWith(path);
@@ -65,7 +67,7 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
 
     <details
       class="sidebar__group"
-      open={startsWith(`${base}classes/260314_computer-a_01/`) || startsWith(`${base}260314_%EC%B2%AB%EC%88%98%EC%97%85/materials/`)}
+      open={availableMaterials.some((session) => startsWith(`${base}classes/${session.slug}/`))}
     >
       <summary class="sidebar__summary">
         <span class="sidebar__label-wrap">
@@ -75,24 +77,23 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
         <span class="sidebar__arrow" aria-hidden="true"></span>
       </summary>
       <div class="sidebar__items">
-        <a
-          class:list={[
-            "sidebar__link",
-            isActive(`${base}classes/260314_computer-a_01/`) && "is-active",
-          ]}
-          href={`${base}classes/260314_computer-a_01/`}
-        >
-          <span class="sidebar__text">3월 14일 A반 첫 수업</span>
-        </a>
-        <a
-          class:list={[
-            "sidebar__link",
-            isActive(`${base}260314_%EC%B2%AB%EC%88%98%EC%97%85/materials/`) && "is-active",
-          ]}
-          href={`${base}260314_%EC%B2%AB%EC%88%98%EC%97%85/materials/`}
-        >
-          <span class="sidebar__text">학생용 첫 수업 페이지</span>
-        </a>
+        {availableMaterials.length > 0 ? (
+          availableMaterials.map((session) => (
+            <a
+              class:list={[
+                "sidebar__link",
+                isActive(`${base}classes/${session.slug}/`) && "is-active",
+              ]}
+              href={`${base}classes/${session.slug}/`}
+            >
+              <span class="sidebar__text">{session.label}</span>
+            </a>
+          ))
+        ) : (
+          <span class="sidebar__link is-empty">
+            <span class="sidebar__text">연결된 자료 없음</span>
+          </span>
+        )}
       </div>
     </details>
 
@@ -303,6 +304,11 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
       color 0.2s ease,
       padding 0.24s ease,
       margin 0.24s ease;
+  }
+
+  .sidebar__link.is-empty {
+    color: #8a8a8a;
+    cursor: default;
   }
 
   .sidebar__icon {

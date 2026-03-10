@@ -1,65 +1,800 @@
 ---
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { sessions } from "../../data/schedule";
+import { getSlidesForSession } from "../../lib/lesson-materials";
 
 export function getStaticPaths() {
   return sessions.map((session) => ({
     params: { slug: session.slug },
-    props: { session },
+    props: {
+      session,
+      material: getSlidesForSession(session.slug),
+    },
   }));
 }
 
-const { session } = Astro.props;
+const { session, material } = Astro.props;
+const slides = material.slides ?? [];
+const slideFileNames = slides.map((slide) => slide.fileName);
+const slidesDir = material.slidesDir ?? "해당 날짜 수업 폴더 없음";
+const initialBadgeLabel = slides[0]?.helpLabel || "Slide Lesson";
 ---
 
 <BaseLayout title={session.label}>
-  <section class="panel">
-    <h1>{session.label}</h1>
-    <p>{session.summary}</p>
-  </section>
-
-  <section class="panel">
-    <h2>수업 정보</h2>
-    <div class="list">
-      <div class="item">
-        <strong>수업</strong>
-        <span>{session.course}</span>
-      </div>
-      <div class="item">
-        <strong>날짜</strong>
-        <span>{session.date}</span>
-      </div>
-      <div class="item">
-        <strong>시간</strong>
-        <span>{session.time}</span>
-      </div>
-      <div class="item">
-        <strong>상태</strong>
-        <span>{session.status}</span>
+  <section class="panel lesson-header">
+    <div class="lesson-header__top">
+      <div class="lesson-header__title">
+        <div class="lesson-header__heading">
+          <h1>{session.label}</h1>
+          <span class="lesson-header__schedule">
+            {session.date} · {session.time}
+          </span>
+        </div>
+        <p>{session.summary}</p>
+        <p class="folder-path">
+          <span>폴더</span>
+          <strong>{slidesDir}</strong>
+          <button
+            class="folder-copy"
+            type="button"
+            data-copy-path={material.slidesDir ?? ""}
+            aria-label="폴더 경로 복사"
+            title="폴더 경로 복사"
+            disabled={!material.slidesDir}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M9 9h9v11H9zM6 4h9v3h-2V6H8v9H7c-.6 0-1-.4-1-1z"
+                fill="currentColor"
+              />
+            </svg>
+          </button>
+        </p>
       </div>
     </div>
   </section>
 
-  <section class="panel">
-    <h2>연결</h2>
-    <div class="list">
-      {session.isFirstLesson ? (
-        <a class="item" href={`${import.meta.env.BASE_URL}260314_%EC%B2%AB%EC%88%98%EC%97%85/materials/`}>
-          <strong>첫 수업 자료 열기</strong>
-          <span>현재 이 수업 항목은 첫 수업 페이지와 연결되어 있습니다.</span>
-        </a>
+  <section class="overview-grid">
+    <section class="panel section-panel">
+      <div class="section-head">
+        <h2>Slides HTML</h2>
+        <span class="section-badge">{slideFileNames.length}개</span>
+      </div>
+
+      {slideFileNames.length > 0 ? (
+        <ol class="file-list">
+          {slideFileNames.map((fileName, index) => (
+            <li class="file-row">
+              <span class="file-row__index">{String(index + 1).padStart(2, "0")}</span>
+              <strong>{fileName}</strong>
+            </li>
+          ))}
+        </ol>
       ) : (
-        <div class="item">
-          <strong>자료 연결 대기</strong>
-          <span>이 항목에는 아직 실제 수업 자료를 연결하지 않았습니다.</span>
+        <div class="empty-note">
+          <strong>슬라이드 파일 없음</strong>
+          <span>현재 `slides` 폴더 안에 표시할 HTML 파일이 없습니다.</span>
         </div>
       )}
-
-      <a class="item" href={`${import.meta.env.BASE_URL}classes/`}>
-        <strong>강의 목록으로 돌아가기</strong>
-        <span>전체 강의 항목 페이지로 이동합니다.</span>
-      </a>
-    </div>
+    </section>
   </section>
+
+  {slides.length > 0 ? (
+    <section class="panel material-panel">
+      <div class="section-head section-head--viewer">
+        <h2>수업 슬라이드</h2>
+        <span class="section-badge">{slides.length}장</span>
+      </div>
+
+      <div class="deck" data-slide-player>
+        <header class="deck-topbar">
+          <div class="deck-brand">
+            <strong>Dasarang Class</strong>
+            <span>/</span>
+            <span>{session.label}</span>
+          </div>
+          <div class="deck-actions">
+            <div class="deck-badge" data-slide-badge>
+              {initialBadgeLabel}
+            </div>
+            <button class="deck-top-btn" type="button" data-fullscreen-btn>
+              전체보기
+            </button>
+            <div class="deck-helper">← → / Space / Esc</div>
+          </div>
+        </header>
+
+        <main class="deck-viewport">
+          <div class="deck-track" data-slide-track>
+            {slides.map((slide, index) => (
+              <section
+                class="deck-slide"
+                data-slide-index={index}
+                data-slide-badge-label={slide.helpLabel || ""}
+                aria-label={`슬라이드 ${index + 1}`}
+              >
+                <div class="deck-slide__inner">
+                  <div class="deck-slide__meta">
+                    <span>{String(slide.order).padStart(2, "0")}</span>
+                    <strong>{slide.title}</strong>
+                    <span>{slide.fileName}</span>
+                  </div>
+                  <iframe
+                    class="deck-slide__frame"
+                    srcdoc={slide.html}
+                    title={slide.title}
+                    loading="lazy"
+                    sandbox="allow-same-origin allow-scripts"
+                  />
+                </div>
+              </section>
+            ))}
+          </div>
+        </main>
+
+        <nav class="deck-controls">
+          <button class="deck-nav-btn" type="button" data-slide-prev>
+            ← 이전
+          </button>
+          <div class="deck-dots" data-slide-dots></div>
+          <div class="deck-controls__end">
+            <div class="deck-page" data-page-info>
+              1 / {slides.length}
+            </div>
+            <button class="deck-nav-btn" type="button" data-slide-next>
+              다음 →
+            </button>
+          </div>
+        </nav>
+      </div>
+    </section>
+  ) : (
+    <section class="panel empty-panel">
+      <p class="section-kicker">Waiting For Content</p>
+      <h2>자료 연결 대기</h2>
+      <p>이 수업 날짜에 해당하는 폴더나 `slides/*.html` 파일이 아직 없습니다.</p>
+      <a class="empty-panel__link" href={`${import.meta.env.BASE_URL}classes/`}>
+        강의 목록으로 돌아가기
+      </a>
+    </section>
+  )}
 </BaseLayout>
 
+<script>
+  const copyButtons = document.querySelectorAll("[data-copy-path]");
+
+  copyButtons.forEach((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      return;
+    }
+
+    button.addEventListener("click", async () => {
+      const path = button.dataset.copyPath;
+
+      if (!path) {
+        return;
+      }
+
+      await navigator.clipboard.writeText(path);
+      button.classList.add("is-copied");
+      window.setTimeout(() => {
+        button.classList.remove("is-copied");
+      }, 1200);
+    });
+  });
+
+  const players = document.querySelectorAll("[data-slide-player]");
+
+  players.forEach((player) => {
+    const track = player.querySelector("[data-slide-track]");
+    const slides = Array.from(player.querySelectorAll("[data-slide-index]"));
+    const dots = player.querySelector("[data-slide-dots]");
+    const prevButton = player.querySelector("[data-slide-prev]");
+    const nextButton = player.querySelector("[data-slide-next]");
+    const pageInfo = player.querySelector("[data-page-info]");
+    const fullscreenButton = player.querySelector("[data-fullscreen-btn]");
+    const badge = player.querySelector("[data-slide-badge]");
+    let current = 0;
+
+    const goTo = (index) => {
+      current = Math.max(0, Math.min(index, slides.length - 1));
+      update();
+    };
+
+    const renderDots = () => {
+      if (!(dots instanceof HTMLElement)) {
+        return;
+      }
+
+      dots.innerHTML = "";
+      slides.forEach((_, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "deck-dot-btn";
+        button.setAttribute("aria-label", `슬라이드 ${index + 1}`);
+        button.addEventListener("click", () => goTo(index));
+        dots.appendChild(button);
+      });
+    };
+
+    const update = () => {
+      if (track instanceof HTMLElement) {
+        track.style.transform = `translateX(-${current * 100}%)`;
+      }
+
+      dots?.querySelectorAll(".deck-dot-btn").forEach((dot, index) => {
+        dot.classList.toggle("active", index === current);
+      });
+
+      if (prevButton instanceof HTMLButtonElement) {
+        prevButton.disabled = current === 0;
+      }
+
+      if (nextButton instanceof HTMLButtonElement) {
+        nextButton.disabled = current === slides.length - 1;
+      }
+
+      if (pageInfo) {
+        pageInfo.textContent = `${current + 1} / ${slides.length}`;
+      }
+
+      if (badge) {
+        const activeSlide = slides[current];
+        const label = activeSlide?.dataset.slideBadgeLabel || "Slide Lesson";
+        badge.textContent = label;
+      }
+    };
+
+    const syncFullscreenButton = () => {
+      if (!(fullscreenButton instanceof HTMLButtonElement)) {
+        return;
+      }
+
+      const isFullscreen = document.fullscreenElement === player;
+      fullscreenButton.textContent = isFullscreen ? "전체보기 종료" : "전체보기";
+      fullscreenButton.setAttribute("aria-pressed", String(isFullscreen));
+    };
+
+    prevButton?.addEventListener("click", () => goTo(current - 1));
+    nextButton?.addEventListener("click", () => goTo(current + 1));
+
+    fullscreenButton?.addEventListener("click", async () => {
+      if (document.fullscreenElement === player) {
+        await document.exitFullscreen();
+        return;
+      }
+
+      if (player instanceof HTMLElement) {
+        await player.requestFullscreen();
+      }
+    });
+
+    document.addEventListener("fullscreenchange", syncFullscreenButton);
+
+    window.addEventListener("keydown", (event) => {
+      if (!player.contains(document.activeElement) && document.fullscreenElement !== player) {
+        if (!["ArrowRight", "ArrowLeft", " ", "PageDown", "PageUp", "Home", "End"].includes(event.key)) {
+          return;
+        }
+      }
+
+      if (event.key === "ArrowRight" || event.key === " " || event.key === "PageDown") {
+        event.preventDefault();
+        goTo(current + 1);
+      }
+
+      if (event.key === "ArrowLeft" || event.key === "PageUp") {
+        event.preventDefault();
+        goTo(current - 1);
+      }
+
+      if (event.key === "Home") {
+        event.preventDefault();
+        goTo(0);
+      }
+
+      if (event.key === "End") {
+        event.preventDefault();
+        goTo(slides.length - 1);
+      }
+    });
+
+    renderDots();
+    update();
+    syncFullscreenButton();
+  });
+</script>
+
+<style>
+  .lesson-header {
+    padding: 18px 20px;
+    background: linear-gradient(180deg, #ffffff 0%, #fcfaf7 100%);
+  }
+
+  .lesson-header__top {
+    display: block;
+  }
+
+  .lesson-header__title h1 {
+    margin: 0;
+    font-size: clamp(24px, 3vw, 32px);
+    letter-spacing: -0.04em;
+  }
+
+  .lesson-header__heading {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 6px;
+  }
+
+  .lesson-header__schedule {
+    color: #7d7568;
+    font-size: 14px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .lesson-header__title p {
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .folder-path {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #ece7de;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .folder-path span {
+    color: #8a8175;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .folder-path strong {
+    color: #5b5349;
+    font-size: 13px;
+    line-height: 1.55;
+    word-break: break-all;
+    flex: 1 1 320px;
+  }
+
+  .folder-copy {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 1px solid #ddd4c7;
+    border-radius: 8px;
+    background: #f7f3ed;
+    color: #6f6558;
+    cursor: pointer;
+    transition:
+      background 0.2s ease,
+      color 0.2s ease,
+      border-color 0.2s ease;
+  }
+
+  .folder-copy:hover:not(:disabled) {
+    background: #efe7dd;
+    border-color: #cfc3b2;
+  }
+
+  .folder-copy:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+
+  .folder-copy.is-copied {
+    background: #e4f3e8;
+    border-color: #9bc7a5;
+    color: #2d6a39;
+  }
+
+  .folder-copy svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  .overview-grid {
+    margin-bottom: 12px;
+  }
+
+  .overview-grid .section-panel {
+    max-width: 960px;
+    margin-bottom: 12px;
+  }
+
+  .section-panel {
+    padding: 16px 20px;
+  }
+
+  .section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #ece7de;
+  }
+
+  .section-head h2 {
+    margin: 0;
+    font-size: 18px;
+  }
+
+  .section-badge {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 12px;
+    border-radius: 999px;
+    background: #eef6ff;
+    color: #24538a;
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .file-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .file-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border: 1px solid #ebe5dc;
+    border-radius: 999px;
+    background: #faf8f4;
+  }
+
+  .file-row__index {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 26px;
+    height: 26px;
+    border-radius: 999px;
+    background: #f2eee8;
+    color: #6c6357;
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .file-row strong {
+    display: block;
+    color: #383838;
+    font-size: 13px;
+  }
+
+  .empty-note span {
+    display: block;
+    color: #7b7b7b;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .empty-note strong {
+    display: block;
+    margin-bottom: 6px;
+    color: #404040;
+  }
+
+  .material-panel {
+    padding: 16px 20px 20px;
+  }
+
+  .section-head--viewer {
+    margin-bottom: 14px;
+  }
+
+  .deck {
+    display: grid;
+    gap: 14px;
+  }
+
+  .deck:fullscreen {
+    padding: 12px;
+    background:
+      radial-gradient(circle at top left, rgba(255, 132, 93, 0.18), transparent 20%),
+      radial-gradient(circle at top right, rgba(111, 181, 255, 0.18), transparent 22%),
+      linear-gradient(180deg, #fffaf3 0%, #f4ecdf 100%);
+  }
+
+  .deck-topbar,
+  .deck-controls,
+  .deck-slide__inner {
+    background: rgba(255, 251, 245, 0.96);
+    border: 2px solid #e4d7c6;
+    box-shadow: 0 24px 50px rgba(28, 36, 52, 0.1);
+  }
+
+  .deck-topbar,
+  .deck-controls {
+    border-radius: 24px;
+  }
+
+  .deck-topbar {
+    padding: 12px 16px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .deck-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 18px;
+    font-weight: 800;
+  }
+
+  .deck-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .deck-badge {
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 2px solid #e4d7c6;
+    background: #fff;
+    font-size: 13px;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .deck-top-btn {
+    min-width: 132px;
+    padding: 11px 16px;
+    border: 2px solid #e4d7c6;
+    border-radius: 16px;
+    background: #fff;
+    color: #1c2434;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 900;
+    cursor: pointer;
+  }
+
+  .deck-helper {
+    font-size: 14px;
+    font-weight: 700;
+    color: #667287;
+  }
+
+  .deck-viewport {
+    position: relative;
+    overflow: hidden;
+    border-radius: 34px;
+  }
+
+  .deck-track {
+    display: flex;
+    transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform;
+  }
+
+  .deck-slide {
+    flex: 0 0 100%;
+  }
+
+  .deck-slide__inner {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    border-radius: 34px;
+    overflow: hidden;
+  }
+
+  .deck-slide__meta {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 12px;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid #ebebeb;
+    background: #f8f8f8;
+    color: #6f6f6f;
+    font-size: 13px;
+  }
+
+  .deck-slide__meta strong {
+    color: #363636;
+    font-size: 14px;
+  }
+
+  .deck-slide__body {
+    background: #fff;
+  }
+
+  .deck-slide__frame {
+    display: block;
+    width: 100%;
+    height: auto;
+    min-height: 560px;
+    aspect-ratio: 16 / 9;
+    border: 0;
+    background: #fff;
+  }
+
+  .deck:fullscreen .deck-viewport,
+  .deck:fullscreen .deck-track,
+  .deck:fullscreen .deck-slide,
+  .deck:fullscreen .deck-slide__inner {
+    height: 100%;
+  }
+
+  .deck:fullscreen .deck-viewport {
+    height: calc(100vh - 176px);
+  }
+
+  .deck:fullscreen .deck-slide__frame {
+    height: 100%;
+    min-height: 0;
+    aspect-ratio: auto;
+  }
+
+  .deck-controls {
+    padding: 12px 16px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .deck-controls__end {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+  }
+
+  .deck-nav-btn {
+    min-width: 120px;
+    padding: 12px 16px;
+    border: 0;
+    border-radius: 16px;
+    background: #1c2434;
+    color: #fff;
+    font: inherit;
+    font-size: 16px;
+    font-weight: 900;
+    cursor: pointer;
+  }
+
+  .deck-nav-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+
+  .deck-dots {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .deck-dot-btn {
+    width: 14px;
+    height: 14px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: #d3d9e4;
+    cursor: pointer;
+  }
+
+  .deck-dot-btn.active {
+    width: 40px;
+    background: #ff845d;
+  }
+
+  .deck-page {
+    font-size: 16px;
+    font-weight: 800;
+    color: #667287;
+    text-align: right;
+  }
+
+  .empty-panel {
+    padding: 20px;
+    text-align: center;
+  }
+
+  .empty-panel h2 {
+    margin-top: 10px;
+  }
+
+  .empty-panel__link {
+    display: inline-flex;
+    margin-top: 16px;
+    padding: 11px 16px;
+    border-radius: 999px;
+    background: #1c2434;
+    color: #fff;
+    font-weight: 700;
+    text-decoration: none;
+  }
+
+  @media (max-width: 1100px) {
+    .lesson-meta {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 920px) {
+    .lesson-header,
+    .section-panel,
+    .material-panel,
+    .empty-panel {
+      padding: 18px;
+    }
+
+    .lesson-header__top,
+    .section-head,
+    .deck-topbar {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .lesson-header__heading {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+    }
+
+    .deck-topbar,
+    .deck-controls,
+    .deck-slide__inner {
+      border-radius: 22px;
+    }
+
+    .deck-actions,
+    .deck-controls__end {
+      width: 100%;
+      justify-content: stretch;
+    }
+
+    .deck-page {
+      width: 100%;
+      text-align: center;
+    }
+
+    .deck-top-btn,
+    .deck-nav-btn,
+    .empty-panel__link {
+      width: 100%;
+      text-align: center;
+      justify-content: center;
+    }
+
+    .deck-slide__meta {
+      grid-template-columns: 1fr;
+    }
+
+    .deck-slide__frame {
+      min-height: 420px;
+    }
+  }
+</style>

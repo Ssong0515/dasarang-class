@@ -48,10 +48,20 @@
 ```text
 YYMMDD_수업이름/
   README.md
-  materials/
+  slides/
+    01_intro.html
+    02_topic.html
   assets/
   notes/
 ```
+
+## 슬라이드 HTML 규칙
+
+- 외부에서 만든 각 슬라이드는 `slides/` 폴더에 `01_이름.html`, `02_이름.html` 형식으로 넣습니다.
+- 각 파일은 완전한 HTML 문서여도 됩니다. 사이트에서는 각 문서의 `<title>`, `<style>`, `<body>`를 추출해 한 장의 슬라이드로 합칩니다.
+- 슬라이드 순서는 파일명 숫자 순서를 따릅니다.
+- 스크립트는 병합 과정에서 제거되므로, 수업 자료는 정적인 HTML/CSS 중심으로 만드는 것을 기준으로 합니다.
+- 기존 `materials/index.html` 단일 파일도 당분간은 호환되지만, 앞으로는 `slides/` 방식이 기본입니다.
 
 ## 예시
 
