@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
@@ -7,59 +7,58 @@
   <title>260314 첫수업</title>
   <style>
     :root {
-      --bg: #fbf6ef;
-      --panel: rgba(255, 252, 246, 0.95);
-      --ink: #15233b;
-      --muted: #61708a;
-      --line: #e8dcc9;
-      --accent: #ff7a59;
-      --accent-2: #1f8f72;
-      --accent-3: #2d6df6;
-      --yellow: #ffd468;
+      --bg: #f7f1e8;
+      --panel: rgba(255, 252, 247, 0.96);
+      --ink: #1c2434;
+      --muted: #647089;
+      --line: #e5d7c4;
+      --orange: #ff845d;
+      --yellow: #ffd76a;
+      --blue: #6fb5ff;
+      --green: #4db78f;
+      --pink: #ffb7b0;
+      --shadow: 0 18px 40px rgba(28, 36, 52, 0.09);
     }
 
     * { box-sizing: border-box; }
-
     html { scroll-behavior: smooth; }
 
     body {
       margin: 0;
-      font-family: "Segoe UI", "Malgun Gothic", sans-serif;
       color: var(--ink);
+      font-family: "Segoe UI", "Malgun Gothic", sans-serif;
       background:
-        radial-gradient(circle at top left, rgba(255, 122, 89, 0.18), transparent 24%),
-        radial-gradient(circle at top right, rgba(45, 109, 246, 0.15), transparent 26%),
-        linear-gradient(180deg, #fff9f2 0%, #f8f0e4 100%);
+        radial-gradient(circle at top left, rgba(255, 132, 93, 0.16), transparent 22%),
+        radial-gradient(circle at top right, rgba(111, 181, 255, 0.16), transparent 24%),
+        linear-gradient(180deg, #fffaf3 0%, #f5ecdf 100%);
     }
 
     a { color: inherit; }
 
     .wrap {
-      width: min(1220px, calc(100% - 28px));
+      width: min(1240px, calc(100% - 28px));
       margin: 0 auto;
-      padding: 20px 0 40px;
+      padding: 20px 0 48px;
     }
 
     .topbar {
       position: sticky;
       top: 0;
       z-index: 20;
-      backdrop-filter: blur(14px);
-      background: rgba(251, 246, 239, 0.85);
-      border: 2px solid var(--line);
-      border-radius: 22px;
-      padding: 12px 16px;
-      margin-bottom: 18px;
       display: flex;
       flex-wrap: wrap;
-      gap: 10px;
       align-items: center;
       justify-content: space-between;
+      gap: 10px;
+      padding: 12px 16px;
+      margin-bottom: 18px;
+      border: 2px solid var(--line);
+      border-radius: 22px;
+      backdrop-filter: blur(16px);
+      background: rgba(255, 248, 239, 0.86);
     }
 
-    .topbar strong {
-      font-size: 18px;
-    }
+    .topbar strong { font-size: 18px; }
 
     .topnav {
       display: flex;
@@ -73,219 +72,89 @@
       border: 2px solid var(--line);
       border-radius: 999px;
       padding: 10px 14px;
-      font-weight: 700;
       font-size: 14px;
+      font-weight: 800;
     }
 
-    .hero {
+    .hero,
+    .grid {
       display: grid;
-      grid-template-columns: 1.2fr 0.8fr;
       gap: 18px;
       margin-bottom: 18px;
     }
 
-    .panel {
+    .hero { grid-template-columns: 1.25fr 0.75fr; }
+    .grid { grid-template-columns: repeat(12, 1fr); }
+    .span-3 { grid-column: span 3; }
+    .span-4 { grid-column: span 4; }
+    .span-5 { grid-column: span 5; }
+    .span-6 { grid-column: span 6; }
+    .span-7 { grid-column: span 7; }
+    .span-8 { grid-column: span 8; }
+    .span-12 { grid-column: span 12; }
+
+    .panel,
+    .stage,
+    .device,
+    .step,
+    .app,
+    .key,
+    .practice,
+    .clean-card,
+    .question,
+    .mini-flow {
       background: var(--panel);
       border: 2px solid var(--line);
       border-radius: 28px;
-      padding: 26px;
-      box-shadow: 0 16px 36px rgba(21, 35, 59, 0.08);
+      box-shadow: var(--shadow);
     }
 
-    .eyebrow {
-      display: inline-block;
-      padding: 8px 12px;
-      border-radius: 999px;
-      background: #fff;
-      border: 2px solid var(--line);
-      font-size: 14px;
-      font-weight: 800;
-      margin-bottom: 14px;
-    }
-
+    .panel { padding: 26px; }
     h1, h2, h3, p { margin: 0; }
 
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      margin-bottom: 16px;
+      border: 2px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
     h1 {
-      font-size: clamp(44px, 8vw, 84px);
-      line-height: 0.94;
-      letter-spacing: -0.04em;
-      margin-bottom: 18px;
+      font-size: clamp(46px, 8vw, 90px);
+      line-height: 0.95;
+      letter-spacing: -0.05em;
+      margin-bottom: 16px;
     }
 
     .hero p {
-      font-size: clamp(20px, 2.5vw, 26px);
-      line-height: 1.4;
       max-width: 18em;
+      font-size: clamp(20px, 2.5vw, 28px);
+      line-height: 1.35;
+      color: var(--muted);
     }
-
-    .triples {
-      display: grid;
-      gap: 10px;
-      margin-top: 20px;
-    }
-
-    .triple {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 10px;
-    }
-
-    .triple span,
-    .pill,
-    .step,
-    .mini-card,
-    .term,
-    .rule,
-    .question {
-      background: #fff;
-      border: 2px solid var(--line);
-      border-radius: 18px;
-    }
-
-    .triple span {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 64px;
-      padding: 14px;
-      font-weight: 800;
-      font-size: clamp(18px, 2vw, 24px);
-      text-align: center;
-    }
-
-    .hero-visual {
-      min-height: 320px;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .hero-visual .shape {
-      position: absolute;
-      border-radius: 50%;
-    }
-
-    .shape.one {
-      width: 180px;
-      height: 180px;
-      background: #ffd468;
-      top: 24px;
-      left: 22px;
-    }
-
-    .shape.two {
-      width: 220px;
-      height: 220px;
-      background: #b9dcff;
-      right: 12px;
-      bottom: 18px;
-    }
-
-    .teacher-card,
-    .screen-card,
-    .device-card {
-      position: absolute;
-      background: #fff;
-      border: 3px solid var(--ink);
-      border-radius: 24px;
-      box-shadow: 0 14px 28px rgba(21, 35, 59, 0.12);
-    }
-
-    .teacher-card {
-      inset: 48px 38px 110px 48px;
-      padding: 20px;
-    }
-
-    .teacher-face {
-      width: 84px;
-      height: 84px;
-      border-radius: 50%;
-      margin-bottom: 16px;
-      background: linear-gradient(180deg, #1f2a44 0 28%, #ffd9b8 28% 100%);
-      position: relative;
-    }
-
-    .teacher-face::before,
-    .teacher-face::after {
-      content: "";
-      position: absolute;
-      background: #1f2a44;
-      border-radius: 50%;
-      width: 8px;
-      height: 8px;
-      top: 34px;
-    }
-
-    .teacher-face::before { left: 24px; }
-    .teacher-face::after { right: 24px; }
-
-    .teacher-card h2 {
-      font-size: 30px;
-      margin-bottom: 8px;
-    }
-
-    .teacher-card p {
-      font-size: 18px;
-      line-height: 1.45;
-    }
-
-    .screen-card {
-      right: 24px;
-      bottom: 26px;
-      width: 180px;
-      height: 100px;
-      padding: 12px;
-      background: linear-gradient(180deg, #2d6df6 0%, #9dc4ff 100%);
-      color: #fff;
-      font-weight: 900;
-      font-size: 22px;
-      transform: rotate(-6deg);
-    }
-
-    .device-card {
-      right: 126px;
-      top: 38px;
-      width: 138px;
-      height: 78px;
-      background: linear-gradient(180deg, #ff8c69 0%, #ffd0bf 100%);
-      transform: rotate(8deg);
-    }
-
-    .device-card::before {
-      content: "";
-      position: absolute;
-      inset: 12px;
-      border: 3px solid rgba(255, 255, 255, 0.92);
-      border-radius: 16px;
-    }
-
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(12, 1fr);
-      gap: 18px;
-      margin-bottom: 18px;
-    }
-
-    .span-4 { grid-column: span 4; }
-    .span-6 { grid-column: span 6; }
-    .span-8 { grid-column: span 8; }
-    .span-12 { grid-column: span 12; }
 
     .section-title {
       display: flex;
       align-items: center;
       gap: 12px;
-      margin-bottom: 16px;
+      margin-bottom: 18px;
     }
 
-    .section-title .num {
-      width: 52px;
-      height: 52px;
-      border-radius: 16px;
-      background: var(--accent);
-      color: #fff;
+    .num {
+      width: 54px;
+      height: 54px;
+      border-radius: 18px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      background: var(--orange);
+      color: #fff;
       font-size: 24px;
       font-weight: 900;
       flex: none;
@@ -296,232 +165,616 @@
       letter-spacing: -0.03em;
     }
 
-    .lead {
-      font-size: 22px;
+    .sub {
+      margin-bottom: 16px;
+      font-size: 20px;
       line-height: 1.45;
       color: var(--muted);
-      margin-bottom: 18px;
     }
 
-    .pill-row,
-    .step-row,
-    .term-grid,
-    .rule-row,
-    .question-row {
-      display: grid;
-      gap: 12px;
+    .hero-visual {
+      min-height: 360px;
+      position: relative;
+      overflow: hidden;
     }
 
-    .pill-row { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
-    .step-row { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
-    .term-grid { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
-    .rule-row { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
-    .question-row { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
-
-    .pill,
-    .step,
-    .mini-card,
-    .term,
-    .rule,
-    .question {
-      padding: 18px;
+    .blob {
+      position: absolute;
+      border-radius: 50%;
     }
 
-    .pill strong,
-    .step strong,
-    .term strong,
-    .rule strong,
-    .question strong {
-      display: block;
-      font-size: 24px;
+    .blob.one {
+      width: 170px;
+      height: 170px;
+      left: 20px;
+      top: 18px;
+      background: var(--yellow);
+    }
+
+    .blob.two {
+      width: 210px;
+      height: 210px;
+      right: 12px;
+      bottom: 12px;
+      background: rgba(111, 181, 255, 0.55);
+    }
+
+    .teacher,
+    .screen,
+    .bubble {
+      position: absolute;
+      background: #fff;
+      border: 3px solid var(--ink);
+      border-radius: 24px;
+    }
+
+    .teacher {
+      inset: 58px 44px 92px 40px;
+      padding: 22px;
+    }
+
+    .face {
+      width: 92px;
+      height: 92px;
+      margin-bottom: 16px;
+      border-radius: 50%;
+      background: linear-gradient(180deg, #243352 0 28%, #ffd7b4 28% 100%);
+      position: relative;
+    }
+
+    .face::before,
+    .face::after {
+      content: "";
+      position: absolute;
+      top: 38px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #243352;
+    }
+
+    .face::before { left: 26px; }
+    .face::after { right: 26px; }
+
+    .teacher h2 {
+      font-size: 32px;
       margin-bottom: 8px;
     }
 
-    .pill span,
-    .step span,
-    .term span,
-    .rule span,
-    .question span {
-      display: block;
+    .teacher p {
       font-size: 18px;
       line-height: 1.45;
       color: var(--muted);
     }
 
-    .mini-card {
-      min-height: 180px;
+    .screen {
+      right: 22px;
+      bottom: 24px;
+      width: 180px;
+      height: 110px;
+      padding: 16px;
+      background: linear-gradient(180deg, #5ca6ff 0%, #cfe7ff 100%);
+      font-size: 22px;
+      font-weight: 900;
+      transform: rotate(-6deg);
+    }
+
+    .bubble {
+      right: 128px;
+      top: 40px;
+      width: 150px;
+      padding: 14px;
+      font-size: 26px;
+      text-align: center;
+      background: linear-gradient(180deg, #ffb7b0 0%, #ffe2dc 100%);
+      transform: rotate(8deg);
+    }
+
+    .goal-stack,
+    .question-row,
+    .app-row,
+    .device-row,
+    .step-row,
+    .key-row,
+    .practice-row,
+    .clean-row,
+    .flow-row {
+      display: grid;
+      gap: 12px;
+    }
+
+    .goal-stack { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .question-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .app-row { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    .device-row { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .step-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .key-row { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    .practice-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .clean-row { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .flow-row { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+
+    .stage,
+    .question,
+    .app,
+    .device,
+    .step,
+    .key,
+    .practice,
+    .clean-card,
+    .mini-flow {
+      padding: 18px;
+      min-height: 150px;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
     }
 
-    .mini-card .icon {
+    .big-icon {
       width: 84px;
       height: 84px;
-      border-radius: 22px;
-      background: linear-gradient(135deg, #ffd468, #ff8c69);
+      border-radius: 24px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       font-size: 42px;
-      margin-bottom: 18px;
+      background: #fff;
+      border: 2px solid var(--line);
+      margin-bottom: 14px;
     }
 
-    .mini-card h3 {
-      font-size: 28px;
-      margin-bottom: 6px;
+    .stage strong,
+    .question strong,
+    .app strong,
+    .device strong,
+    .step strong,
+    .key strong,
+    .practice strong,
+    .clean-card strong,
+    .mini-flow strong {
+      display: block;
+      font-size: 26px;
+      line-height: 1.15;
     }
 
-    .mini-card p {
+    .stage span,
+    .question span,
+    .app span,
+    .device span,
+    .step span,
+    .key span,
+    .practice span,
+    .clean-card span,
+    .mini-flow span,
+    .tagline,
+    .timer {
+      display: block;
       font-size: 18px;
-      line-height: 1.4;
+      line-height: 1.35;
       color: var(--muted);
     }
 
-    .wide-visual {
-      min-height: 220px;
+    .timer-card {
+      display: grid;
+      gap: 12px;
+    }
+
+    .timer,
+    .tagline {
+      padding: 16px 18px;
+      border-radius: 20px;
+      background: #fff;
+      border: 2px solid var(--line);
+      font-weight: 800;
+    }
+
+    .life-phone {
+      min-height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .phone {
+      width: min(100%, 300px);
+      aspect-ratio: 10 / 18;
+      padding: 18px;
+      border-radius: 34px;
+      background: #1e273a;
+      position: relative;
+      box-shadow: inset 0 0 0 3px #31405b;
+    }
+
+    .phone::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 10px;
+      transform: translateX(-50%);
+      width: 92px;
+      height: 10px;
+      border-radius: 999px;
+      background: #111827;
+    }
+
+    .phone-screen {
+      height: 100%;
+      padding: 16px;
+      border-radius: 24px;
+      background: linear-gradient(180deg, #fff8ec 0%, #eef6ff 100%);
+      display: grid;
+      gap: 12px;
+      align-content: start;
+    }
+
+    .app-chip {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      border-radius: 18px;
+      background: #fff;
+      border: 2px solid var(--line);
+      font-weight: 800;
+      font-size: 18px;
+    }
+
+    .app-dot {
+      width: 42px;
+      height: 42px;
+      border-radius: 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+    }
+
+    .concept {
+      min-height: 320px;
       display: grid;
       place-items: center;
       overflow: hidden;
-      position: relative;
     }
 
-    .power-ring,
-    .mouse-visual,
-    .keyboard-visual,
-    .internet-visual {
-      position: relative;
-    }
-
-    .power-ring {
-      width: 180px;
-      height: 180px;
-      border-radius: 50%;
-      border: 14px solid var(--accent);
-    }
-
-    .power-ring::before {
-      content: "";
-      position: absolute;
-      width: 18px;
-      height: 82px;
-      background: var(--accent);
-      border-radius: 999px;
-      left: 50%;
-      top: -6px;
-      transform: translateX(-50%);
-    }
-
-    .mouse-visual {
-      width: 160px;
-      height: 220px;
-      border-radius: 80px;
-      border: 6px solid var(--ink);
-      background: #fff;
-    }
-
-    .mouse-visual::before {
-      content: "";
-      position: absolute;
-      left: 50%;
-      top: 24px;
-      transform: translateX(-50%);
-      width: 10px;
-      height: 48px;
-      background: var(--ink);
-      border-radius: 999px;
-    }
-
-    .mouse-visual::after {
-      content: "";
-      position: absolute;
-      left: 50%;
-      top: 88px;
-      transform: translateX(-50%);
-      width: 60px;
-      height: 60px;
-      border-radius: 50%;
-      background: #ffd468;
-    }
-
-    .keyboard-visual {
-      width: min(100%, 520px);
-      padding: 18px;
-      border-radius: 24px;
-      background: #1f2a44;
+    .computer-scene {
+      width: min(100%, 560px);
       display: grid;
-      grid-template-columns: repeat(8, 1fr);
-      gap: 8px;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 18px;
     }
 
-    .keyboard-visual span {
-      min-height: 42px;
-      border-radius: 10px;
+    .input-column {
+      display: grid;
+      gap: 12px;
+    }
+
+    .tool-card,
+    .center-card {
+      border-radius: 24px;
       background: #fff;
+      border: 3px solid var(--ink);
+      padding: 18px;
+      text-align: center;
+      font-weight: 900;
+    }
+
+    .tool-card {
+      min-height: 132px;
       display: grid;
       place-items: center;
-      font-size: 16px;
-      font-weight: 800;
-      color: var(--ink);
-      padding: 6px;
+      font-size: 28px;
     }
 
-    .keyboard-visual span.wide {
-      grid-column: span 3;
-      background: #ffd468;
+    .center-card {
+      min-height: 220px;
+      min-width: 200px;
+      display: grid;
+      place-items: center;
+      font-size: 32px;
+      background: linear-gradient(180deg, #6fb5ff 0%, #dceeff 100%);
     }
 
-    .internet-visual {
-      width: 220px;
-      height: 220px;
-      border-radius: 50%;
-      border: 6px solid var(--accent-3);
+    .arrow {
+      font-size: 48px;
+      font-weight: 900;
+      color: var(--orange);
+      text-align: center;
     }
 
-    .internet-visual::before,
-    .internet-visual::after {
+    .typing-hero {
+      min-height: 260px;
+      display: grid;
+      place-items: center;
+    }
+
+    .typing-board {
+      width: min(100%, 620px);
+      display: grid;
+      gap: 14px;
+    }
+
+    .typing-pill {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 18px;
+      border-radius: 24px;
+      background: #fff;
+      border: 2px solid var(--line);
+      font-size: 26px;
+      font-weight: 900;
+    }
+
+    .typing-pill .dot {
+      width: 56px;
+      height: 56px;
+      border-radius: 18px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, var(--yellow), var(--orange));
+      font-size: 28px;
+    }
+
+    .device-figure {
+      margin-bottom: 12px;
+      height: 92px;
+      position: relative;
+    }
+
+    .monitor-fig,
+    .tower-fig,
+    .mouse-fig,
+    .keyboard-fig {
+      position: absolute;
+      inset: 0;
+      margin: auto;
+    }
+
+    .monitor-fig {
+      width: 120px;
+      height: 72px;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #5ca6ff 0%, #d7ebff 100%);
+      border: 4px solid var(--ink);
+    }
+
+    .monitor-fig::before {
       content: "";
       position: absolute;
-      inset: 20px;
-      border: 6px solid var(--accent-3);
+      left: 50%;
+      bottom: -18px;
+      transform: translateX(-50%);
+      width: 38px;
+      height: 10px;
+      background: var(--ink);
+      border-radius: 8px;
+    }
+
+    .tower-fig {
+      width: 74px;
+      height: 98px;
+      border-radius: 18px;
+      background: linear-gradient(180deg, #ffd76a 0%, #ffe8a8 100%);
+      border: 4px solid var(--ink);
+    }
+
+    .tower-fig::before {
+      content: "";
+      position: absolute;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 24px;
+      height: 24px;
       border-radius: 50%;
+      border: 4px solid var(--ink);
     }
 
-    .internet-visual::after {
-      inset: 0;
-      clip-path: inset(50% 0 0 0);
-      border-color: var(--accent-2);
+    .mouse-fig {
+      width: 70px;
+      height: 96px;
+      border-radius: 36px;
+      border: 4px solid var(--ink);
+      background: #fff;
     }
 
-    .caption {
-      margin-top: 16px;
-      font-size: 20px;
-      font-weight: 800;
+    .mouse-fig::before {
+      content: "";
+      position: absolute;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 8px;
+      height: 28px;
+      border-radius: 999px;
+      background: var(--ink);
+    }
+
+    .keyboard-fig {
+      width: 136px;
+      height: 74px;
+      padding: 10px;
+      border-radius: 18px;
+      background: #1e273a;
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 6px;
+    }
+
+    .keyboard-fig span {
+      border-radius: 7px;
+      background: #fff;
+    }
+
+    .power-steps,
+    .shutdown-steps {
+      display: grid;
+      gap: 12px;
+    }
+
+    .power-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .shutdown-steps { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+    .rest-banner {
+      padding: 24px 28px;
+      border-radius: 32px;
+      border: 2px dashed #d6b78f;
+      background:
+        linear-gradient(135deg, rgba(255, 215, 106, 0.45), rgba(255, 255, 255, 0.72)),
+        #fff7df;
       text-align: center;
+      box-shadow: var(--shadow);
+    }
+
+    .rest-banner strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: clamp(32px, 5vw, 54px);
+    }
+
+    .rest-banner span {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--muted);
+    }
+
+    .key {
+      min-height: 180px;
+      text-align: center;
+      align-items: center;
+    }
+
+    .key-cap {
+      min-width: 110px;
+      padding: 18px 16px;
+      margin-bottom: 14px;
+      border-radius: 22px;
+      background: #fff;
+      border: 3px solid var(--ink);
+      font-size: 26px;
+      font-weight: 900;
+    }
+
+    .practice {
+      min-height: 220px;
+    }
+
+    .practice ol {
+      margin: 0;
+      padding-left: 24px;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.55;
+      font-weight: 700;
+    }
+
+    .site-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 12px;
+      padding: 12px 16px;
+      border-radius: 16px;
+      background: #fff;
+      border: 2px solid var(--line);
+      font-size: 18px;
+      font-weight: 800;
+      text-decoration: none;
+    }
+
+    .flow-row .mini-flow {
+      min-height: 170px;
+      text-align: center;
+      align-items: center;
+    }
+
+    .mini-flow .big-icon {
+      margin-bottom: 10px;
     }
 
     .footer-note {
+      padding: 18px;
       text-align: center;
-      padding: 24px;
-      color: var(--muted);
       font-size: 18px;
+      color: var(--muted);
     }
 
-    @media (max-width: 1024px) {
+    @media (max-width: 1100px) {
       .hero,
       .grid {
         grid-template-columns: 1fr;
       }
 
+      .span-3,
       .span-4,
+      .span-5,
       .span-6,
+      .span-7,
       .span-8,
       .span-12 {
         grid-column: span 1;
       }
 
-      .triple {
+      .app-row,
+      .device-row,
+      .key-row,
+      .clean-row,
+      .flow-row,
+      .practice-row,
+      .step-row,
+      .question-row,
+      .goal-stack,
+      .power-steps,
+      .shutdown-steps {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 760px) {
+      .wrap {
+        width: min(100%, calc(100% - 18px));
+      }
+
+      .topbar {
+        border-radius: 18px;
+        padding: 12px;
+      }
+
+      .panel,
+      .stage,
+      .device,
+      .step,
+      .app,
+      .key,
+      .practice,
+      .clean-card,
+      .question,
+      .mini-flow {
+        border-radius: 22px;
+      }
+
+      .goal-stack,
+      .question-row,
+      .app-row,
+      .device-row,
+      .step-row,
+      .key-row,
+      .practice-row,
+      .clean-row,
+      .flow-row,
+      .power-steps,
+      .shutdown-steps,
+      .computer-scene {
         grid-template-columns: 1fr;
+      }
+
+      .computer-scene {
+        gap: 10px;
+      }
+
+      .arrow {
+        transform: rotate(90deg);
       }
     }
   </style>
@@ -531,311 +784,471 @@
     <div class="topbar">
       <strong><a href="../../" style="text-decoration:none;">Dasarang Class</a> / 260314 첫수업</strong>
       <nav class="topnav">
-        <a href="#intro">소개</a>
-        <a href="#today">오늘 할 것</a>
-        <a href="#words">물건 이름</a>
-        <a href="#power">전원</a>
-        <a href="#mouse">마우스</a>
-        <a href="#keyboard">키보드</a>
-        <a href="#typing">타이핑</a>
-        <a href="#question">질문</a>
+        <a href="#start">시작</a>
+        <a href="#life">한국 생활</a>
+        <a href="#input">입력</a>
+        <a href="#devices">장치</a>
+        <a href="#typing">타자</a>
+        <a href="#finish">정리</a>
       </nav>
     </div>
 
     <section class="hero">
       <div class="panel">
-        <div class="eyebrow">Lesson 01 / First Computer Class / Первый урок</div>
+        <div class="eyebrow">Lesson 01 · LOOK · FOLLOW · DO</div>
         <h1>첫 컴퓨터 수업</h1>
-        <p>보기, 따라하기, 직접하기. 아주 기본적인 것부터 같이 시작합니다.</p>
-        <div class="triples">
-          <div class="triple">
-            <span>컴퓨터</span>
-            <span>Computer</span>
-            <span>Компьютер</span>
+        <p>말은 짧게. 그림은 크게. 보고 따라하면서 바로 시작합니다.</p>
+        <div class="goal-stack" style="margin-top:20px;">
+          <div class="stage">
+            <div class="big-icon">🧭</div>
+            <strong>한국 생활 도움</strong>
+            <span>map · translate · search · shop</span>
           </div>
-          <div class="triple">
-            <span>짧게</span>
-            <span>크게</span>
-            <span>같이</span>
+          <div class="stage">
+            <div class="big-icon">⌨️</div>
+            <strong>입력 = 시작</strong>
+            <span>mouse + keyboard</span>
+          </div>
+          <div class="stage">
+            <div class="big-icon">✍️</div>
+            <strong>가장 중요한 기술</strong>
+            <span>typing</span>
+          </div>
+          <div class="stage">
+            <div class="big-icon">🧹</div>
+            <strong>끝까지 정리</strong>
+            <span>close · shut down · clean up</span>
           </div>
         </div>
       </div>
+
       <div class="panel hero-visual">
-        <div class="shape one"></div>
-        <div class="shape two"></div>
-        <div class="teacher-card">
-          <div class="teacher-face"></div>
-          <h2>송은석</h2>
-          <p>컴퓨터 선생님<br>Computer Teacher<br>Учитель компьютера</p>
+        <div class="blob one"></div>
+        <div class="blob two"></div>
+        <div class="teacher">
+          <div class="face"></div>
+          <h2>WELCOME</h2>
+          <p>Teacher 소개<br>Student 소개<br>Computer 경험?</p>
         </div>
-        <div class="device-card"></div>
-        <div class="screen-card">LOOK<br>FOLLOW<br>DO</div>
+        <div class="bubble">👋🙂</div>
+        <div class="screen">1h 50m<br>break<br>10-15m</div>
       </div>
     </section>
 
-    <section id="intro" class="grid">
+    <section id="start" class="grid">
       <div class="panel span-8">
         <div class="section-title">
           <span class="num">1</span>
-          <h2>수업 시작 - 자기소개</h2>
+          <h2>아이스브레이킹</h2>
         </div>
-        <p class="lead">학생들이 선생님을 인식하고, 편안하게 수업 분위기를 시작합니다.</p>
-        <div class="pill-row">
-          <div class="pill">
-            <strong>이름</strong>
-            <span>송은석</span>
+        <p class="sub">짧은 질문, 손들기, 간단한 자기소개</p>
+        <div class="question-row">
+          <div class="question">
+            <div class="big-icon">💻</div>
+            <strong>컴퓨터 해봤어요?</strong>
+            <span>Yes / No</span>
           </div>
-          <div class="pill">
-            <strong>역할</strong>
-            <span>컴퓨터 선생님</span>
-          </div>
-          <div class="pill">
-            <strong>수업 방식</strong>
-            <span>1. 보기  2. 따라하기  3. 직접하기</span>
+          <div class="question">
+            <div class="big-icon">▶️</div>
+            <strong>YouTube 봤어요?</strong>
+            <span>Yes / No</span>
           </div>
         </div>
       </div>
       <div class="panel span-4">
         <div class="section-title">
-          <span class="num">핵</span>
-          <h2>핵심 단어</h2>
+          <span class="num">⏱</span>
+          <h2>수업 시간</h2>
         </div>
-        <div class="triple">
-          <span>컴퓨터</span>
-          <span>Computer</span>
-          <span>Компьютер</span>
+        <div class="timer-card">
+          <div class="timer">총 1시간 50분</div>
+          <div class="timer">중간 휴식 10~15분</div>
+          <div class="tagline">천천히 · 크게 · 같이</div>
         </div>
       </div>
     </section>
 
-    <section id="today" class="grid">
-      <div class="panel span-6">
+    <section id="life" class="grid">
+      <div class="panel span-7">
         <div class="section-title">
           <span class="num">2</span>
-          <h2>오늘 할 것</h2>
+          <h2>컴퓨터로 할 수 있는 것</h2>
         </div>
-        <p class="lead">첫 수업 목표는 아주 기본적인 것만 배우기입니다.</p>
-        <div class="step-row">
-          <div class="step"><strong>컴퓨터 켜기</strong><span>Turn on<br>Включить</span></div>
-          <div class="step"><strong>컴퓨터 끄기</strong><span>Turn off<br>Выключить</span></div>
-          <div class="step"><strong>마우스 클릭</strong><span>Click<br>Клик</span></div>
-          <div class="step"><strong>키보드 타이핑</strong><span>Typing<br>Печатать</span></div>
+        <p class="sub">한국 생활에 바로 쓰는 5가지</p>
+        <div class="app-row">
+          <div class="app">
+            <div class="big-icon">🗺️</div>
+            <strong>길 찾기</strong>
+            <span>Naver Map</span>
+          </div>
+          <div class="app">
+            <div class="big-icon">🌐</div>
+            <strong>번역</strong>
+            <span>Papago</span>
+          </div>
+          <div class="app">
+            <div class="big-icon">🔎</div>
+            <strong>정보 찾기</strong>
+            <span>Google</span>
+          </div>
+          <div class="app">
+            <div class="big-icon">🍜</div>
+            <strong>가게 찾기</strong>
+            <span>restaurant</span>
+          </div>
+          <div class="app">
+            <div class="big-icon">🛒</div>
+            <strong>쇼핑</strong>
+            <span>Coupang</span>
+          </div>
         </div>
       </div>
-      <div class="panel span-6">
-        <div class="section-title">
-          <span class="num">원</span>
-          <h2>수업 원칙</h2>
-        </div>
-        <div class="rule-row">
-          <div class="rule"><strong>짧게</strong><span>Short</span></div>
-          <div class="rule"><strong>크게</strong><span>Big</span></div>
-          <div class="rule"><strong>같이</strong><span>Together</span></div>
+      <div class="panel span-5 life-phone">
+        <div class="phone">
+          <div class="phone-screen">
+            <div class="app-chip"><span class="app-dot" style="background:#d6f0ff;">🗺️</span>Map</div>
+            <div class="app-chip"><span class="app-dot" style="background:#d9f5e8;">🌐</span>Translate</div>
+            <div class="app-chip"><span class="app-dot" style="background:#fff0c8;">🔎</span>Search</div>
+            <div class="app-chip"><span class="app-dot" style="background:#ffe0d8;">🍜</span>Food</div>
+            <div class="app-chip"><span class="app-dot" style="background:#e4e3ff;">🛒</span>Shop</div>
+          </div>
         </div>
       </div>
     </section>
 
-    <section id="words" class="grid">
+    <section class="grid">
       <div class="panel span-12">
         <div class="section-title">
-          <span class="num">3</span>
-          <h2>컴퓨터 물건 이름</h2>
+          <span class="num">핵심</span>
+          <h2>컴퓨터는 한국 생활을 도와줍니다</h2>
         </div>
-        <p class="lead">수업에서 계속 사용할 기본 용어입니다.</p>
-        <div class="term-grid">
-          <div class="mini-card">
-            <div class="icon">💻</div>
-            <div>
-              <h3>노트북</h3>
-              <p>Laptop<br>Ноутбук</p>
-            </div>
+        <div class="flow-row">
+          <div class="mini-flow">
+            <div class="big-icon">🏠</div>
+            <strong>생활</strong>
+            <span>daily life</span>
           </div>
-          <div class="mini-card">
-            <div class="icon">🖥️</div>
-            <div>
-              <h3>화면</h3>
-              <p>Screen<br>Экран</p>
-            </div>
+          <div class="mini-flow">
+            <div class="big-icon">➡️</div>
+            <strong>도움</strong>
+            <span>help</span>
           </div>
-          <div class="mini-card">
-            <div class="icon">⌨️</div>
-            <div>
-              <h3>키보드</h3>
-              <p>Keyboard<br>Клавиатура</p>
-            </div>
+          <div class="mini-flow">
+            <div class="big-icon">🖥️</div>
+            <strong>컴퓨터</strong>
+            <span>computer</span>
           </div>
-          <div class="mini-card">
-            <div class="icon">🖱️</div>
-            <div>
-              <h3>마우스</h3>
-              <p>Mouse<br>Мышь</p>
-            </div>
+          <div class="mini-flow">
+            <div class="big-icon">➡️</div>
+            <strong>입력</strong>
+            <span>input</span>
+          </div>
+          <div class="mini-flow">
+            <div class="big-icon">⌨️</div>
+            <strong>키보드</strong>
+            <span>keyboard</span>
+          </div>
+          <div class="mini-flow">
+            <div class="big-icon">✍️</div>
+            <strong>타이핑</strong>
+            <span>typing</span>
           </div>
         </div>
       </div>
     </section>
 
-    <section id="power" class="grid">
-      <div class="panel span-4">
+    <section id="input" class="grid">
+      <div class="panel span-5">
+        <div class="section-title">
+          <span class="num">3</span>
+          <h2>컴퓨터는 입력이 필요해요</h2>
+        </div>
+        <p class="sub">컴퓨터는 생각을 읽지 못합니다</p>
+        <div class="goal-stack">
+          <div class="stage">
+            <div class="big-icon">🧠</div>
+            <strong>생각만 하면</strong>
+            <span>computer does not know</span>
+          </div>
+          <div class="stage">
+            <div class="big-icon">🖱️</div>
+            <strong>마우스</strong>
+            <span>click</span>
+          </div>
+          <div class="stage">
+            <div class="big-icon">⌨️</div>
+            <strong>키보드</strong>
+            <span>type</span>
+          </div>
+          <div class="stage">
+            <div class="big-icon">✅</div>
+            <strong>입력하면</strong>
+            <span>computer works</span>
+          </div>
+        </div>
+      </div>
+      <div class="panel span-7 concept">
+        <div class="computer-scene">
+          <div class="input-column">
+            <div class="tool-card">🖱️<br>CLICK</div>
+            <div class="tool-card">⌨️<br>TYPE</div>
+          </div>
+          <div class="arrow">→</div>
+          <div class="center-card">🖥️<br>COMPUTER</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <div class="panel span-12">
         <div class="section-title">
           <span class="num">4</span>
-          <h2>전원 버튼</h2>
+          <h2>가장 중요한 기술 = 타이핑</h2>
         </div>
-        <div class="triple">
-          <span>전원</span>
-          <span>Power button</span>
-          <span>Кнопка питания</span>
+        <div class="typing-hero">
+          <div class="typing-board">
+            <div class="typing-pill"><span class="dot">🔎</span>검색 = 글자 입력</div>
+            <div class="typing-pill"><span class="dot">🌐</span>번역 = 글자 입력</div>
+            <div class="typing-pill"><span class="dot">🛒</span>쇼핑 = 글자 입력</div>
+            <div class="typing-pill"><span class="dot">⭐</span>컴퓨터 핵심 = 타이핑</div>
+          </div>
         </div>
-        <p class="lead" style="margin-top:18px;">컴퓨터를 켜기 위해 누르는 버튼</p>
       </div>
-      <div class="panel span-8 wide-visual">
-        <div class="power-ring"></div>
-        <div class="caption">전원 버튼은 한 번만 누르기</div>
+    </section>
+
+    <section id="devices" class="grid">
+      <div class="panel span-12">
+        <div class="section-title">
+          <span class="num">5</span>
+          <h2>컴퓨터 기본 장치</h2>
+        </div>
+        <p class="sub">보고 찾기: 어디에 있나요?</p>
+        <div class="device-row">
+          <div class="device">
+            <div class="device-figure"><div class="monitor-fig"></div></div>
+            <strong>모니터</strong>
+            <span>monitor</span>
+          </div>
+          <div class="device">
+            <div class="device-figure">
+              <div class="keyboard-fig">
+                <span></span><span></span><span></span><span></span><span></span><span></span>
+                <span></span><span></span><span></span><span></span><span></span><span></span>
+                <span></span><span></span><span></span><span></span><span></span><span></span>
+              </div>
+            </div>
+            <strong>키보드</strong>
+            <span>keyboard</span>
+          </div>
+          <div class="device">
+            <div class="device-figure"><div class="mouse-fig"></div></div>
+            <strong>마우스</strong>
+            <span>mouse</span>
+          </div>
+          <div class="device">
+            <div class="device-figure"><div class="tower-fig"></div></div>
+            <strong>본체</strong>
+            <span>computer</span>
+          </div>
+        </div>
       </div>
     </section>
 
     <section class="grid">
       <div class="panel span-6">
         <div class="section-title">
-          <span class="num">5</span>
+          <span class="num">6</span>
           <h2>컴퓨터 켜기</h2>
         </div>
-        <div class="step-row">
-          <div class="step"><strong>1</strong><span>전원 버튼 찾기</span></div>
-          <div class="step"><strong>2</strong><span>버튼 누르기</span></div>
-          <div class="step"><strong>3</strong><span>기다리기</span></div>
+        <div class="power-steps">
+          <div class="step">
+            <div class="big-icon">🔘</div>
+            <strong>1. 버튼 찾기</strong>
+            <span>power</span>
+          </div>
+          <div class="step">
+            <div class="big-icon">☝️</div>
+            <strong>2. 한 번 누르기</strong>
+            <span>one click</span>
+          </div>
+          <div class="step">
+            <div class="big-icon">👀</div>
+            <strong>3. 화면 보기</strong>
+            <span>screen on</span>
+          </div>
         </div>
-        <p class="lead" style="margin-top:18px;">중요: 전원 버튼은 한 번만 누르기</p>
       </div>
       <div class="panel span-6">
         <div class="section-title">
-          <span class="num">6</span>
-          <h2>컴퓨터 끄기</h2>
+          <span class="num">휴식</span>
+          <h2>중간 쉬는 시간</h2>
         </div>
-        <div class="step-row">
-          <div class="step"><strong>1</strong><span>시작 버튼 클릭</span></div>
-          <div class="step"><strong>2</strong><span>종료 선택</span></div>
-          <div class="step"><strong>3</strong><span>기다리기</span></div>
+        <div class="rest-banner">
+          <strong>☕ BREAK</strong>
+          <span>10 ~ 15 min</span>
         </div>
-        <p class="lead" style="margin-top:18px;">중요: 전원 버튼으로 끄지 않기</p>
       </div>
     </section>
 
-    <section id="mouse" class="grid">
-      <div class="panel span-4">
+    <section class="grid">
+      <div class="panel span-12">
         <div class="section-title">
           <span class="num">7</span>
-          <h2>마우스</h2>
+          <h2>키보드 기본 키</h2>
         </div>
-        <div class="triple">
-          <span>클릭</span>
-          <span>Click</span>
-          <span>Клик</span>
-        </div>
-        <p class="lead" style="margin-top:18px;">마우스 왼쪽 버튼을 한 번 누르는 것</p>
-      </div>
-      <div class="panel span-8 wide-visual">
-        <div class="mouse-visual"></div>
-        <div class="caption">왼쪽 버튼 한 번 누르기</div>
-      </div>
-    </section>
-
-    <section id="keyboard" class="grid">
-      <div class="panel span-6">
-        <div class="section-title">
-          <span class="num">8</span>
-          <h2>키보드</h2>
-        </div>
-        <div class="term-grid">
-          <div class="term"><strong>Space</strong><span>띄어쓰기</span></div>
-          <div class="term"><strong>Enter</strong><span>다음 줄</span></div>
-          <div class="term"><strong>Backspace</strong><span>지우기</span></div>
-          <div class="term"><strong>한/영</strong><span>한국어 / 영어 전환</span></div>
-        </div>
-      </div>
-      <div class="panel span-6 wide-visual">
-        <div class="keyboard-visual">
-          <span>Q</span><span>W</span><span>E</span><span>R</span><span>T</span><span>Y</span><span>U</span><span>I</span>
-          <span>A</span><span>S</span><span>D</span><span>F</span><span>G</span><span>H</span><span>J</span><span>K</span>
-          <span>Z</span><span>X</span><span>C</span><span>V</span><span>B</span><span>N</span><span>M</span><span>Enter</span>
-          <span>한/영</span><span>Ctrl</span><span class="wide">Space</span><span>Alt</span><span>Back</span><span>Shift</span>
+        <div class="key-row">
+          <div class="key">
+            <div class="key-cap">한/영</div>
+            <strong>언어</strong>
+            <span>Korean / English</span>
+          </div>
+          <div class="key">
+            <div class="key-cap">Space</div>
+            <strong>띄어쓰기</strong>
+            <span>space</span>
+          </div>
+          <div class="key">
+            <div class="key-cap">Enter</div>
+            <strong>확인 / 다음 줄</strong>
+            <span>enter</span>
+          </div>
+          <div class="key">
+            <div class="key-cap">Backspace</div>
+            <strong>지우기</strong>
+            <span>delete one</span>
+          </div>
+          <div class="key">
+            <div class="key-cap">ABC / 가나</div>
+            <strong>글자 입력</strong>
+            <span>typing start</span>
+          </div>
         </div>
       </div>
     </section>
 
     <section id="typing" class="grid">
-      <div class="panel span-6">
+      <div class="panel span-8">
+        <div class="section-title">
+          <span class="num">8</span>
+          <h2>타자 연습 시작</h2>
+        </div>
+        <p class="sub">속도보다 위치 익숙해지기</p>
+        <div class="practice-row">
+          <div class="practice">
+            <div class="big-icon">1</div>
+            <strong>연습 순서 A</strong>
+            <ol>
+              <li>자리연습</li>
+              <li>기본자리</li>
+              <li>왼손 윗자리</li>
+            </ol>
+          </div>
+          <div class="practice">
+            <div class="big-icon">2</div>
+            <strong>연습 순서 B</strong>
+            <ol>
+              <li>왼손 아랫자리</li>
+              <li>가운데 자리</li>
+              <li>오른손 윗자리</li>
+            </ol>
+          </div>
+          <div class="practice">
+            <div class="big-icon">3</div>
+            <strong>연습 순서 C</strong>
+            <ol>
+              <li>오른손 아랫자리</li>
+              <li>전체 자리</li>
+              <li>숫자 자리</li>
+            </ol>
+          </div>
+        </div>
+        <a class="site-link" href="https://tt.hancomtaja.com/ko/" target="_blank" rel="noreferrer">🔗 tt.hancomtaja.com/ko/</a>
+      </div>
+      <div class="panel span-4">
+        <div class="section-title">
+          <span class="num">목표</span>
+          <h2>오늘 목표</h2>
+        </div>
+        <div class="goal-stack">
+          <div class="stage">
+            <div class="big-icon">👀</div>
+            <strong>키 위치 보기</strong>
+            <span>look</span>
+          </div>
+          <div class="stage">
+            <div class="big-icon">☝️</div>
+            <strong>손가락 움직이기</strong>
+            <span>move</span>
+          </div>
+          <div class="stage">
+            <div class="big-icon">🐢</div>
+            <strong>천천히</strong>
+            <span>slow is okay</span>
+          </div>
+          <div class="stage">
+            <div class="big-icon">📍</div>
+            <strong>위치 익숙해지기</strong>
+            <span>not speed</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="finish" class="grid">
+      <div class="panel span-7">
         <div class="section-title">
           <span class="num">9</span>
-          <h2>타이핑 연습</h2>
+          <h2>정리 시간</h2>
         </div>
-        <div class="pill-row">
-          <div class="pill"><strong>첫 연습</strong><span>내 이름 쓰기</span></div>
-          <div class="pill"><strong>목표 1</strong><span>키보드 사용 익숙해지기</span></div>
-          <div class="pill"><strong>목표 2</strong><span>한글 입력 경험하기</span></div>
+        <p class="sub">올바르게 끄고, 자리도 정리하기</p>
+        <div class="shutdown-steps">
+          <div class="clean-card">
+            <div class="big-icon">❎</div>
+            <strong>프로그램 닫기</strong>
+            <span>close</span>
+          </div>
+          <div class="clean-card">
+            <div class="big-icon">🪟</div>
+            <strong>시작 버튼</strong>
+            <span>start</span>
+          </div>
+          <div class="clean-card">
+            <div class="big-icon">⏻</div>
+            <strong>전원</strong>
+            <span>power</span>
+          </div>
+          <div class="clean-card">
+            <div class="big-icon">🌙</div>
+            <strong>종료</strong>
+            <span>shut down</span>
+          </div>
         </div>
       </div>
-      <div class="panel span-6">
+      <div class="panel span-5">
         <div class="section-title">
           <span class="num">10</span>
-          <h2>컴퓨터로 할 수 있는 것</h2>
+          <h2>자리 정리</h2>
         </div>
-        <div class="term-grid">
-          <div class="mini-card">
-            <div class="icon">✍️</div>
-            <div>
-              <h3>글쓰기</h3>
-              <p>Write<br>Писать</p>
-            </div>
+        <div class="clean-row">
+          <div class="clean-card">
+            <div class="big-icon">🖱️</div>
+            <strong>마우스 정리</strong>
+            <span>mouse</span>
           </div>
-          <div class="mini-card">
-            <div class="icon">🌐</div>
-            <div>
-              <h3>인터넷</h3>
-              <p>Internet<br>Интернет</p>
-            </div>
+          <div class="clean-card">
+            <div class="big-icon">⌨️</div>
+            <strong>키보드 확인</strong>
+            <span>keyboard</span>
           </div>
-          <div class="mini-card">
-            <div class="icon">🎨</div>
-            <div>
-              <h3>만들기</h3>
-              <p>Create<br>Создавать</p>
-            </div>
+          <div class="clean-card">
+            <div class="big-icon">💻</div>
+            <strong>노트북 닫기</strong>
+            <span>laptop</span>
           </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="grid">
-      <div class="panel span-6">
-        <div class="section-title">
-          <span class="num">11</span>
-          <h2>수업 분위기</h2>
-        </div>
-        <p class="lead">천천히 해도 괜찮음</p>
-        <div class="term-grid">
-          <div class="term"><strong>보기</strong><span>Look<br>Смотреть</span></div>
-          <div class="term"><strong>듣기</strong><span>Listen<br>Слушать</span></div>
-          <div class="term"><strong>따라하기</strong><span>Follow<br>Повторять</span></div>
-          <div class="term"><strong>손들기</strong><span>Raise hand<br>Поднять руку</span></div>
-        </div>
-      </div>
-      <div class="panel span-6 wide-visual">
-        <div class="internet-visual"></div>
-        <div class="caption">천천히 보고, 듣고, 따라하기</div>
-      </div>
-    </section>
-
-    <section id="question" class="grid">
-      <div class="panel span-12">
-        <div class="section-title">
-          <span class="num">12</span>
-          <h2>질문</h2>
-        </div>
-        <div class="question-row">
-          <div class="question">
-            <strong>컴퓨터 사용해 본 사람?</strong>
-            <span>손 들기</span>
+          <div class="clean-card">
+            <div class="big-icon">🪑</div>
+            <strong>자리 정리</strong>
+            <span>clean desk</span>
           </div>
         </div>
       </div>
@@ -844,21 +1257,45 @@
     <section class="grid">
       <div class="panel span-12">
         <div class="section-title">
-          <span class="num">원</span>
-          <h2>수업 운영 원칙</h2>
+          <span class="num">마침</span>
+          <h2>마지막 메시지</h2>
         </div>
-        <div class="rule-row">
-          <div class="rule"><strong>1</strong><span>컴퓨터 명칭을 항상 동일하게 사용</span></div>
-          <div class="rule"><strong>2</strong><span>타자 연습은 매 수업 조금씩 진행</span></div>
-          <div class="rule"><strong>3</strong><span>컴퓨터로 할 수 있는 것을 시각적으로 보여주기</span></div>
-          <div class="rule"><strong>4</strong><span>한국어가 어려운 학생을 위해 영어와 러시아어 병행 사용</span></div>
+        <div class="flow-row">
+          <div class="mini-flow">
+            <div class="big-icon">⌨️</div>
+            <strong>타이핑</strong>
+            <span>important</span>
+          </div>
+          <div class="mini-flow">
+            <div class="big-icon">📈</div>
+            <strong>타이핑 ↑</strong>
+            <span>computer skill ↑</span>
+          </div>
+          <div class="mini-flow">
+            <div class="big-icon">🔁</div>
+            <strong>매 수업 시작</strong>
+            <span>typing practice</span>
+          </div>
+          <div class="mini-flow">
+            <div class="big-icon">가</div>
+            <strong>한국어 이해 ↑</strong>
+            <span>typing easier</span>
+          </div>
+          <div class="mini-flow">
+            <div class="big-icon">🧭</div>
+            <strong>한국 생활 도움</strong>
+            <span>real life</span>
+          </div>
+          <div class="mini-flow">
+            <div class="big-icon">👏</div>
+            <strong>오늘 끝</strong>
+            <span>good job</span>
+          </div>
         </div>
       </div>
     </section>
 
-    <div class="footer-note">
-      큰 화면으로 띄워 함께 보는 수업 자료
-    </div>
+    <div class="footer-note">이미지 중심 첫 수업 자료</div>
   </div>
   <script defer src="../../shared/sidebar.js"></script>
 </body>
