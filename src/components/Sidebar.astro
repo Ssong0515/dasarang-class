@@ -6,6 +6,23 @@ const base = import.meta.env.BASE_URL;
 
 const isActive = (path: string) => currentPath === path;
 const startsWith = (path: string) => currentPath.startsWith(path);
+
+const updatedParts = new Intl.DateTimeFormat("ko-KR", {
+  timeZone: "Asia/Seoul",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  weekday: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: true,
+}).formatToParts(new Date());
+
+const getPart = (type: Intl.DateTimeFormatPartTypes) =>
+  updatedParts.find((part) => part.type === type)?.value ?? "";
+
+const updatedLabel = `${getPart("year")}년${getPart("month")}월${getPart("day")}일(${getPart("weekday")}) ${getPart("dayPeriod")} ${getPart("hour")}:${getPart("minute")}:${getPart("second")}`;
 ---
 
 <aside class="sidebar" id="shared-sidebar">
@@ -13,7 +30,7 @@ const startsWith = (path: string) => currentPath.startsWith(path);
     <div class="sidebar__top">
       <div class="sidebar__brand">
         <strong>다사랑 강의 허브</strong>
-        <span>어느 페이지에서도 같은 사이드바를 사용합니다.</span>
+        <span>{updatedLabel}</span>
       </div>
       <button
         class="sidebar__collapse"
