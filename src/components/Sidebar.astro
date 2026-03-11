@@ -1,10 +1,12 @@
 ---
+import { getCollection } from "astro:content";
 import { monthGroups, sessions } from "../data/schedule";
-import { getSlidesForSession } from "../lib/lesson-materials";
 import { withBase } from "../lib/site";
 
 const currentPath = Astro.url.pathname;
-const availableMaterials = sessions.filter((session) => getSlidesForSession(session.slug).slides.length > 0);
+const noteEntries = await getCollection("classNotes");
+const noteIds = new Set(noteEntries.map((entry) => entry.id));
+const availableNotes = sessions.filter((session) => noteIds.has(session.slug));
 
 const isActive = (path: string) => currentPath === path;
 const startsWith = (path: string) => currentPath.startsWith(path);
@@ -49,9 +51,11 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")}:${getPart("m
 
     <details class="sidebar__group" open={isActive(withBase("/"))}>
       <summary class="sidebar__summary">
-        <span class="sidebar__label-wrap">
-          <span class="sidebar__icon sidebar__icon--overview">홈</span>
-          <span class="sidebar__text">개요</span>
+        <span class="sidebar__summary-main">
+          <a class="sidebar__icon-link sidebar__icon-link--overview" href={withBase("/")} aria-label="홈 전체 보기">
+            <span class="sidebar__icon sidebar__icon--overview" aria-hidden="true">🏠</span>
+          </a>
+          <span class="sidebar__text">홈</span>
         </span>
         <span class="sidebar__arrow" aria-hidden="true"></span>
       </summary>
@@ -65,19 +69,22 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")}:${getPart("m
     <details
       class="sidebar__group"
       open={
-        availableMaterials.some((session) => startsWith(withBase(`/classes/${session.slug}/`)))
+        isActive(withBase("/notes/")) ||
+        availableNotes.some((session) => currentPath === withBase(`/classes/${session.slug}/`))
       }
     >
       <summary class="sidebar__summary">
-        <span class="sidebar__label-wrap">
-          <span class="sidebar__icon sidebar__icon--materials">수업</span>
-          <span class="sidebar__text">대표 자료</span>
+        <span class="sidebar__summary-main">
+          <a class="sidebar__icon-link sidebar__icon-link--notes" href={withBase("/notes/")} aria-label="메모 전체 보기">
+            <span class="sidebar__icon sidebar__icon--notes" aria-hidden="true">📝</span>
+          </a>
+          <span class="sidebar__text">메모</span>
         </span>
         <span class="sidebar__arrow" aria-hidden="true"></span>
       </summary>
       <div class="sidebar__items">
-        {availableMaterials.length > 0 ? (
-          availableMaterials.map((session) => (
+        {availableNotes.length > 0 ? (
+          availableNotes.map((session) => (
             <a
               class:list={[
                 "sidebar__link",
@@ -90,7 +97,7 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")}:${getPart("m
           ))
         ) : (
           <span class="sidebar__link is-empty">
-            <span class="sidebar__text">연결된 자료 없음</span>
+            <span class="sidebar__text">작성된 메모 없음</span>
           </span>
         )}
       </div>
@@ -98,8 +105,10 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")}:${getPart("m
 
     <details class="sidebar__group" open={startsWith(withBase("/classes/"))}>
       <summary class="sidebar__summary">
-        <span class="sidebar__label-wrap">
-          <span class="sidebar__icon sidebar__icon--classes">반</span>
+        <span class="sidebar__summary-main">
+          <a class="sidebar__icon-link sidebar__icon-link--classes" href={withBase("/classes/")} aria-label="강의 전체 보기">
+            <span class="sidebar__icon sidebar__icon--classes" aria-hidden="true">🏫</span>
+          </a>
           <span class="sidebar__text">강의 목록</span>
         </span>
         <span class="sidebar__arrow" aria-hidden="true"></span>
@@ -163,7 +172,35 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")}:${getPart("m
       </div>
     </details>
   </div>
+
+  <div class="sidebar__footer">
+    <form class="sidebar__logout" method="POST" action={withBase("/api/logout/")}>
+      <button class="sidebar__logout-button" type="submit" aria-label="잠금 다시 걸기" title="잠금 다시 걸기">
+        <span class="sidebar__logout-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false">
+            <path
+              d="M7 10V7a5 5 0 0 1 10 0v3h1a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h1zm2 0h6V7a3 3 0 0 0-6 0v3z"
+              fill="currentColor"
+            ></path>
+          </svg>
+        </span>
+        <span class="sidebar__logout-label">잠금</span>
+      </button>
+    </form>
+  </div>
 </aside>
+
+<script>
+  document.querySelectorAll(".sidebar__icon-link").forEach((link) => {
+    link.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+    });
+
+    link.addEventListener("click", (event) => {
+      event.stopPropagation();
+    });
+  });
+</script>
 
 <style>
   .sidebar {
@@ -171,13 +208,13 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")}:${getPart("m
     top: 0;
     left: 0;
     bottom: 0;
+    display: flex;
+    flex-direction: column;
     width: 280px;
-    overflow-y: auto;
+    overflow: hidden;
     background: #efefef;
     border-right: 1px solid #d2d2d2;
-    transition:
-      width 0.28s cubic-bezier(0.22, 1, 0.36, 1),
-      box-shadow 0.28s ease;
+    transition: width 0.28s cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   :global(body.sidebar-collapsed) .sidebar {
@@ -185,7 +222,10 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")}:${getPart("m
   }
 
   .sidebar__inner {
+    flex: 1;
+    min-height: 0;
     padding: 18px 16px 24px;
+    overflow-y: auto;
     transition: padding 0.28s cubic-bezier(0.22, 1, 0.36, 1);
   }
 
@@ -195,8 +235,8 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")}:${getPart("m
     justify-content: space-between;
     gap: 10px;
     padding: 2px 12px 18px;
-    border-bottom: 1px solid #d2d2d2;
     margin-bottom: 10px;
+    border-bottom: 1px solid #d2d2d2;
   }
 
   .sidebar__brand {
@@ -242,19 +282,14 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")}:${getPart("m
 
   .sidebar__summary,
   .sidebar__subsummary {
-    list-style: none;
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 18px 10px;
+    list-style: none;
     cursor: pointer;
     font-size: 15px;
     font-weight: 700;
-    transition: padding 0.24s ease;
-  }
-
-  .sidebar__subsummary {
-    padding: 0;
   }
 
   .sidebar__summary::-webkit-details-marker,
@@ -262,11 +297,52 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")}:${getPart("m
     display: none;
   }
 
-  .sidebar__label-wrap {
+  .sidebar__subsummary {
+    padding: 0;
+  }
+
+  .sidebar__summary-main {
     display: inline-flex;
     align-items: center;
     gap: 10px;
     min-width: 0;
+  }
+
+  .sidebar__icon-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 10px;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .sidebar__icon-link:hover {
+    background: #e5e5e5;
+  }
+
+  .sidebar__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    font-size: 16px;
+    line-height: 1;
+  }
+
+  .sidebar__icon--overview {
+    color: #8f5a00;
+  }
+
+  .sidebar__icon--notes {
+    color: #0b6978;
+  }
+
+  .sidebar__icon--classes {
+    color: #3356b4;
   }
 
   .sidebar__arrow::before,
@@ -297,62 +373,22 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")}:${getPart("m
     text-decoration: none;
     font-size: 14px;
     font-weight: 700;
-    transition:
-      background 0.2s ease,
-      color 0.2s ease,
-      padding 0.24s ease,
-      margin 0.24s ease;
+    transition: background 0.2s ease;
   }
 
-  .sidebar__link.is-empty {
-    color: #8a8a8a;
-    cursor: default;
-  }
-
-  .sidebar__icon {
-    flex: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 18px;
-    height: 18px;
-    text-align: center;
-    font-size: 11px;
-    line-height: 1;
-    letter-spacing: -0.02em;
-    transition:
-      width 0.24s ease,
-      height 0.24s ease,
-      font-size 0.24s ease,
-      background 0.24s ease,
-      color 0.24s ease,
-      border-radius 0.24s ease,
-      box-shadow 0.24s ease;
-  }
-
-  .sidebar__icon--overview {
-    color: #7a4d00;
-  }
-
-  .sidebar__icon--materials {
-    color: #0d5f6d;
-  }
-
-  .sidebar__icon--classes {
-    color: #3758a5;
-  }
-
-  .sidebar__text {
-    min-width: 0;
-  }
-
-  .sidebar__link:hover {
+  .sidebar__link:hover,
+  .sidebar__logout-button:hover {
     background: #e8e8e8;
   }
 
   .sidebar__link.is-active {
     background: #efd4ae;
     color: #6d5b43;
+  }
+
+  .sidebar__link.is-empty {
+    color: #8a8a8a;
+    cursor: default;
   }
 
   .sidebar__link.is-month {
@@ -365,13 +401,79 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")}:${getPart("m
     margin: 0 8px 8px 18px;
     background: #f5f5f5;
     font-size: 13px;
-    font-weight: 700;
   }
 
   .sidebar__link.is-child {
     margin-left: 30px;
     font-size: 13px;
     font-weight: 600;
+  }
+
+  .sidebar__text {
+    min-width: 0;
+  }
+
+  .sidebar__footer {
+    flex: 0 0 auto;
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    margin-top: auto;
+    padding: 10px 16px 14px;
+    background: #efefef;
+    border-top: 1px solid #d2d2d2;
+  }
+
+  .sidebar__logout {
+    margin: 0;
+    width: 100%;
+  }
+
+  .sidebar__logout-button {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    width: auto;
+    min-width: 40px;
+    height: 40px;
+    padding: 0 8px;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    background: transparent;
+    color: #8b7b6a;
+    font: inherit;
+    cursor: pointer;
+    opacity: 0.68;
+    transition:
+      background 0.2s ease,
+      color 0.2s ease,
+      opacity 0.2s ease;
+  }
+
+  .sidebar__logout-button:hover {
+    opacity: 1;
+  }
+
+  .sidebar__logout-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    color: currentColor;
+  }
+
+  .sidebar__logout-icon svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .sidebar__logout-label {
+    color: #918476;
+    font-size: 11px;
+    line-height: 1;
+    letter-spacing: -0.01em;
   }
 
   :global(body.sidebar-collapsed) .sidebar__inner {
@@ -388,7 +490,8 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")}:${getPart("m
   :global(body.sidebar-collapsed) .sidebar__brand span,
   :global(body.sidebar-collapsed) .sidebar__text,
   :global(body.sidebar-collapsed) .sidebar__arrow,
-  :global(body.sidebar-collapsed) .sidebar__subarrow {
+  :global(body.sidebar-collapsed) .sidebar__subarrow,
+  :global(body.sidebar-collapsed) .sidebar__logout-label {
     display: none;
   }
 
@@ -405,8 +508,7 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")}:${getPart("m
 
   :global(body.sidebar-collapsed) .sidebar__items,
   :global(body.sidebar-collapsed) .sidebar__subitems {
-    display: block;
-    padding-bottom: 6px;
+    display: none;
   }
 
   :global(body.sidebar-collapsed) .sidebar__link {
@@ -416,27 +518,28 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")}:${getPart("m
     border-radius: 12px;
   }
 
-  :global(body.sidebar-collapsed) .sidebar__summary > .sidebar__label-wrap > .sidebar__icon {
+  :global(body.sidebar-collapsed) .sidebar__icon-link {
     width: 30px;
     height: 30px;
     border-radius: 10px;
-    font-size: 10px;
     box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.04);
   }
 
-  :global(body.sidebar-collapsed) .sidebar__icon--overview {
+  :global(body.sidebar-collapsed) .sidebar__icon-link--overview {
     background: #f5dfbf;
-    color: #8f5a00;
   }
 
-  :global(body.sidebar-collapsed) .sidebar__icon--materials {
+  :global(body.sidebar-collapsed) .sidebar__icon-link--notes {
     background: #cfeef2;
-    color: #0b6978;
   }
 
-  :global(body.sidebar-collapsed) .sidebar__icon--classes {
+  :global(body.sidebar-collapsed) .sidebar__icon-link--classes {
     background: #d9e4ff;
-    color: #3356b4;
+  }
+
+  :global(body.sidebar-collapsed) .sidebar__footer {
+    justify-content: center;
+    padding-inline: 8px;
   }
 
   :global(body.sidebar-collapsed) .sidebar__link.is-month,
@@ -447,14 +550,12 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")}:${getPart("m
 
   @media (max-width: 920px) {
     .sidebar {
-      position: static;
-      width: auto;
-      border-right: 0;
-      border-bottom: 1px solid #d2d2d2;
+      width: 72px;
+      z-index: 30;
     }
 
     :global(body.sidebar-collapsed) .sidebar {
-      width: auto;
+      width: 72px;
     }
   }
 </style>

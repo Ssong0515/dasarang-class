@@ -1,6 +1,5 @@
 ---
 import Sidebar from "../components/Sidebar.astro";
-import { withBase } from "../lib/site";
 
 type Props = {
   title: string;
@@ -40,33 +39,13 @@ const { title } = Astro.props;
       }
 
       .page-shell {
-        padding-left: 280px;
         min-height: 100vh;
+        padding-left: 280px;
         transition: padding-left 0.28s cubic-bezier(0.22, 1, 0.36, 1);
       }
 
       .page-main {
         padding: 24px;
-      }
-
-      .page-actions {
-        display: flex;
-        justify-content: flex-end;
-        margin-bottom: 16px;
-      }
-
-      .logout-form {
-        margin: 0;
-      }
-
-      .logout-button {
-        padding: 10px 14px;
-        border: 1px solid var(--line);
-        border-radius: 10px;
-        background: #fff;
-        color: var(--text);
-        font: inherit;
-        cursor: pointer;
       }
 
       .panel {
@@ -122,16 +101,13 @@ const { title } = Astro.props;
       }
 
       @media (max-width: 920px) {
+        .page-shell,
+        body.sidebar-collapsed .page-shell {
+          padding-left: 72px;
+        }
+
         .page-main {
           padding: 16px;
-        }
-
-        .page-actions {
-          justify-content: stretch;
-        }
-
-        .logout-button {
-          width: 100%;
         }
       }
     </style>
@@ -140,11 +116,6 @@ const { title } = Astro.props;
     <Sidebar />
     <div class="page-shell">
       <main class="page-main">
-        <div class="page-actions">
-          <form class="logout-form" method="POST" action={withBase("/api/logout/")}>
-            <button class="logout-button" type="submit">잠금 다시 걸기</button>
-          </form>
-        </div>
         <slot />
       </main>
     </div>
@@ -176,6 +147,7 @@ const { title } = Astro.props;
         if (collapsed) {
           closeAllSidebarGroups();
         }
+
         toggleButtons.forEach((button) => {
           button.setAttribute("aria-expanded", String(!collapsed));
           button.setAttribute("aria-label", collapsed ? "사이드바 열기" : "사이드바 닫기");
@@ -208,6 +180,10 @@ const { title } = Astro.props;
 
       sidebar?.addEventListener("click", (event) => {
         if (!document.body.classList.contains("sidebar-collapsed")) {
+          return;
+        }
+
+        if (isForcedCollapsed()) {
           return;
         }
 

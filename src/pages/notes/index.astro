@@ -1,0 +1,126 @@
+---
+import { getCollection } from "astro:content";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { sessions } from "../../data/schedule";
+import { withBase } from "../../lib/site";
+
+const noteEntries = await getCollection("classNotes");
+const sessionMap = new Map(sessions.map((session) => [session.slug, session]));
+const notes = (
+  await Promise.all(
+    noteEntries.map(async (entry) => {
+      const session = sessionMap.get(entry.id);
+      if (!session) {
+        return undefined;
+      }
+
+      const rendered = await entry.render();
+
+      return {
+        entry,
+        session,
+        rendered,
+      };
+    }),
+  )
+)
+  .filter(Boolean)
+  .sort((left, right) => left!.session.date.localeCompare(right!.session.date)) as Array<{
+    entry: (typeof noteEntries)[number];
+    session: (typeof sessions)[number];
+    rendered: Awaited<ReturnType<(typeof noteEntries)[number]["render"]>>;
+  }>;
+---
+
+<BaseLayout title="전체 메모">
+  <section class="panel">
+    <h1>전체 메모</h1>
+    <p>수업별 메모를 한곳에서 모아 봅니다. 각 메모 카드에서 해당 수업 상세 페이지로 바로 이동할 수 있습니다.</p>
+  </section>
+
+  {notes.length > 0 ? (
+    <div class="notes-grid">
+      {notes.map(({ entry, session, rendered }) => (
+        <article class="panel note-card" id={entry.id}>
+          <div class="note-card__head">
+            <div>
+              <h2>{entry.data.title}</h2>
+              <p class="note-card__meta">
+                <span>{session.course}</span>
+                <span>{session.date}</span>
+                <span>{session.time}</span>
+              </p>
+            </div>
+            <a class="note-card__link" href={withBase(`/classes/${session.slug}/`)}>
+              수업 상세
+            </a>
+          </div>
+          <div class="note-card__body">
+            <rendered.Content />
+          </div>
+        </article>
+      ))}
+    </div>
+  ) : (
+    <section class="panel">
+      <p>아직 작성된 메모가 없습니다.</p>
+    </section>
+  )}
+</BaseLayout>
+
+<style>
+  .notes-grid {
+    display: grid;
+    gap: 16px;
+  }
+
+  .note-card {
+    display: grid;
+    gap: 16px;
+  }
+
+  .note-card__head {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: flex-start;
+  }
+
+  .note-card__head h2 {
+    margin-bottom: 8px;
+    font-size: 20px;
+  }
+
+  .note-card__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    color: #7b7b7b;
+    font-size: 13px;
+  }
+
+  .note-card__link {
+    flex: none;
+    padding: 10px 14px;
+    border-radius: 999px;
+    background: #1c2434;
+    color: #fff;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .note-card__body {
+    padding: 18px;
+    border: 1px solid #dcdcdc;
+    border-radius: 12px;
+    background: #fcfcfc;
+    line-height: 1.8;
+  }
+
+  @media (max-width: 720px) {
+    .note-card__head {
+      flex-direction: column;
+    }
+  }
+</style>
