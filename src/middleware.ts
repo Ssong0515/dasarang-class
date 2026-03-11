@@ -36,7 +36,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     return next();
   }
 
-  const loginUrl = new URL(withBase("/login"), context.request.url);
+  const loginUrl = new URL(withBase("/login/"), context.request.url);
   const currentUrl = new URL(context.request.url);
   loginUrl.searchParams.set("next", `${currentUrl.pathname}${currentUrl.search}`);
 

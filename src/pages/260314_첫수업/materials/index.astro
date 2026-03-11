@@ -1,5 +1,6 @@
 ---
 import BaseLayout from "../../../layouts/BaseLayout.astro";
+import { withBase } from "../../../lib/site";
 import lessonHtml from "../../../../260314_첫수업/materials/index.html?raw";
 
 const styleMatch = lessonHtml.match(/<style>([\s\S]*?)<\/style>/i);
@@ -10,7 +11,8 @@ let lessonBody = bodyMatch ? bodyMatch[1] : lessonHtml;
 
 lessonBody = lessonBody
   .replace(/<script[^>]*shared\/sidebar\.js[^>]*><\/script>/gi, "")
-  .replace(/<link[^>]*shared\/sidebar\.css[^>]*>/gi, "");
+  .replace(/<link[^>]*shared\/sidebar\.css[^>]*>/gi, "")
+  .replace(/href="\.\.\/\.\.\//gi, `href="${withBase("/")}"`);
 ---
 
 <BaseLayout title="260314 첫수업">
