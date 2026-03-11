@@ -1,8 +1,8 @@
 ---
-import { getEntry } from "astro:content";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { sessions } from "../../data/schedule";
 import { getSlidesForSession } from "../../lib/lesson-materials";
+import { getNote } from "../../lib/notes";
 import { withBase } from "../../lib/site";
 
 export const prerender = false;
@@ -14,8 +14,7 @@ if (!session) {
   Astro.response.status = 404;
 }
 
-const noteEntry = session ? await getEntry("classNotes", slug) : undefined;
-const note = noteEntry ? await noteEntry.render() : undefined;
+const note = session ? await getNote(slug, Astro.locals) : undefined;
 const material = session ? getSlidesForSession(slug) : { slides: [], slidesDir: undefined };
 const slides = material.slides ?? [];
 const slideFileNames = slides.map((slide) => slide.fileName);
@@ -52,6 +51,48 @@ const initialBadgeLabel = slides[0]?.helpLabel || "Slide Lesson";
         </section>
 
         <section class="panel">
+          <details class="note-panel" data-note-panel>
+            <summary class="note-panel__summary">
+              <div>
+                <h2>수업 메모</h2>
+                <p class="section-copy">필요할 때만 열어서 적고, 저장하면 다시 접힙니다.</p>
+              </div>
+              <div class="note-panel__meta">
+                {
+                  note?.updatedAt ? (
+                    <span class="section-meta">
+                      마지막 저장 {new Intl.DateTimeFormat("ko-KR", {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                        timeZone: "Asia/Seoul",
+                      }).format(new Date(note.updatedAt))}
+                    </span>
+                  ) : (
+                    <span class="section-meta">아직 저장된 메모 없음</span>
+                  )
+                }
+                <span class="note-panel__arrow" aria-hidden="true"></span>
+              </div>
+            </summary>
+
+            <div class="note-panel__body">
+              <form class="note-form" method="POST" action={withBase(`/api/notes/${slug}/`)} data-note-form>
+                <textarea
+                  class="note-textarea"
+                  name="content"
+                  rows={14}
+                  placeholder="오늘 수업 흐름, 주제, 아이디어, 준비할 것들을 자유롭게 적어두세요."
+                >{note?.content ?? ""}</textarea>
+                <div class="note-actions">
+                  <p class="save-notice" data-note-status aria-live="polite"></p>
+                  <button class="note-save" type="submit">저장</button>
+                </div>
+              </form>
+            </div>
+          </details>
+        </section>
+
+        <section class="panel">
           <div class="section-head">
             <h2>Slides HTML</h2>
             <span class="section-badge">{slideFileNames.length}개</span>
@@ -72,46 +113,6 @@ const initialBadgeLabel = slides[0]?.helpLabel || "Slide Lesson";
               <span>현재 `slides` 폴더 안에 표시할 HTML 파일이 없습니다.</span>
             </div>
           )}
-        </section>
-
-        <section class="panel">
-          <h2>수업 정보</h2>
-          <div class="list">
-            <div class="item">
-              <strong>반</strong>
-              <span>{session.course}</span>
-            </div>
-            <div class="item">
-              <strong>날짜</strong>
-              <span>{session.date}</span>
-            </div>
-            <div class="item">
-              <strong>시간</strong>
-              <span>{session.time}</span>
-            </div>
-            <div class="item">
-              <strong>상태</strong>
-              <span>{session.status}</span>
-            </div>
-          </div>
-        </section>
-
-        <section class="panel">
-          <div class="section-head">
-            <h2>수업 메모</h2>
-          </div>
-          {
-            note ? (
-              <article class="note-body">
-                <note.Content />
-              </article>
-            ) : (
-              <div class="empty-note">
-                <strong>메모 파일 없음</strong>
-                <span>`src/content/classNotes/{slug}.md` 파일을 추가하면 여기에서 바로 보입니다.</span>
-              </div>
-            )
-          }
         </section>
 
         {slides.length > 0 ? (
@@ -205,6 +206,49 @@ const initialBadgeLabel = slides[0]?.helpLabel || "Slide Lesson";
     });
   });
 
+  const notePanel = document.querySelector("[data-note-panel]");
+  const noteForm = document.querySelector("[data-note-form]");
+  const noteStatus = document.querySelector("[data-note-status]");
+
+  if (notePanel instanceof HTMLDetailsElement && noteForm instanceof HTMLFormElement) {
+    noteForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      const submitButton = noteForm.querySelector('button[type="submit"]');
+      if (!(submitButton instanceof HTMLButtonElement)) return;
+
+      submitButton.disabled = true;
+      if (noteStatus instanceof HTMLElement) {
+        noteStatus.textContent = "저장 중...";
+      }
+
+      try {
+        const response = await fetch(noteForm.action, {
+          method: "POST",
+          body: new FormData(noteForm),
+          headers: {
+            Accept: "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error("save_failed");
+        }
+
+        notePanel.open = false;
+        if (noteStatus instanceof HTMLElement) {
+          noteStatus.textContent = "저장했습니다.";
+        }
+      } catch {
+        if (noteStatus instanceof HTMLElement) {
+          noteStatus.textContent = "저장에 실패했습니다.";
+        }
+      } finally {
+        submitButton.disabled = false;
+      }
+    });
+  }
+
   const players = document.querySelectorAll("[data-slide-player]");
 
   players.forEach((player) => {
@@ -260,19 +304,66 @@ const initialBadgeLabel = slides[0]?.helpLabel || "Slide Lesson";
 
 <style>
   .lesson-header { background: linear-gradient(180deg, #ffffff 0%, #fcfaf7 100%); }
-  .lesson-header__heading { display: flex; gap: 12px; align-items: baseline; }
+  .lesson-header__heading { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
   .lesson-header__schedule { color: #7d7568; font-size: 14px; font-weight: 700; }
   .folder-path { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  .folder-copy { padding: 6px 10px; border: 1px solid #ddd4c7; border-radius: 8px; background: #f7f3ed; }
+  .folder-copy { padding: 6px 10px; border: 1px solid #ddd4c7; border-radius: 8px; background: #f7f3ed; cursor: pointer; }
   .section-head { display: flex; justify-content: space-between; gap: 14px; align-items: center; margin-bottom: 12px; }
+  .section-copy { margin: 6px 0 0; color: #7b7b7b; font-size: 13px; }
+  .section-meta { color: #7b7b7b; font-size: 12px; font-weight: 700; }
   .section-badge { padding: 8px 12px; border-radius: 999px; background: #eef6ff; color: #24538a; font-size: 12px; font-weight: 800; }
   .file-list { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 8px; }
   .file-row { display: inline-flex; gap: 10px; padding: 8px 12px; border: 1px solid #ebe5dc; border-radius: 999px; background: #faf8f4; }
   .file-row__index { min-width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; background: #f2eee8; font-size: 11px; font-weight: 800; }
-  .note-body { padding: 18px; border: 1px solid #d2d2d2; border-radius: 12px; background: #fcfcfc; line-height: 1.8; }
   .empty-note { padding: 18px; border: 1px dashed #c8b18f; border-radius: 12px; background: #fffaf3; color: #73573a; line-height: 1.7; }
   .empty-note strong, .empty-note span { display: block; }
   .empty-note strong { margin-bottom: 6px; }
+  .note-panel {
+    border: 1px solid #dfdfdf;
+    border-radius: 16px;
+    background: #fcfcfc;
+  }
+  .note-panel[open] {
+    background: #ffffff;
+  }
+  .note-panel__summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 20px;
+    cursor: pointer;
+    list-style: none;
+  }
+  .note-panel__summary::-webkit-details-marker {
+    display: none;
+  }
+  .note-panel__summary h2 {
+    margin: 0;
+  }
+  .note-panel__meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .note-panel__arrow::before {
+    content: "▸";
+    color: #6f6f6f;
+    font-size: 14px;
+  }
+  .note-panel[open] .note-panel__arrow::before {
+    content: "▾";
+  }
+  .note-panel__body {
+    padding: 0 20px 20px;
+    border-top: 1px solid #ececec;
+  }
+  .note-form { display: grid; gap: 12px; padding-top: 16px; }
+  .note-textarea { width: 100%; min-height: 320px; padding: 16px; border: 1px solid #d6d6d6; border-radius: 14px; background: #fcfcfc; color: #3f3f3f; font: inherit; line-height: 1.7; resize: vertical; }
+  .note-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .save-notice { margin: 0; color: #1f6f43; font-size: 13px; font-weight: 700; }
+  .note-save { padding: 10px 18px; border: 0; border-radius: 12px; background: #1c2434; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+  .note-save:disabled { opacity: 0.6; cursor: wait; }
   .deck { display: grid; gap: 14px; }
   .deck-topbar, .deck-controls, .deck-slide__inner { background: rgba(255, 251, 245, 0.96); border: 2px solid #e4d7c6; border-radius: 24px; }
   .deck-topbar, .deck-controls { padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
@@ -290,4 +381,13 @@ const initialBadgeLabel = slides[0]?.helpLabel || "Slide Lesson";
   .deck-dot-btn { width: 14px; height: 14px; border: 0; border-radius: 999px; background: #d3d9e4; cursor: pointer; }
   .deck-dot-btn.active { width: 40px; background: #ff845d; }
   .empty-panel { text-align: center; }
+
+  @media (max-width: 900px) {
+    .section-head,
+    .note-panel__summary,
+    .note-actions {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+  }
 </style>

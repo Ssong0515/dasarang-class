@@ -1,12 +1,11 @@
 ---
-import { getCollection } from "astro:content";
 import { monthGroups, sessions } from "../data/schedule";
+import { listNotes } from "../lib/notes";
 import { withBase } from "../lib/site";
 
 const currentPath = Astro.url.pathname;
-const noteEntries = await getCollection("classNotes");
-const noteIds = new Set(noteEntries.map((entry) => entry.id));
-const availableNotes = sessions.filter((session) => noteIds.has(session.slug));
+const savedNotes = await listNotes(Astro.locals);
+const availableNotes = sessions.filter((session) => savedNotes[session.slug]?.content?.trim());
 
 const isActive = (path: string) => currentPath === path;
 const startsWith = (path: string) => currentPath.startsWith(path);
@@ -97,7 +96,7 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")}:${getPart("m
           ))
         ) : (
           <span class="sidebar__link is-empty">
-            <span class="sidebar__text">작성된 메모 없음</span>
+            <span class="sidebar__text">저장된 메모 없음</span>
           </span>
         )}
       </div>
@@ -540,6 +539,13 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")}:${getPart("m
   :global(body.sidebar-collapsed) .sidebar__footer {
     justify-content: center;
     padding-inline: 8px;
+  }
+
+  :global(body.sidebar-collapsed) .sidebar__logout-button {
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
   }
 
   :global(body.sidebar-collapsed) .sidebar__link.is-month,

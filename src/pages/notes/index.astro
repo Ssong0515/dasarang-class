@@ -1,69 +1,58 @@
 ---
-import { getCollection } from "astro:content";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { sessions } from "../../data/schedule";
+import { listNotes } from "../../lib/notes";
 import { withBase } from "../../lib/site";
 
-const noteEntries = await getCollection("classNotes");
+const notes = await listNotes(Astro.locals);
 const sessionMap = new Map(sessions.map((session) => [session.slug, session]));
-const notes = (
-  await Promise.all(
-    noteEntries.map(async (entry) => {
-      const session = sessionMap.get(entry.id);
-      if (!session) {
-        return undefined;
-      }
+const rows = Object.entries(notes)
+  .map(([slug, note]) => {
+    const session = sessionMap.get(slug);
+    if (!session || !note.content.trim()) {
+      return undefined;
+    }
 
-      const rendered = await entry.render();
-
-      return {
-        entry,
-        session,
-        rendered,
-      };
-    }),
-  )
-)
+    return { slug, note, session };
+  })
   .filter(Boolean)
   .sort((left, right) => left!.session.date.localeCompare(right!.session.date)) as Array<{
-    entry: (typeof noteEntries)[number];
+    slug: string;
+    note: (typeof notes)[string];
     session: (typeof sessions)[number];
-    rendered: Awaited<ReturnType<(typeof noteEntries)[number]["render"]>>;
   }>;
 ---
 
 <BaseLayout title="전체 메모">
   <section class="panel">
     <h1>전체 메모</h1>
-    <p>수업별 메모를 한곳에서 모아 봅니다. 각 메모 카드에서 해당 수업 상세 페이지로 바로 이동할 수 있습니다.</p>
+    <p>저장한 수업 메모를 날짜순으로 모아 봅니다. 각 카드에서 해당 수업 상세 페이지로 바로 이동할 수 있습니다.</p>
   </section>
 
-  {notes.length > 0 ? (
+  {rows.length > 0 ? (
     <div class="notes-grid">
-      {notes.map(({ entry, session, rendered }) => (
-        <article class="panel note-card" id={entry.id}>
+      {rows.map(({ slug, note, session }) => (
+        <article class="panel note-card" id={slug}>
           <div class="note-card__head">
             <div>
-              <h2>{entry.data.title}</h2>
+              <h2>{session.label}</h2>
               <p class="note-card__meta">
                 <span>{session.course}</span>
                 <span>{session.date}</span>
                 <span>{session.time}</span>
               </p>
             </div>
-            <a class="note-card__link" href={withBase(`/classes/${session.slug}/`)}>
+            <a class="note-card__link" href={withBase(`/classes/${slug}/`)}>
               수업 상세
             </a>
           </div>
-          <div class="note-card__body">
-            <rendered.Content />
-          </div>
+          <div class="note-card__body">{note.content}</div>
         </article>
       ))}
     </div>
   ) : (
     <section class="panel">
-      <p>아직 작성된 메모가 없습니다.</p>
+      <p>아직 저장된 메모가 없습니다.</p>
     </section>
   )}
 </BaseLayout>
@@ -115,6 +104,7 @@ const notes = (
     border: 1px solid #dcdcdc;
     border-radius: 12px;
     background: #fcfcfc;
+    white-space: pre-wrap;
     line-height: 1.8;
   }
 

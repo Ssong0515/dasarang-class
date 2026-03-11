@@ -1,4 +1,11 @@
 {
   "name": "dasarang-class",
   "compatibility_date": "2026-03-11"
+  // Add this after creating a Cloudflare KV namespace for notes:
+  // "kv_namespaces": [
+  //   {
+  //     "binding": "NOTES",
+  //     "id": "your-kv-namespace-id"
+  //   }
+  // ]
 }

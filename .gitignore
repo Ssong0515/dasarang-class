@@ -7,3 +7,4 @@ Thumbs.db
 .astro/
 .wrangler/
 .dev.vars
+.local/
