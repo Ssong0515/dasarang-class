@@ -1,0 +1,233 @@
+---
+import SlideShell from "../../components/slides/SlideShell.astro";
+
+export const slideMeta = {
+  title: "타이핑 연습",
+  helpLabel: "연습 사이트",
+};
+---
+
+<SlideShell>
+  <div class="typing">
+    <header class="typing__header">
+      <div class="typing__hero">⌨️</div>
+      <h1>타이핑 연습</h1>
+      <p>손가락으로 글자와 숫자를 입력하는 연습을 합니다</p>
+      <span>Typing practice</span>
+      <span>Практика печати</span>
+    </header>
+
+    <div class="typing__panel">
+      <div class="typing__art-card">
+        <img
+          class="typing__art"
+          alt="타이핑 연습 일러스트"
+          src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 720 520'%3E%3Crect width='720' height='520' fill='%23eaf3ff'/%3E%3Crect x='110' y='54' width='500' height='250' rx='26' fill='%23334155'/%3E%3Crect x='138' y='82' width='444' height='194' rx='16' fill='%2393c5fd'/%3E%3Crect x='178' y='116' width='164' height='42' rx='12' fill='%23ffffff' fill-opacity='0.74'/%3E%3Ctext x='200' y='144' font-size='28' font-family='Arial' font-weight='700' fill='%231e293b'%3E타자 연습%3C/text%3E%3Crect x='184' y='188' width='120' height='92' rx='16' fill='%23ffffff' fill-opacity='0.78'/%3E%3Ctext x='224' y='247' font-size='48' font-family='Arial' font-weight='800' fill='%232563eb'%3E가%3C/text%3E%3Crect x='328' y='188' width='120' height='92' rx='16' fill='%23ffffff' fill-opacity='0.78'/%3E%3Ctext x='368' y='247' font-size='48' font-family='Arial' font-weight='800' fill='%232563eb'%3E나%3C/text%3E%3Crect x='472' y='188' width='76' height='92' rx='16' fill='%23ffffff' fill-opacity='0.78'/%3E%3Ctext x='494' y='247' font-size='48' font-family='Arial' font-weight='800' fill='%232563eb'%3E3%3C/text%3E%3Crect x='150' y='346' width='420' height='108' rx='20' fill='%23e5e7eb' stroke='%2394a3b8' stroke-width='4'/%3E%3Cg fill='%23cbd5e1'%3E%3Crect x='178' y='372' width='38' height='18' rx='4'/%3E%3Crect x='222' y='372' width='38' height='18' rx='4'/%3E%3Crect x='266' y='372' width='38' height='18' rx='4'/%3E%3Crect x='310' y='372' width='38' height='18' rx='4'/%3E%3Crect x='354' y='372' width='38' height='18' rx='4'/%3E%3Crect x='398' y='372' width='38' height='18' rx='4'/%3E%3Crect x='442' y='372' width='38' height='18' rx='4'/%3E%3Crect x='486' y='372' width='56' height='18' rx='4'/%3E%3Crect x='178' y='400' width='66' height='18' rx='4'/%3E%3Crect x='250' y='400' width='38' height='18' rx='4'/%3E%3Crect x='294' y='400' width='38' height='18' rx='4'/%3E%3Crect x='338' y='400' width='140' height='18' rx='4'/%3E%3C/g%3E%3Cg fill='%23fde68a'%3E%3Crect x='210' y='438' width='78' height='62' rx='32'/%3E%3Crect x='432' y='438' width='78' height='62' rx='32'/%3E%3C/g%3E%3Cg fill='%23fbbf24'%3E%3Cellipse cx='250' cy='496' rx='54' ry='26'/%3E%3Cellipse cx='472' cy='496' rx='54' ry='26'/%3E%3C/g%3E%3Ccircle cx='628' cy='102' r='54' fill='%23ffffff' fill-opacity='0.9'/%3E%3Ctext x='600' y='116' font-size='40' font-family='Arial' font-weight='800' fill='%2322c55e'%3EABC%3C/text%3E%3C/svg%3E"
+        />
+      </div>
+
+      <div class="typing__info">
+        <div class="typing__steps">
+          <div class="typing__step">
+            <span>1</span>
+            <p>사이트를 열고 화면을 봅니다.</p>
+          </div>
+          <div class="typing__step">
+            <span>2</span>
+            <p>화면에 보이는 글자와 숫자를 손가락으로 입력합니다.</p>
+          </div>
+          <div class="typing__step">
+            <span>3</span>
+            <p>천천히 정확하게 따라 치면서 익힙니다.</p>
+          </div>
+        </div>
+
+        <div class="typing__site">
+          <strong>한컴 타자</strong>
+          <span>tt.hancomtaja.com</span>
+        </div>
+
+        <div class="typing__translation">
+          <span>Open the typing site and type the letters and numbers you see on the screen.</span>
+          <span>Откройте сайт для печати и вводите буквы и цифры, которые видите на экране.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</SlideShell>
+
+<style>
+  .typing {
+    min-height: 100%;
+    padding: 18px 18px 18px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .typing__header {
+    text-align: center;
+    margin-bottom: 12px;
+  }
+
+  .typing__hero {
+    font-size: 38px;
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+
+  .typing__header h1 {
+    margin: 0;
+    font-size: clamp(26px, 3.6vw, 40px);
+    line-height: 1.1;
+  }
+
+  .typing__header p {
+    margin: 6px 0 0;
+    font-size: clamp(15px, 1.5vw, 19px);
+    line-height: 1.3;
+  }
+
+  .typing__header span {
+    display: block;
+    font-size: 12px;
+    line-height: 1.25;
+    opacity: 0.88;
+  }
+
+  .typing__panel {
+    display: grid;
+    grid-template-columns: 1.02fr 0.98fr;
+    gap: 12px;
+    flex: 1;
+  }
+
+  .typing__art-card,
+  .typing__info {
+    overflow: hidden;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .typing__art {
+    width: 100%;
+    height: 100%;
+    display: block;
+    background: #eaf3ff;
+  }
+
+  .typing__info {
+    padding: 12px 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .typing__steps {
+    display: grid;
+    gap: 8px;
+  }
+
+  .typing__step {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 9px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .typing__step span {
+    flex: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fff;
+    color: #111827;
+    font-size: 13px;
+    font-weight: 900;
+  }
+
+  .typing__step p {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.35;
+  }
+
+  .typing__site {
+    padding: 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .typing__site strong {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 18px;
+    line-height: 1.15;
+  }
+
+  .typing__site span {
+    font-size: 14px;
+    line-height: 1.35;
+    opacity: 0.95;
+  }
+
+  .typing__translation {
+    margin-top: auto;
+    display: grid;
+    gap: 4px;
+    font-size: 12px;
+    line-height: 1.25;
+    opacity: 0.82;
+  }
+
+  @media (max-width: 640px) {
+    .typing {
+      padding: 13px 12px 14px;
+    }
+
+    .typing__hero {
+      font-size: 34px;
+    }
+
+    .typing__header h1 {
+      font-size: 24px;
+    }
+
+    .typing__header p {
+      font-size: 13px;
+    }
+
+    .typing__header span {
+      font-size: 11px;
+    }
+
+    .typing__panel {
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+
+    .typing__art-card {
+      min-height: 180px;
+    }
+
+    .typing__step p,
+    .typing__site span {
+      font-size: 13px;
+    }
+
+    .typing__site strong {
+      font-size: 16px;
+    }
+
+    .typing__translation {
+      font-size: 11px;
+    }
+  }
+</style>

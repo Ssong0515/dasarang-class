@@ -1,0 +1,26 @@
+---
+import { getSlidesForSession } from "../../../lib/lesson-materials";
+import { withBase } from "../../../lib/site";
+
+const slug = Astro.params.slug ?? "";
+const material = await getSlidesForSession(slug);
+const firstSlide = material.slides.find((entry) => entry.kind === "component");
+
+if (firstSlide) {
+  return Astro.redirect(withBase(firstSlide.previewPath));
+}
+
+Astro.response.status = 404;
+---
+
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>슬라이드를 찾을 수 없습니다</title>
+  </head>
+  <body>
+    <p>슬라이드를 찾을 수 없습니다.</p>
+  </body>
+</html>

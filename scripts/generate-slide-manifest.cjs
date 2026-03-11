@@ -4,6 +4,7 @@ const path = require("node:path");
 const projectRoot = process.cwd();
 const outputDir = path.join(projectRoot, "src", "generated");
 const outputFile = path.join(outputDir, "slide-manifest.ts");
+const componentSlidesRoot = path.join(projectRoot, "src", "slides");
 const lessonFolderPattern = /^\d{6}_.+/;
 const htmlPattern = /\.html?$/i;
 
@@ -20,6 +21,12 @@ const extractHelpLabel = (html) => {
 
 const framePresetStyle = `
 <style data-slide-frame-preset>
+  :root {
+    --slide-shell-padding: clamp(16px, 2.6vw, 32px);
+    --slide-frame-width: min(1100px, calc(100vw - (var(--slide-shell-padding) * 2)));
+    --slide-frame-height: calc(100vh - (var(--slide-shell-padding) * 2));
+  }
+
   html,
   body {
     width: 100% !important;
@@ -30,12 +37,108 @@ const framePresetStyle = `
   body {
     margin: 0 !important;
     overscroll-behavior: none !important;
+    display: grid !important;
+    place-items: center !important;
   }
 
   *,
   *::before,
   *::after {
     box-sizing: border-box !important;
+  }
+
+  body > .slide,
+  .slide {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 100% !important;
+    padding: var(--slide-shell-padding) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  .slide > .frame,
+  .slide > .overlay + .frame,
+  .slide .frame:first-of-type {
+    width: var(--slide-frame-width) !important;
+    max-width: var(--slide-frame-width) !important;
+    margin: 0 auto !important;
+  }
+
+  .slide .frame {
+    position: relative !important;
+  }
+
+  .slide .grid,
+  .slide .panel {
+    width: 100% !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+
+  @media (max-width: 640px) {
+    :root {
+      --slide-shell-padding: 12px;
+      --slide-frame-width: calc(100vw - 24px);
+    }
+  }
+
+  @media (min-width: 1200px) and (min-height: 720px) {
+    .slide .hero-icon,
+    .slide .info-icon {
+      font-size: 44px !important;
+      line-height: 1 !important;
+    }
+
+    .slide .title {
+      font-size: clamp(36px, 4vw, 54px) !important;
+      line-height: 1.12 !important;
+    }
+
+    .slide .subtitle {
+      font-size: clamp(21px, 2vw, 28px) !important;
+      line-height: 1.35 !important;
+    }
+
+    .slide .subtitle-small,
+    .slide .card-trans,
+    .slide .trans,
+    .slide .info-trans {
+      font-size: 15px !important;
+      line-height: 1.4 !important;
+    }
+
+    .slide .card-title,
+    .slide .name,
+    .slide .site-title,
+    .slide .mini-title,
+    .slide .info-title {
+      font-size: 25px !important;
+      line-height: 1.2 !important;
+    }
+
+    .slide .card-text,
+    .slide .desc,
+    .slide .step-text,
+    .slide .site-url,
+    .slide .mini-text,
+    .slide .info-text {
+      font-size: 18px !important;
+      line-height: 1.45 !important;
+    }
+
+    .slide .chip-btn {
+      font-size: 16px !important;
+      padding: 10px 14px !important;
+    }
+
+    .slide .step-no,
+    .slide .card-step {
+      width: 30px !important;
+      height: 30px !important;
+      font-size: 15px !important;
+    }
   }
 </style>
 `.trim();
@@ -75,6 +178,19 @@ const getLessonFolders = () =>
     .map((entry) => entry.name)
     .sort();
 
+const getComponentSlideKeys = () => {
+  if (!fs.existsSync(componentSlidesRoot)) {
+    return new Set();
+  }
+
+  return new Set(
+    fs
+      .readdirSync(componentSlidesRoot, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name),
+  );
+};
+
 const getSlidesForFolder = (lessonFolder) => {
   const slidesDir = path.join(projectRoot, lessonFolder, "slides");
 
@@ -110,10 +226,16 @@ const getSlidesForFolder = (lessonFolder) => {
 };
 
 const manifest = {};
+const componentSlideKeys = getComponentSlideKeys();
 
 for (const lessonFolder of getLessonFolders()) {
-  const { slidesDir, slides } = getSlidesForFolder(lessonFolder);
   const dateKey = lessonFolder.slice(0, 6);
+
+  if (componentSlideKeys.has(lessonFolder) || componentSlideKeys.has(dateKey)) {
+    continue;
+  }
+
+  const { slidesDir, slides } = getSlidesForFolder(lessonFolder);
   const entry = {
     lessonFolder,
     slidesDir: slidesDir ? slidesDir.replaceAll("\\", "/") : null,

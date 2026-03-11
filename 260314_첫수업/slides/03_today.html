@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>컴퓨터 수업 - 3페이지</title>
   <style>
+    :root{
+      --frame-width:min(980px,100%);
+      --frame-height:min(620px,calc(100vh - 72px));
+    }
     *{box-sizing:border-box}
     html,body{height:100%}
     body{
@@ -24,7 +28,7 @@
       background-position:center;
       background-repeat:no-repeat;
       overflow:hidden;
-      padding:56px 32px;
+      padding:36px 32px;
       display:flex;
       align-items:center;
       justify-content:center;
@@ -37,14 +41,18 @@
     .frame{
       position:relative;
       z-index:2;
-      width:min(1020px,100%);
+      width:var(--frame-width);
+      min-height:560px;
       background:rgba(15,23,42,.54);
       border:1px solid rgba(255,255,255,.14);
       border-radius:28px;
       backdrop-filter:blur(12px);
       box-shadow:0 24px 60px rgba(0,0,0,.28);
-      padding:18px 20px 20px;
+      padding:18px 18px 18px;
       text-align:center;
+      display:flex;
+      flex-direction:column;
+      overflow:visible;
     }
     .hero-icon{
       font-size:42px;
@@ -67,7 +75,7 @@
       margin:0;
     }
     .subtitle-small{
-      font-size:12px;
+      font-size:13px;
       line-height:1.3;
       opacity:.88;
       margin-top:3px;
@@ -75,9 +83,10 @@
     .grid{
       display:grid;
       grid-template-columns:repeat(3,minmax(0,1fr));
-      gap:14px;
-      width:min(940px,100%);
+      gap:12px;
+      width:100%;
       margin:0 auto;
+      flex:1;
     }
     .card{
       background:rgba(255,255,255,.08);
@@ -91,33 +100,33 @@
     }
     .card img{
       width:100%;
-      height:138px;
+      height:108px;
       object-fit:cover;
       display:block;
     }
     .card-body{
-      padding:11px 13px 13px;
+      padding:10px 11px 11px;
       display:flex;
       flex-direction:column;
       gap:5px;
       flex:1;
     }
     .card-step{
-      width:28px;
-      height:28px;
+      width:24px;
+      height:24px;
       border-radius:50%;
       background:#fff;
       color:#111827;
       display:flex;
       align-items:center;
       justify-content:center;
-      font-size:13px;
+      font-size:12px;
       font-weight:900;
       margin-bottom:2px;
     }
     .card-title{
       margin:0;
-      font-size:18px;
+      font-size:19px;
       font-weight:800;
       line-height:1.15;
     }
@@ -132,8 +141,8 @@
       display:flex;
       flex-direction:column;
       gap:5px;
-      font-size:10px;
-      line-height:1.25;
+      font-size:12px;
+      line-height:1.35;
       opacity:.8;
       padding-top:6px;
     }
@@ -146,28 +155,29 @@
       border-top:1px solid rgba(255,255,255,.12);
     }
     @media (max-width:900px){
-      .slide{padding:40px 18px;}
-      .frame{padding:16px 16px 18px;}
+      .slide{padding:28px 18px;}
+      .frame{padding:16px 16px 16px;}
       .grid{gap:10px;}
-      .card img{height:120px;}
-      .card-title{font-size:16px;}
-      .card-text{font-size:13px;}
+      .card img{height:102px;}
+      .card-title{font-size:17px;}
+      .card-text{font-size:14px;}
+      .card-trans{font-size:11px;}
     }
     @media (max-width:640px){
       .slide{padding:28px 12px;}
-      .frame{padding:14px 14px 16px;border-radius:20px;}
+      .frame{min-height:0; padding:14px 14px 16px;border-radius:20px;}
       .hero-icon{font-size:36px;}
       .title{font-size:26px;}
       .subtitle{font-size:14px;}
-      .subtitle-small{font-size:11px;}
+      .subtitle-small{font-size:12px;}
       .subtitle-wrap{margin-bottom:10px;}
       .grid{grid-template-columns:1fr;gap:10px;}
       .card img{height:110px;}
       .card-body{padding:11px 11px 12px;}
       .card-step{width:26px;height:26px;font-size:12px;}
-      .card-title{font-size:16px;}
-      .card-text{font-size:12px;}
-      .card-trans{font-size:10px;}
+      .card-title{font-size:17px;}
+      .card-text{font-size:13px;}
+      .card-trans{font-size:11px;}
     }
   </style>
 </head>
