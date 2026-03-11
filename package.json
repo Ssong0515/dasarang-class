@@ -3,9 +3,11 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
-    "dev": "astro dev --host 0.0.0.0 --port 3000",
+    "predev": "node scripts/generate-slide-manifest.cjs",
+    "dev": "astro dev --host 0.0.0.0 --port 8000",
+    "prebuild": "node scripts/generate-slide-manifest.cjs",
     "build": "astro build",
-    "preview": "astro preview --host 0.0.0.0 --port 4173"
+    "preview": "astro preview --host 0.0.0.0 --port 8001"
   },
   "devDependencies": {
     "@astrojs/cloudflare": "^12.6.13",
