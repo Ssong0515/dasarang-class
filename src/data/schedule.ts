@@ -69,7 +69,7 @@ saturdayDates.forEach((date, index) => {
     time: "토요일 13:00-14:50",
     month: monthLabel(date),
     status: isFirstLesson ? "첫 수업 연결" : "진행 예정",
-    summary: "토요일 컴퓨터 A반 수업 자료 자리입니다.",
+    summary: "토요일 컴퓨터 A반 수업 자료와 메모를 정리하는 페이지입니다.",
     isFirstLesson,
   });
 
@@ -81,7 +81,7 @@ saturdayDates.forEach((date, index) => {
     time: "토요일 15:00-16:50",
     month: monthLabel(date),
     status: "진행 예정",
-    summary: "토요일 컴퓨터 B반 수업 자료 자리입니다.",
+    summary: "토요일 컴퓨터 B반 수업 자료와 메모를 정리하는 페이지입니다.",
     isFirstLesson: false,
   });
 });
@@ -93,24 +93,24 @@ julyExtraDates.forEach((date, index) => {
   sessions.push({
     slug: `${ymd}_computer1_${order}`,
     label: `${ymd}_컴퓨터1_${order}`,
-    course: "컴퓨터1",
+    course: "컴퓨터 1반",
     date,
-    time: "화/목 오전 10:00-11:50",
+    time: "화요일 오전 10:00-11:50",
     month: monthLabel(date),
     status: "진행 예정",
-    summary: "7월 오전 컴퓨터1 수업 자료 자리입니다.",
+    summary: "7월 화요일 오전 컴퓨터 1반 수업 자료와 메모를 정리하는 페이지입니다.",
     isFirstLesson: false,
   });
 
   sessions.push({
     slug: `${ymd}_computer2_${order}`,
     label: `${ymd}_컴퓨터2_${order}`,
-    course: "컴퓨터2",
+    course: "컴퓨터 2반",
     date,
-    time: "화/목 오후 17:00-18:30",
+    time: "목요일 오후 17:00-18:30",
     month: monthLabel(date),
     status: "진행 예정",
-    summary: "7월 방과후 컴퓨터2 수업 자료 자리입니다.",
+    summary: "7월 방과 후 컴퓨터 2반 수업 자료와 메모를 정리하는 페이지입니다.",
     isFirstLesson: false,
   });
 });

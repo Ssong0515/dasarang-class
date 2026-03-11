@@ -5,3 +5,5 @@ dist/
 Thumbs.db
 .idea/
 .astro/
+.wrangler/
+.dev.vars

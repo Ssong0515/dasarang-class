@@ -1,9 +1,17 @@
 import { defineConfig } from "astro/config";
+import cloudflare from "@astrojs/cloudflare";
+
+const site = process.env.SITE_URL ?? "https://dasarang-class.pages.dev";
+const base = process.env.SITE_BASE_PATH ?? "/";
 
 export default defineConfig({
-  site: "https://ssong0515.github.io",
-  base: "/dasarang-class",
-  output: "static",
+  site,
+  base,
+  output: "server",
   trailingSlash: "always",
+  adapter: cloudflare({
+    platformProxy: {
+      enabled: true,
+    },
+  }),
 });
-

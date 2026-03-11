@@ -1,68 +1,45 @@
 # dasarang-class
 
-수업 자료를 날짜별 폴더로 관리하는 프로젝트입니다.
+다사랑 수업 허브를 Astro로 운영하는 프로젝트입니다. Cloudflare Pages 배포를 기준으로 전체 사이트 비밀번호 잠금, 수업별 메모, 수업 슬라이드 뷰어를 함께 관리합니다.
 
-## 수업 대상
+## 주요 구조
 
-- 주 대상: 14세~24세 외국인 학생
-- 수업 주제: 컴퓨터 기초, 실생활 활용, AI를 활용한 다양한 결과물 만들기
+- 전체 사이트는 서버측 비밀번호 확인 후에만 열립니다.
+- 수업 일정은 `src/data/schedule.ts`에서 관리합니다.
+- 수업별 메모는 `src/content/classNotes` 아래 Markdown 파일로 관리합니다.
+- 수업 슬라이드는 각 수업 폴더의 `slides/*.html`을 읽어서 상세 페이지에서 합쳐 보여줍니다.
+- Git 기반 CMS는 `Pages CMS`를 기준으로 `/.pages.yml`을 포함합니다.
 
-## 자료 제작 원칙
+## 로컬 실행
 
-- 자료는 학생 개인용 문서보다 앞의 큰 화면에 띄워 함께 보는 수업 자료를 기준으로 만듭니다.
-- 설명은 길게 쓰지 않고, 한 화면에서 바로 이해할 수 있게 짧고 명확하게 구성합니다.
-- 텍스트보다 이미지, 아이콘, 예시 화면을 우선 사용합니다.
-- 외국인 학생 대상이므로 흥미를 끌 수 있는 시각 자료를 적극적으로 넣습니다.
+1. `npm install`
+2. `.dev.vars.example`을 복사해서 `.dev.vars`를 만듭니다.
+3. `.dev.vars`에 아래 값을 넣습니다.
+4. `npm run dev`
 
-## 번역 원칙
-
-- 중요한 단어, 핵심 문장, 반드시 이해하거나 외워야 하는 표현은 함께 번역합니다.
-- 기본 표기 순서는 `한국어 / English / Русский`로 통일합니다.
-- 일반 설명 전체를 모두 번역하기보다, 핵심 표현과 수업 진행에 꼭 필요한 문장 위주로 번역합니다.
-
-## 폴더 이름 규칙
-
-- 형식: `YYMMDD_수업이름`
-- 예시: `260314_첫수업`
-
-## 작업 방식
-
-- 수업 1회차마다 루트에 새 폴더를 만듭니다.
-- 각 수업 폴더 안에서 자료, 이미지, 메모를 함께 관리합니다.
-- 파일 이름은 가능하면 용도가 바로 보이게 작성합니다.
-- 각 수업 자료는 큰 화면 발표용 기준으로 제작합니다.
-- 핵심 단어와 문장은 한국어, 영어, 러시아어를 함께 넣습니다.
-- 가능하면 텍스트 설명보다 이미지 중심으로 구성합니다.
-
-## 배포 방식
-
-- 이 프로젝트는 정적 사이트로 운영합니다.
-- GitHub Pages로 배포합니다.
-- Astro 기반 정적 사이트로 관리합니다.
-- 메인 페이지와 강의 페이지는 `src/pages/`에서 관리합니다.
-- GitHub Actions가 `main` 브랜치 푸시 시 `npm run build` 후 `dist/`를 자동 배포합니다.
-- 한글 폴더 이름과 정적 파일 구조를 유지하기 위해 `.nojekyll` 파일을 포함합니다.
-
-## 권장 수업 폴더 구조
-
-```text
-YYMMDD_수업이름/
-  README.md
-  slides/
-    01_intro.html
-    02_topic.html
-  assets/
-  notes/
+```env
+SITE_PASSWORD=your-password-here
+SITE_URL=https://dasarang-class.pages.dev
+SITE_BASE_PATH=/
 ```
 
-## 슬라이드 HTML 규칙
+## Cloudflare Pages 배포
 
-- 외부에서 만든 각 슬라이드는 `slides/` 폴더에 `01_이름.html`, `02_이름.html` 형식으로 넣습니다.
-- 각 파일은 완전한 HTML 문서여도 됩니다. 사이트에서는 각 문서의 `<title>`, `<style>`, `<body>`를 추출해 한 장의 슬라이드로 합칩니다.
-- 슬라이드 순서는 파일명 숫자 순서를 따릅니다.
-- 스크립트는 병합 과정에서 제거되므로, 수업 자료는 정적인 HTML/CSS 중심으로 만드는 것을 기준으로 합니다.
-- 기존 `materials/index.html` 단일 파일도 당분간은 호환되지만, 앞으로는 `slides/` 방식이 기본입니다.
+1. GitHub 저장소를 Cloudflare Pages에 연결합니다.
+2. Build command는 `npm run build`
+3. Output directory는 `dist`
+4. Cloudflare 환경 변수 또는 시크릿에 아래 값을 넣습니다.
 
-## 예시
+```env
+SITE_PASSWORD=your-password-here
+SITE_URL=https://your-project.pages.dev
+SITE_BASE_PATH=/
+```
 
-- `260314_첫수업`
+`SITE_PASSWORD`는 저장소에 커밋하지 말고 Cloudflare Secret으로 넣어야 합니다.
+
+## 메모 수정
+
+- 파일 직접 수정: `src/content/classNotes`
+- CMS로 수정: [Pages CMS](https://pagescms.org/)에서 저장소 연결
+- 파일명은 수업 slug와 동일하게 유지합니다.

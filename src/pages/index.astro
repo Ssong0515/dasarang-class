@@ -1,23 +1,30 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
+import { withBase } from "../lib/site";
+
+export const prerender = false;
 ---
 
-<BaseLayout title="다사랑 강의 허브">
+<BaseLayout title="다사랑 수업 허브">
   <section class="panel">
-    <h1>다사랑 강의 허브</h1>
-    <p>수업 자료와 강의 항목을 컴포넌트와 라우팅 구조로 관리하는 메인 페이지입니다. 왼쪽 사이드바는 모든 페이지에서 동일하게 유지됩니다.</p>
+    <h1>다사랑 수업 허브</h1>
+    <p>수업 자료, 일정, 메모를 한 곳에서 확인하는 메인 페이지입니다. 수업 상세 페이지에서는 슬라이드 뷰어와 메모를 함께 볼 수 있습니다.</p>
   </section>
 
   <section class="panel">
     <h2>빠른 이동</h2>
     <div class="list">
-      <a class="item" href={`${import.meta.env.BASE_URL}classes/260314_computer-a_01/`}>
+      <a class="item" href={withBase("/classes/260314_computer-a_01/")}>
         <strong>3월 14일 A반 첫 수업</strong>
-        <span>날짜별 슬라이드 뷰어가 연결된 수업 페이지</span>
+        <span>슬라이드 뷰어와 수업 메모가 연결된 상세 페이지입니다.</span>
       </a>
-      <a class="item" href={`${import.meta.env.BASE_URL}classes/`}>
+      <a class="item" href={withBase("/classes/")}>
         <strong>2026년 1학기 강의 목록</strong>
-        <span>시간표 기준으로 만든 전체 강의 항목</span>
+        <span>월별, 반별로 정리된 전체 수업 목록을 확인합니다.</span>
+      </a>
+      <a class="item" href={withBase("/260314_%EC%B2%AB%EC%88%98%EC%97%85/materials/")}>
+        <strong>첫 수업 자료 페이지</strong>
+        <span>학생에게 바로 보여줄 첫 수업 자료 페이지로 이동합니다.</span>
       </a>
     </div>
   </section>

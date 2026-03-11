@@ -1,12 +1,13 @@
 ---
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { monthGroups } from "../../data/schedule";
+import { withBase } from "../../lib/site";
 ---
 
 <BaseLayout title="2026년 1학기 강의 목록">
   <section class="panel">
     <h1>2026년 1학기 강의 목록</h1>
-    <p>강의 항목은 시간표 기준으로 자동 생성합니다. 월별로 보고, 그 아래에서 반이나 과정 단위로 정리해서 찾을 수 있습니다.</p>
+    <p>월별로 수업을 보고, 각 수업 상세 페이지에서 자료와 메모를 함께 관리할 수 있습니다.</p>
   </section>
 
   {monthGroups.map(({ month, courses }) => (
@@ -18,7 +19,7 @@ import { monthGroups } from "../../data/schedule";
             <h3>{course}</h3>
             <div class="rows">
               {sessions.map((session) => (
-                <a class="row" href={`${import.meta.env.BASE_URL}classes/${session.slug}/`}>
+                <a class="row" href={withBase(`/classes/${session.slug}/`)}>
                   <strong>{session.label}</strong>
                   <span>{session.date}</span>
                   <span>{session.time}</span>

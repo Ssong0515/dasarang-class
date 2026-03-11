@@ -1,9 +1,9 @@
 ---
 import { monthGroups, sessions } from "../data/schedule";
 import { getSlidesForSession } from "../lib/lesson-materials";
+import { withBase } from "../lib/site";
 
 const currentPath = Astro.url.pathname;
-const base = import.meta.env.BASE_URL;
 const availableMaterials = sessions.filter((session) => getSlidesForSession(session.slug).slides.length > 0);
 
 const isActive = (path: string) => currentPath === path;
@@ -24,14 +24,14 @@ const getPart = (type: Intl.DateTimeFormatPartTypes) =>
   updatedParts.find((part) => part.type === type)?.value ?? "";
 
 const updatedDateLine = `${getPart("year")}년 ${getPart("month")}월 ${getPart("day")}일 (${getPart("weekday")})`;
-const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart("minute")} : ${getPart("second")}`;
+const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")}:${getPart("minute")}:${getPart("second")}`;
 ---
 
 <aside class="sidebar" id="shared-sidebar">
   <div class="sidebar__inner">
     <div class="sidebar__top">
-      <a class="sidebar__brand" href={base} aria-label="홈으로 이동">
-        <strong>다사랑</strong>
+      <a class="sidebar__brand" href={withBase("/")} aria-label="홈으로 이동">
+        <strong>다사랑 교실</strong>
         <span>{updatedDateLine}</span>
         <span>{updatedTimeLine}</span>
       </a>
@@ -43,48 +43,58 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
         aria-label="사이드바 닫기"
         title="사이드바 닫기"
       >
-        ✕
+        {"<"}
       </button>
     </div>
 
-    <details class="sidebar__group" open={isActive(base)}>
+    <details class="sidebar__group" open={isActive(withBase("/"))}>
       <summary class="sidebar__summary">
         <span class="sidebar__label-wrap">
-          <span class="sidebar__icon sidebar__icon--overview">⌂</span>
+          <span class="sidebar__icon sidebar__icon--overview">홈</span>
           <span class="sidebar__text">개요</span>
         </span>
         <span class="sidebar__arrow" aria-hidden="true"></span>
       </summary>
       <div class="sidebar__items">
-        <a class:list={["sidebar__link", isActive(base) && "is-active"]} href={base}>
+        <a class:list={["sidebar__link", isActive(withBase("/")) && "is-active"]} href={withBase("/")}>
           <span class="sidebar__text">메인 허브</span>
-        </a>
-        <a class="sidebar__link" href={`${base}README.md`}>
-          <span class="sidebar__text">프로젝트 기준</span>
         </a>
       </div>
     </details>
 
     <details
       class="sidebar__group"
-      open={availableMaterials.some((session) => startsWith(`${base}classes/${session.slug}/`))}
+      open={
+        startsWith(withBase("/260314_%EC%B2%AB%EC%88%98%EC%97%85/materials/")) ||
+        availableMaterials.some((session) => startsWith(withBase(`/classes/${session.slug}/`)))
+      }
     >
       <summary class="sidebar__summary">
         <span class="sidebar__label-wrap">
-          <span class="sidebar__icon sidebar__icon--materials">🖥</span>
-          <span class="sidebar__text">수업 자료</span>
+          <span class="sidebar__icon sidebar__icon--materials">수업</span>
+          <span class="sidebar__text">대표 자료</span>
         </span>
         <span class="sidebar__arrow" aria-hidden="true"></span>
       </summary>
       <div class="sidebar__items">
+        <a
+          class:list={[
+            "sidebar__link",
+            isActive(withBase("/260314_%EC%B2%AB%EC%88%98%EC%97%85/materials/")) && "is-active",
+          ]}
+          href={withBase("/260314_%EC%B2%AB%EC%88%98%EC%97%85/materials/")}
+        >
+          <span class="sidebar__text">첫 수업 자료 페이지</span>
+        </a>
+
         {availableMaterials.length > 0 ? (
           availableMaterials.map((session) => (
             <a
               class:list={[
                 "sidebar__link",
-                isActive(`${base}classes/${session.slug}/`) && "is-active",
+                isActive(withBase(`/classes/${session.slug}/`)) && "is-active",
               ]}
-              href={`${base}classes/${session.slug}/`}
+              href={withBase(`/classes/${session.slug}/`)}
             >
               <span class="sidebar__text">{session.label}</span>
             </a>
@@ -97,22 +107,25 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
       </div>
     </details>
 
-    <details class="sidebar__group" open={startsWith(`${base}classes/`)}>
+    <details class="sidebar__group" open={startsWith(withBase("/classes/"))}>
       <summary class="sidebar__summary">
         <span class="sidebar__label-wrap">
-          <span class="sidebar__icon sidebar__icon--classes">🗂</span>
+          <span class="sidebar__icon sidebar__icon--classes">반</span>
           <span class="sidebar__text">강의 목록</span>
         </span>
         <span class="sidebar__arrow" aria-hidden="true"></span>
       </summary>
       <div class="sidebar__items">
-        <a class:list={["sidebar__link", isActive(`${base}classes/`) && "is-active"]} href={`${base}classes/`}>
+        <a
+          class:list={["sidebar__link", isActive(withBase("/classes/")) && "is-active"]}
+          href={withBase("/classes/")}
+        >
           <span class="sidebar__text">전체 강의 목록</span>
         </a>
 
         {monthGroups.map(({ month, courses }) => {
           const monthOpen = courses.some(({ sessions }) =>
-            sessions.some((session) => currentPath === `${base}classes/${session.slug}/`),
+            sessions.some((session) => currentPath === withBase(`/classes/${session.slug}/`)),
           );
 
           return (
@@ -126,7 +139,7 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
               <div class="sidebar__subitems">
                 {courses.map(({ course, sessions }) => {
                   const courseOpen = sessions.some(
-                    (session) => currentPath === `${base}classes/${session.slug}/`,
+                    (session) => currentPath === withBase(`/classes/${session.slug}/`),
                   );
 
                   return (
@@ -143,9 +156,9 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
                             class:list={[
                               "sidebar__link",
                               "is-child",
-                              currentPath === `${base}classes/${session.slug}/` && "is-active",
+                              currentPath === withBase(`/classes/${session.slug}/`) && "is-active",
                             ]}
-                            href={`${base}classes/${session.slug}/`}
+                            href={withBase(`/classes/${session.slug}/`)}
                           >
                             <span class="sidebar__text">{session.label}</span>
                           </a>
@@ -299,11 +312,6 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
     text-decoration: none;
     font-size: 14px;
     font-weight: 700;
-    transition:
-      background 0.2s ease,
-      color 0.2s ease,
-      padding 0.24s ease,
-      margin 0.24s ease;
   }
 
   .sidebar__link.is-empty {
@@ -312,35 +320,9 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
   }
 
   .sidebar__icon {
-    flex: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 18px;
+    min-width: 18px;
     text-align: center;
-    font-size: 15px;
-    line-height: 1;
-    transition:
-      width 0.24s ease,
-      height 0.24s ease,
-      font-size 0.24s ease,
-      background 0.24s ease,
-      color 0.24s ease,
-      border-radius 0.24s ease,
-      box-shadow 0.24s ease;
-  }
-
-  .sidebar__icon--overview {
-    color: #7a4d00;
-  }
-
-  .sidebar__icon--materials {
-    color: #0d5f6d;
-  }
-
-  .sidebar__icon--classes {
-    color: #3758a5;
+    font-size: 12px;
   }
 
   .sidebar__text {
@@ -375,75 +357,12 @@ const updatedTimeLine = `${getPart("dayPeriod")} ${getPart("hour")} : ${getPart(
     font-weight: 600;
   }
 
-  :global(body.sidebar-collapsed) .sidebar__inner {
-    padding-inline: 8px;
+  @media (max-width: 920px) {
+    .sidebar {
+      position: static;
+      width: auto;
+      border-right: 0;
+      border-bottom: 1px solid #d2d2d2;
+    }
   }
-
-  :global(body.sidebar-collapsed) .sidebar__top {
-    flex-direction: column;
-    align-items: center;
-    padding-inline: 0;
-  }
-
-  :global(body.sidebar-collapsed) .sidebar__brand strong,
-  :global(body.sidebar-collapsed) .sidebar__brand span,
-  :global(body.sidebar-collapsed) .sidebar__text,
-  :global(body.sidebar-collapsed) .sidebar__arrow,
-  :global(body.sidebar-collapsed) .sidebar__subarrow {
-    display: none;
-  }
-
-  :global(body.sidebar-collapsed) .sidebar__collapse {
-    width: 40px;
-    height: 40px;
-  }
-
-  :global(body.sidebar-collapsed) .sidebar__summary,
-  :global(body.sidebar-collapsed) .sidebar__subsummary {
-    padding: 12px 0;
-    justify-content: center;
-  }
-
-  :global(body.sidebar-collapsed) .sidebar__items,
-  :global(body.sidebar-collapsed) .sidebar__subitems {
-    display: block;
-    padding-bottom: 6px;
-  }
-
-  :global(body.sidebar-collapsed) .sidebar__link {
-    justify-content: center;
-    margin: 0 0 8px;
-    padding: 12px;
-    border-radius: 12px;
-  }
-
-  :global(body.sidebar-collapsed) .sidebar__summary > .sidebar__label-wrap > .sidebar__icon {
-    width: 30px;
-    height: 30px;
-    border-radius: 10px;
-    font-size: 15px;
-    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.04);
-  }
-
-  :global(body.sidebar-collapsed) .sidebar__icon--overview {
-    background: #f5dfbf;
-    color: #8f5a00;
-  }
-
-  :global(body.sidebar-collapsed) .sidebar__icon--materials {
-    background: #cfeef2;
-    color: #0b6978;
-  }
-
-  :global(body.sidebar-collapsed) .sidebar__icon--classes {
-    background: #d9e4ff;
-    color: #3356b4;
-  }
-
-  :global(body.sidebar-collapsed) .sidebar__link.is-month,
-  :global(body.sidebar-collapsed) .sidebar__link.is-course,
-  :global(body.sidebar-collapsed) .sidebar__link.is-child {
-    margin-left: 0;
-  }
-
 </style>
