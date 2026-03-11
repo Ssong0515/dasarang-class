@@ -1,23 +1,212 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>오늘 할 것</title>
-<style>
-body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#0f172a;color:white}
-.page{min-height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:60px;text-align:center}
-h1{font-size:56px;margin-bottom:20px}
-p{font-size:28px;max-width:900px}
-.page-no{position:fixed;top:20px;left:20px;background:rgba(255,255,255,0.15);padding:10px 16px;border-radius:10px;font-size:18px}
-.help{position:fixed;top:20px;right:20px;background:#2563eb;padding:12px 18px;border-radius:12px;font-weight:bold}
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>컴퓨터 수업 - 3페이지</title>
+  <style>
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family:Arial,Helvetica,sans-serif;
+      background:#0f172a;
+      color:#fff;
+      overflow:hidden;
+    }
+    .slide{
+      width:100vw;
+      height:100svh;
+      min-height:100vh;
+      position:relative;
+      background-image:url('https://images.unsplash.com/photo-1496171367470-9ed9a91ea931?auto=format&fit=crop&w=1800&q=80');
+      background-size:cover;
+      background-position:center;
+      background-repeat:no-repeat;
+      overflow:hidden;
+      padding:16px 40px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .overlay{
+      position:absolute;
+      inset:0;
+      background:linear-gradient(180deg,rgba(15,23,42,.48),rgba(15,23,42,.84));
+    }
+    .frame{
+      position:relative;
+      z-index:2;
+      width:min(1080px,100%);
+      background:rgba(15,23,42,.56);
+      border:1px solid rgba(255,255,255,.14);
+      border-radius:28px;
+      backdrop-filter:blur(12px);
+      box-shadow:0 24px 60px rgba(0,0,0,.28);
+      padding:18px 24px;
+    }
+    .header{
+      text-align:center;
+      margin-bottom:12px;
+    }
+    .hero-icon{
+      font-size:42px;
+      line-height:1;
+      margin-bottom:6px;
+    }
+    .title{
+      margin:0;
+      font-size:clamp(28px,3.8vw,44px);
+      font-weight:800;
+      line-height:1.1;
+    }
+    .subtitle-wrap{
+      margin-top:4px;
+    }
+    .subtitle{
+      font-size:clamp(16px,1.6vw,20px);
+      line-height:1.3;
+      margin:0;
+    }
+    .subtitle-small{
+      font-size:12px;
+      line-height:1.25;
+      opacity:.88;
+      margin-top:2px;
+    }
+    .grid{
+      display:grid;
+      grid-template-columns:repeat(3,minmax(0,1fr));
+      gap:14px;
+      align-items:stretch;
+      padding:0 4px;
+    }
+    .card{
+      background:rgba(255,255,255,.08);
+      border:1px solid rgba(255,255,255,.14);
+      border-radius:22px;
+      overflow:hidden;
+      display:flex;
+      flex-direction:column;
+      min-width:0;
+    }
+    .card img{
+      width:100%;
+      height:150px;
+      object-fit:cover;
+      display:block;
+    }
+    .card-body{
+      padding:12px 14px 14px;
+      display:flex;
+      flex-direction:column;
+      gap:5px;
+      flex:1;
+    }
+    .card-step{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      width:30px;
+      height:30px;
+      border-radius:50%;
+      background:#fff;
+      color:#111827;
+      font-size:14px;
+      font-weight:900;
+      margin-bottom:2px;
+    }
+    .card-title{
+      margin:0;
+      font-size:20px;
+      font-weight:800;
+      line-height:1.15;
+    }
+    .card-text{
+      margin:0;
+      font-size:14px;
+      line-height:1.3;
+      opacity:.98;
+    }
+    .trans{
+      margin-top:auto;
+      font-size:11px;
+      line-height:1.25;
+      opacity:.82;
+    }
+    @media (max-width:900px){
+      .slide{padding:14px 26px;}
+      .frame{padding:16px 22px;}
+      .header{margin-bottom:12px;}
+      .grid{gap:12px;}
+      .card img{height:132px;}
+      .card-title{font-size:18px;}
+      .card-text{font-size:13px;}
+    }
+    @media (max-width:640px){
+      .slide{padding:14px;}
+      .frame{padding:16px;border-radius:20px;}
+      .grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;}
+      .card img{height:90px;}
+      .hero-icon{font-size:42px;margin-bottom:8px;}
+      .title{font-size:28px;}
+      .subtitle{font-size:15px;}
+      .subtitle-small{font-size:11px;}
+      .card-body{padding:10px 10px 12px;}
+      .card-step{width:28px;height:28px;font-size:13px;}
+      .card-title{font-size:15px;}
+      .card-text{font-size:12px;line-height:1.3;}
+      .trans{font-size:10px;line-height:1.25;}
+    }
+  </style>
 </head>
 <body>
-<div class="page-no">3 / 14</div>
-<div class="help">🖐 모르면 손!</div>
-<div class="page">
-<h1>오늘 할 것</h1><p>컴퓨터 이름 배우기 · 타이핑 연습</p>
-</div>
+  <section class="slide">
+    <div class="overlay"></div>
+
+    <div class="frame">
+      <div class="header">
+        <div class="hero-icon">📚</div>
+        <h1 class="title">오늘 할 것</h1>
+        <div class="subtitle-wrap">
+          <p class="subtitle">오늘 수업에서 배우는 핵심 내용입니다</p>
+          <div class="subtitle-small">What we do today</div>
+          <div class="subtitle-small">Что будем делать сегодня</div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?auto=format&fit=crop&w=1200&q=80" alt="컴퓨터 장치 배우기" />
+          <div class="card-body">
+            <div class="card-step">1</div>
+            <p class="card-title">이름 알기</p>
+            <p class="card-text">모니터, 키보드, 마우스 이름을 정확히 배웁니다</p>
+            <div class="trans">Learn device names / Названия устройств</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1515879218367-8466d910aaa4?auto=format&fit=crop&w=1200&q=80" alt="타이핑 연습" />
+          <div class="card-body">
+            <div class="card-step">2</div>
+            <p class="card-title">타이핑</p>
+            <p class="card-text">손가락으로 글자와 숫자를 입력하는 연습을 합니다</p>
+            <div class="trans">Typing practice / Печатание</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1516321165247-4aa89a48be28?auto=format&fit=crop&w=1200&q=80" alt="직접 연습" />
+          <div class="card-body">
+            <div class="card-step">3</div>
+            <p class="card-title">직접 연습</p>
+            <p class="card-text">사이트에서 직접 눌러 보고 따라 하면서 익힙니다</p>
+            <div class="trans">Practice on website / Практика на сайте</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
 </body>
 </html>

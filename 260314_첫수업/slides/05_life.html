@@ -1,23 +1,300 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>생활 도구</title>
-<style>
-body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#0f172a;color:white}
-.page{min-height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:60px;text-align:center}
-h1{font-size:56px;margin-bottom:20px}
-p{font-size:28px;max-width:900px}
-.page-no{position:fixed;top:20px;left:20px;background:rgba(255,255,255,0.15);padding:10px 16px;border-radius:10px;font-size:18px}
-.help{position:fixed;top:20px;right:20px;background:#2563eb;padding:12px 18px;border-radius:12px;font-weight:bold}
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>컴퓨터 수업 - 4페이지</title>
+  <style>
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family:Arial,Helvetica,sans-serif;
+      background:#0f172a;
+      color:#fff;
+      overflow:hidden;
+    }
+    .slide{
+      width:100vw;
+      height:100svh;
+      min-height:100vh;
+      position:relative;
+      background-image:url('https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1800&q=80');
+      background-size:cover;
+      background-position:center;
+      background-repeat:no-repeat;
+      overflow:hidden;
+      padding:16px 34px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .overlay{
+      position:absolute;
+      inset:0;
+      background:linear-gradient(180deg,rgba(15,23,42,.50),rgba(15,23,42,.86));
+    }
+    .frame{
+      position:relative;
+      z-index:2;
+      width:min(1100px,100%);
+      background:rgba(15,23,42,.58);
+      border:1px solid rgba(255,255,255,.14);
+      border-radius:28px;
+      backdrop-filter:blur(12px);
+      box-shadow:0 24px 60px rgba(0,0,0,.28);
+      padding:18px 22px 20px;
+    }
+    .header{
+      text-align:center;
+      margin-bottom:12px;
+    }
+    .hero-icon{
+      font-size:42px;
+      line-height:1;
+      margin-bottom:6px;
+    }
+    .title{
+      margin:0;
+      font-size:clamp(28px,3.8vw,44px);
+      font-weight:800;
+      line-height:1.1;
+    }
+    .subtitle-wrap{margin-top:4px}
+    .subtitle{
+      font-size:clamp(16px,1.6vw,20px);
+      line-height:1.3;
+      margin:0;
+    }
+    .subtitle-small{
+      font-size:12px;
+      line-height:1.25;
+      opacity:.88;
+      margin-top:2px;
+    }
+    .chip-row{
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+      justify-content:center;
+      margin:12px 0 14px;
+      padding:0 8px;
+    }
+    .chip-btn{
+      border:none;
+      border-radius:999px;
+      padding:10px 14px;
+      font-size:15px;
+      font-weight:800;
+      color:#fff;
+      cursor:pointer;
+      background:rgba(255,255,255,.12);
+      border:1px solid rgba(255,255,255,.14);
+    }
+    .chip-btn.active{
+      background:#fff;
+      color:#111827;
+    }
+    .panel{
+      display:grid;
+      grid-template-columns:1.15fr .85fr;
+      gap:14px;
+      align-items:stretch;
+      min-height:360px;
+    }
+    .image-box{
+      border-radius:22px;
+      overflow:hidden;
+      border:1px solid rgba(255,255,255,.14);
+      background:rgba(255,255,255,.07);
+      min-width:0;
+      height:360px;
+    }
+    .image-box img{
+      width:100%;
+      height:100%;
+      object-fit:cover;
+      object-position:center;
+      display:block;
+    }
+    .info-box{
+      border-radius:22px;
+      border:1px solid rgba(255,255,255,.14);
+      background:rgba(255,255,255,.08);
+      padding:18px;
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      text-align:left;
+    }
+    .info-icon{
+      font-size:38px;
+      line-height:1;
+      margin-bottom:10px;
+    }
+    .info-title{
+      margin:0 0 8px;
+      font-size:28px;
+      font-weight:800;
+      line-height:1.15;
+    }
+    .info-text{
+      margin:0;
+      font-size:17px;
+      line-height:1.45;
+      opacity:.98;
+    }
+    .info-trans{
+      margin-top:10px;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      font-size:12px;
+      line-height:1.35;
+      opacity:.82;
+    }
+    .trans-en,
+    .trans-ru{
+      display:block;
+      padding-top:4px;
+    }
+    .trans-ru{
+      border-top:1px solid rgba(255,255,255,.14);
+    }
+    @media (max-width:900px){
+      .slide{padding:14px 22px;}
+      .frame{padding:16px 18px 18px;}
+      .chip-row{gap:8px;margin:10px 0 12px;}
+      .chip-btn{padding:9px 12px;font-size:14px;}
+      .panel{gap:12px;min-height:320px;}
+      .image-box{height:320px;}
+      .info-box{padding:16px;}
+      .info-title{font-size:24px;}
+      .info-text{font-size:15px;}
+    }
+    @media (max-width:640px){
+      .slide{padding:12px;}
+      .frame{padding:14px 14px 16px;border-radius:20px;}
+      .hero-icon{font-size:38px;}
+      .title{font-size:26px;}
+      .subtitle{font-size:14px;}
+      .subtitle-small{font-size:11px;}
+      .chip-row{gap:6px;padding:0;margin:8px 0 10px;}
+      .chip-btn{padding:8px 10px;font-size:12px;}
+      .panel{grid-template-columns:1fr;min-height:auto;}
+      .image-box{height:180px;}
+      .info-box{padding:14px;}
+      .info-icon{font-size:30px;margin-bottom:8px;}
+      .info-title{font-size:20px;}
+      .info-text{font-size:13px;line-height:1.35;}
+      .info-trans{font-size:10px;}
+    }
+  </style>
 </head>
 <body>
-<div class="page-no">5 / 14</div>
-<div class="help">🖐 모르면 손!</div>
-<div class="page">
-<h1>컴퓨터는 생활 도구</h1><p>한국 생활에 필요한 정보를 찾습니다</p>
-</div>
+  <section class="slide">
+    <div class="overlay"></div>
+
+    <div class="frame">
+      <div class="header">
+        <div class="hero-icon">💻</div>
+        <h1 class="title">컴퓨터로 할 수 있는 것</h1>
+        <div class="subtitle-wrap">
+          <p class="subtitle">버튼을 누르면 아래 예시가 바뀝니다</p>
+          <div class="subtitle-small">What you can do with a computer</div>
+          <div class="subtitle-small">Что можно делать на компьютере</div>
+        </div>
+      </div>
+
+      <div class="chip-row">
+        <button class="chip-btn active" onclick="changeExample(0,this)">🗺️ 길 찾기</button>
+        <button class="chip-btn" onclick="changeExample(1,this)">🌐 번역</button>
+        <button class="chip-btn" onclick="changeExample(2,this)">🔎 정보 찾기</button>
+        <button class="chip-btn" onclick="changeExample(3,this)">🍜 가게 찾기</button>
+        <button class="chip-btn" onclick="changeExample(4,this)">🛒 물건 사기</button>
+      </div>
+
+      <div class="panel">
+        <div class="image-box">
+          <img id="exampleImage" src="https://plus.unsplash.com/premium_vector-1761202026344-5bfaa5611735?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8M3x8JUVCJUFBJUE4JUVCJUIwJTk0JUVDJTlEJUJDJTIwJUVBJUI4JUI4JUVDJUIwJUJFJUVBJUI4JUIwfGVufDB8fDB8fHww" alt="길 찾기 예시" />
+        </div>
+
+        <div class="info-box">
+          <div id="exampleIcon" class="info-icon">🗺️</div>
+          <h2 id="exampleTitle" class="info-title">길 찾기</h2>
+          <p id="exampleText" class="info-text">지도에서 목적지를 찾고 길을 확인할 수 있습니다.</p>
+          <div id="exampleTrans" class="info-trans">
+            <span class="trans-en">Find places on a map and check directions.</span>
+            <span class="trans-ru">Найти место на карте и посмотреть маршрут.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    const examples = [
+      {
+        icon:'🗺️',
+        title:'길 찾기',
+        text:'지도에서 목적지를 찾고 길을 확인할 수 있습니다.',
+        transEn:'Find places on a map and check directions.',
+        transRu:'Найти место на карте и посмотреть маршрут.',
+        img:'https://plus.unsplash.com/premium_vector-1761202026344-5bfaa5611735?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8M3x8JUVCJUFBJUE4JUVCJUIwJTk0JUVDJTlEJUJDJTIwJUVBJUI4JUI4JUVDJUIwJUJFJUVBJUI4JUIwfGVufDB8fDB8fHww',
+        alt:'길 찾기 예시'
+      },
+      {
+        icon:'🌐',
+        title:'번역',
+        text:'한국어를 다른 언어로 바꾸고 뜻을 이해할 수 있습니다.',
+        transEn:'Translate Korean into another language and understand the meaning.',
+        transRu:'Перевести корейский на другой язык и понять смысл.',
+        img:'https://plus.unsplash.com/premium_vector-1765037113558-15bbbb416fc6?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTZ8fCVFQiVCMiU4OCVFQyU5NyVBRHxlbnwwfHwwfHx8MA%3D%3D',
+        alt:'번역 예시'
+      },
+      {
+        icon:'🔎',
+        title:'정보 찾기',
+        text:'필요한 정보와 사진을 인터넷에서 검색할 수 있습니다.',
+        transEn:'Search for information and photos on the internet.',
+        transRu:'Искать информацию и фотографии в интернете.',
+        img:'https://plus.unsplash.com/premium_vector-1761435925322-d7beeb7c6d77?auto=format&fit=crop&fm=jpg&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&ixlib=rb-4.1.0&q=60&w=3000',
+        alt:'검색창과 돋보기가 있는 정보 찾기 일러스트'
+      },
+      {
+        icon:'🍜',
+        title:'가게 찾기',
+        text:'음식점과 카페 위치를 보고 선택할 수 있습니다.',
+        transEn:'Find restaurants and cafes and choose where to go.',
+        transRu:'Найти кафе и рестораны и выбрать, куда пойти.',
+        img:'https://plus.unsplash.com/premium_vector-1747619131786-29eb111bfe52?auto=format&fit=crop&fm=jpg&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&ixlib=rb-4.1.0&q=60&w=3000',
+        alt:'위치 표시와 가게 태그가 있는 가게 찾기 일러스트'
+      },
+      {
+        icon:'🛒',
+        title:'물건 사기',
+        text:'인터넷에서 필요한 물건을 찾아 주문할 수 있습니다.',
+        transEn:'Find and order things you need on the internet.',
+        transRu:'Найти и заказать нужные вещи в интернете.',
+        img:'https://plus.unsplash.com/premium_vector-1726815518466-ddd2e0d0d65b?auto=format&fit=crop&fm=jpg&ixid=M3wxMjA3fDB8MHxwaG90by1pbi1zYW1lLXNlcmllc3wzfHx8ZW58MHx8fHx8&ixlib=rb-4.1.0&q=60&w=3000',
+        alt:'온라인 쇼핑 화면과 카트가 있는 물건 사기 일러스트'
+      }
+    ];
+
+    function changeExample(index, btn){
+      const data = examples[index];
+      document.getElementById('exampleIcon').textContent = data.icon;
+      document.getElementById('exampleTitle').textContent = data.title;
+      document.getElementById('exampleText').textContent = data.text;
+      document.querySelector('#exampleTrans .trans-en').textContent = data.transEn;
+      document.querySelector('#exampleTrans .trans-ru').textContent = data.transRu;
+      const img = document.getElementById('exampleImage');
+      img.src = data.img;
+      img.alt = data.alt;
+
+      document.querySelectorAll('.chip-btn').forEach(el => el.classList.remove('active'));
+      if(btn) btn.classList.add('active');
+    }
+  </script>
 </body>
 </html>
