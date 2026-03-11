@@ -6,5 +6,5 @@ export const POST: APIRoute = async ({ cookies, redirect }) => {
     path: "/",
   });
 
-  return redirect(withBase("/login/"));
+  return redirect(withBase("/login"));
 };

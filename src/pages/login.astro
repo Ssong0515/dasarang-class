@@ -103,7 +103,7 @@ const hasError = Astro.url.searchParams.get("error") === "1";
 
       {hasError && <div class="error">비밀번호가 올바르지 않습니다.</div>}
 
-      <form method="POST" action={withBase("/api/login/")}>
+      <form method="POST" action={withBase("/api/login")}>
         <input type="hidden" name="next" value={next} />
         <label for="password">비밀번호</label>
         <input id="password" name="password" type="password" required autocomplete="current-password" />

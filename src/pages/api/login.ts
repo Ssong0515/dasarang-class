@@ -18,7 +18,7 @@ export const POST: APIRoute = async ({ request, locals, cookies, redirect, url }
   }
 
   if (password !== sitePassword) {
-    const loginUrl = new URL(withBase("/login/"), url);
+    const loginUrl = new URL(withBase("/login"), url);
     loginUrl.searchParams.set("error", "1");
     loginUrl.searchParams.set("next", next);
     return redirect(loginUrl.toString());
