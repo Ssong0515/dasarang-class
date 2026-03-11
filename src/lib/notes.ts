@@ -21,6 +21,7 @@ type RuntimeLocals = {
 };
 
 const NOTE_PREFIX = "note:";
+const isLocalDev = import.meta.env.DEV;
 
 const getNoteKey = (slug: string) => `${NOTE_PREFIX}${slug}`;
 
@@ -73,6 +74,10 @@ export const getNote = async (slug: string, locals?: RuntimeLocals) => {
     return readJson(await kv.get(getNoteKey(slug), "text"));
   }
 
+  if (!isLocalDev) {
+    return undefined;
+  }
+
   const notes = await readLocalNotes();
   return notes[slug];
 };
@@ -96,6 +101,10 @@ export const listNotes = async (locals?: RuntimeLocals): Promise<NoteMap> => {
     );
 
     return Object.fromEntries(entries.filter(Boolean) as Array<readonly [string, NoteRecord]>);
+  }
+
+  if (!isLocalDev) {
+    return {};
   }
 
   return readLocalNotes();
@@ -125,6 +134,10 @@ export const saveNote = async (slug: string, content: string, locals?: RuntimeLo
   if (kv) {
     await kv.put(getNoteKey(slug), JSON.stringify(record));
     return record;
+  }
+
+  if (!isLocalDev) {
+    throw new Error("NOTES KV binding is not configured.");
   }
 
   const notes = await readLocalNotes();
