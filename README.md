@@ -19,7 +19,7 @@
 
 ```env
 SITE_PASSWORD=your-password-here
-SITE_URL=https://dasarang-class.pages.dev
+SITE_URL=http://localhost
 SITE_BASE_PATH=/
 ```
 
