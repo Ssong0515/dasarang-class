@@ -2,47 +2,233 @@
 import SlideShell from "../../components/slides/SlideShell.astro";
 
 export const slideMeta = {
-  title: "슬라이드 6",
-  helpLabel: "준비 중",
-  order: 6,
+  title: "마무리하기",
+  helpLabel: "정리와 종료",
 };
 ---
 
 <SlideShell>
-  <div class="placeholder">
-    <span class="placeholder__eyebrow">260321 Computer A 02</span>
-    <h1>슬라이드 6</h1>
-    <p>내용 준비 중</p>
+  <div class="finish">
+    <header class="finish__header">
+      <div class="finish__hero">🔌</div>
+      <h1>마무리하기</h1>
+      <p>수업이 끝나면 컴퓨터를 바르게 끄고 자리를 정리합니다</p>
+      <span>Finish and tidy up</span>
+      <span>Завершаем занятие и приводим место в порядок</span>
+    </header>
+
+    <div class="finish__panel">
+      <div class="finish__art-card">
+        <img
+          class="finish__art"
+          alt="컴퓨터 종료와 자리 정리 일러스트"
+          src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 720 520'%3E%3Crect width='720' height='520' fill='%23eaf3ff'/%3E%3Crect x='92' y='68' width='360' height='220' rx='22' fill='%23334155'/%3E%3Crect x='116' y='92' width='312' height='172' rx='14' fill='%2393c5fd'/%3E%3Ccircle cx='540' cy='142' r='74' fill='%23ffffff' fill-opacity='0.92'/%3E%3Cpath d='M540 114 v40 M518 146 a22 22 0 1 0 44 0' stroke='%2322c55e' stroke-width='12' stroke-linecap='round' fill='none'/%3E%3Crect x='138' y='334' width='340' height='92' rx='18' fill='%23e5e7eb' stroke='%2394a3b8' stroke-width='4'/%3E%3Cg fill='%23cbd5e1'%3E%3Crect x='165' y='356' width='36' height='18' rx='4'/%3E%3Crect x='207' y='356' width='36' height='18' rx='4'/%3E%3Crect x='249' y='356' width='36' height='18' rx='4'/%3E%3Crect x='291' y='356' width='36' height='18' rx='4'/%3E%3Crect x='333' y='356' width='36' height='18' rx='4'/%3E%3Crect x='375' y='356' width='60' height='18' rx='4'/%3E%3Crect x='165' y='382' width='64' height='18' rx='4'/%3E%3Crect x='235' y='382' width='36' height='18' rx='4'/%3E%3Crect x='277' y='382' width='120' height='18' rx='4'/%3E%3C/g%3E%3Crect x='530' y='320' width='110' height='140' rx='24' fill='%23f8fafc' stroke='%2394a3b8' stroke-width='4'/%3E%3Cline x1='585' y1='344' x2='585' y2='380' stroke='%2394a3b8' stroke-width='4'/%3E%3Crect x='506' y='406' width='160' height='54' rx='18' fill='%23dcfce7' stroke='%2386efac' stroke-width='4'/%3E%3Ctext x='520' y='440' font-size='24' font-family='Arial' font-weight='700' fill='%23166534'%3E정리 완료%3C/text%3E%3C/svg%3E"
+        />
+      </div>
+
+      <div class="finish__info">
+        <div class="finish__steps">
+          <div class="finish__step">
+            <span>1</span>
+            <p>시작 버튼을 누르고 종료를 선택합니다.</p>
+          </div>
+          <div class="finish__step">
+            <span>2</span>
+            <p>전원을 바로 길게 누르지 않습니다.</p>
+          </div>
+          <div class="finish__step">
+            <span>3</span>
+            <p>마우스와 자리를 제자리에 정리합니다.</p>
+          </div>
+        </div>
+
+        <div class="finish__summary">
+          <strong>마지막 확인</strong>
+          <p>컴퓨터를 바르게 끄고, 주변을 깨끗하게 정리하면 수업이 끝납니다.</p>
+        </div>
+
+        <div class="finish__translation">
+          <span>Choose shut down, do not press the power button for a long time, and tidy your desk.</span>
+          <span>Выберите завершение работы, не удерживайте кнопку питания долго и приведите в порядок своё место.</span>
+        </div>
+      </div>
+    </div>
   </div>
 </SlideShell>
 
 <style>
-  .placeholder {
+  .finish {
     min-height: 100%;
-    display: grid;
-    place-items: center;
+    padding: 18px 18px 18px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .finish__header {
     text-align: center;
-    gap: 10px;
-    padding: 24px;
+    margin-bottom: 12px;
   }
 
-  .placeholder__eyebrow {
-    font-size: 14px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    opacity: 0.7;
+  .finish__hero {
+    font-size: 38px;
+    line-height: 1;
+    margin-bottom: 6px;
   }
 
-  .placeholder h1 {
+  .finish__header h1 {
     margin: 0;
-    font-size: clamp(42px, 6vw, 72px);
+    font-size: clamp(26px, 3.6vw, 40px);
     line-height: 1.1;
   }
 
-  .placeholder p {
+  .finish__header p {
+    margin: 6px 0 0;
+    font-size: clamp(15px, 1.5vw, 19px);
+    line-height: 1.3;
+  }
+
+  .finish__header span {
+    display: block;
+    font-size: 12px;
+    line-height: 1.25;
+    opacity: 0.88;
+  }
+
+  .finish__panel {
+    display: grid;
+    grid-template-columns: 1.02fr 0.98fr;
+    gap: 12px;
+    flex: 1;
+  }
+
+  .finish__art-card,
+  .finish__info {
+    overflow: hidden;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .finish__art {
+    width: 100%;
+    height: 100%;
+    display: block;
+    background: #eaf3ff;
+  }
+
+  .finish__info {
+    padding: 12px 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .finish__steps {
+    display: grid;
+    gap: 8px;
+  }
+
+  .finish__step {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 9px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .finish__step span {
+    flex: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fff;
+    color: #111827;
+    font-size: 13px;
+    font-weight: 900;
+  }
+
+  .finish__step p {
     margin: 0;
-    font-size: clamp(18px, 2.2vw, 28px);
-    opacity: 0.86;
+    font-size: 14px;
+    line-height: 1.35;
+  }
+
+  .finish__summary {
+    padding: 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .finish__summary strong {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 18px;
+    line-height: 1.15;
+  }
+
+  .finish__summary p {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.35;
+    opacity: 0.95;
+  }
+
+  .finish__translation {
+    display: grid;
+    gap: 4px;
+    margin-top: auto;
+    font-size: 12px;
+    line-height: 1.25;
+    opacity: 0.82;
+  }
+
+  @media (max-width: 640px) {
+    .finish {
+      padding: 13px 12px 14px;
+    }
+
+    .finish__hero {
+      font-size: 34px;
+    }
+
+    .finish__header h1 {
+      font-size: 24px;
+    }
+
+    .finish__header p {
+      font-size: 13px;
+    }
+
+    .finish__header span {
+      font-size: 11px;
+    }
+
+    .finish__panel {
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+
+    .finish__art-card {
+      min-height: 180px;
+    }
+
+    .finish__step p,
+    .finish__summary p {
+      font-size: 13px;
+    }
+
+    .finish__summary strong {
+      font-size: 16px;
+    }
+
+    .finish__translation {
+      font-size: 11px;
+    }
   }
 </style>

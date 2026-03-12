@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { createSlideForSession, updateSlideMetaForSession } from "../../../lib/slide-files";
+import { createSlideForSession, importSlidesFromSession, updateSlideMetaForSession } from "../../../lib/slide-files";
 import { deleteSlideFromSession, saveSlideOrder } from "../../../lib/slide-state";
 
 export const prerender = false;
@@ -96,10 +96,36 @@ export const POST: APIRoute = async ({ params, request }) => {
         headers: { "Content-Type": "application/json" },
       });
     }
+
+    if (action === "import") {
+      const sourceSlug = typeof (payload as { sourceSlug?: unknown })?.sourceSlug === "string"
+        ? (payload as { sourceSlug: string }).sourceSlug
+        : "";
+
+      if (!sourceSlug) {
+        return new Response(JSON.stringify({ ok: false, error: "missing_source_slug" }), {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      const imported = await importSlidesFromSession(slug, sourceSlug);
+
+      return new Response(JSON.stringify({ ok: true, imported }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
   } catch (error) {
     if (error instanceof Error && error.message === "slide_file_editing_unavailable") {
       return new Response(JSON.stringify({ ok: false, error: "editing_unavailable_in_deployment" }), {
         status: 501,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    if (error instanceof Error && error.message === "source_slides_not_found") {
+      return new Response(JSON.stringify({ ok: false, error: "source_slides_not_found" }), {
+        status: 404,
         headers: { "Content-Type": "application/json" },
       });
     }

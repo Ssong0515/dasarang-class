@@ -25,6 +25,7 @@ type ComponentSlide = Extract<SlideDocument, { kind: "component" }>;
 const componentSlides = slides.filter((slide): slide is ComponentSlide => slide.kind === "component");
 const startClassHref = componentSlides[0] ? withBase(componentSlides[0].previewPath) : undefined;
 const slideApiPath = withBase(`/api/slides/${slug}/`);
+const importableSessions = sessions.filter((entry) => entry.slug !== slug);
 ---
 
 <BaseLayout title={session ? session.label : "수업을 찾을 수 없습니다"}>
@@ -92,10 +93,15 @@ const slideApiPath = withBase(`/api/slides/${slug}/`);
 
             <div class="workspace-panel">
               <div class="workspace-panel__meta">
-                <strong>슬라이드 목록</strong>
+                <div class="workspace-panel__heading">
+                  <strong>슬라이드 목록</strong>
+                  <span class="section-badge" data-slide-count-badge>{componentSlides.length}장</span>
+                </div>
               </div>
               <div class="workspace-panel__actions">
-                <span class="section-badge" data-slide-count-badge>{componentSlides.length}장</span>
+                <button class="workspace-panel__button is-import" type="button" data-slide-import-open>
+                  가져오기
+                </button>
                 {startClassHref ? (
                   <a class="workspace-panel__button" href={startClassHref} data-start-class-button>
                     수업 시작
@@ -103,6 +109,28 @@ const slideApiPath = withBase(`/api/slides/${slug}/`);
                 ) : null}
               </div>
             </div>
+
+            <dialog class="slide-import-dialog" data-slide-import-dialog>
+              <form class="slide-import-dialog__panel" method="dialog">
+                <div class="slide-import-dialog__head">
+                  <strong>다른 수업 슬라이드 가져오기</strong>
+                  <button class="slide-import-dialog__close" type="submit" value="cancel" aria-label="닫기">×</button>
+                </div>
+                <p class="slide-import-dialog__copy">선택한 수업의 슬라이드를 현재 목록 아래에 이어서 추가합니다.</p>
+                <select class="slide-import-dialog__select" data-slide-import-select>
+                  <option value="">가져올 수업 선택</option>
+                  {importableSessions.map((entry) => (
+                    <option value={entry.slug}>{entry.label}</option>
+                  ))}
+                </select>
+                <div class="slide-import-dialog__actions">
+                  <button class="slide-import-dialog__button is-cancel" type="submit" value="cancel">취소</button>
+                  <button class="slide-import-dialog__button is-confirm" type="button" data-slide-import-confirm>
+                    가져오기
+                  </button>
+                </div>
+              </form>
+            </dialog>
 
             <div
               class="component-slide-list"
@@ -189,6 +217,10 @@ const slideApiPath = withBase(`/api/slides/${slug}/`);
   const emptySlideMessage = document.querySelector("[data-slide-empty]");
   const startClassButton = document.querySelector("[data-start-class-button]");
   const addSlideButton = document.querySelector("[data-slide-add]");
+  const importDialog = document.querySelector("[data-slide-import-dialog]");
+  const importOpenButton = document.querySelector("[data-slide-import-open]");
+  const importConfirmButton = document.querySelector("[data-slide-import-confirm]");
+  const importSelect = document.querySelector("[data-slide-import-select]");
 
   if (notePanel instanceof HTMLDetailsElement && noteForm instanceof HTMLFormElement) {
     noteForm.addEventListener("submit", async (event) => {
@@ -507,6 +539,56 @@ const slideApiPath = withBase(`/api/slides/${slug}/`);
       addSlideButton.disabled = false;
     }
   });
+
+  importOpenButton?.addEventListener("click", () => {
+    if (!(importDialog instanceof HTMLDialogElement)) return;
+    importDialog.showModal();
+  });
+
+  importConfirmButton?.addEventListener("click", async () => {
+    if (!(slideList instanceof HTMLElement) || !(importSelect instanceof HTMLSelectElement)) return;
+    if (!(importConfirmButton instanceof HTMLButtonElement)) return;
+
+    const sourceSlug = importSelect.value;
+    const apiPath = slideList.dataset.slideApi || "";
+
+    if (!sourceSlug || !apiPath) {
+      window.alert("가져올 수업을 먼저 선택해주세요.");
+      return;
+    }
+
+    const confirmed = window.confirm("선택한 수업의 슬라이드를 현재 목록 아래에 추가할까요?");
+    if (!confirmed) return;
+
+    importConfirmButton.disabled = true;
+
+    try {
+      const response = await fetch(apiPath, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          action: "import",
+          sourceSlug,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("import_failed");
+      }
+
+      if (importDialog instanceof HTMLDialogElement) {
+        importDialog.close();
+      }
+
+      window.location.reload();
+    } catch {
+      window.alert("슬라이드 가져오기에 실패했습니다.");
+      importConfirmButton.disabled = false;
+    }
+  });
 </script>
 
 <style>
@@ -574,6 +656,13 @@ const slideApiPath = withBase(`/api/slides/${slug}/`);
     gap: 6px;
   }
 
+  .workspace-panel__heading {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
   .workspace-panel__meta strong {
     color: #25466f;
     font-size: 15px;
@@ -607,6 +696,12 @@ const slideApiPath = withBase(`/api/slides/${slug}/`);
     font-weight: 800;
     border: 0;
     cursor: pointer;
+  }
+
+  .workspace-panel__button.is-import {
+    background: #edf6ff;
+    color: #235091;
+    border: 1px solid #cfe1f8;
   }
 
   .workspace-panel__button.is-disabled,
@@ -780,6 +875,95 @@ const slideApiPath = withBase(`/api/slides/${slug}/`);
   .component-slide-add:disabled {
     opacity: 0.6;
     cursor: wait;
+  }
+
+  .slide-import-dialog {
+    width: min(420px, calc(100vw - 32px));
+    padding: 0;
+    border: 0;
+    border-radius: 20px;
+    background: transparent;
+  }
+
+  .slide-import-dialog::backdrop {
+    background: rgba(28, 36, 52, 0.32);
+  }
+
+  .slide-import-dialog__panel {
+    display: grid;
+    gap: 14px;
+    padding: 20px;
+    border: 1px solid #d8e2ef;
+    border-radius: 20px;
+    background: #ffffff;
+    box-shadow: 0 24px 60px rgba(32, 54, 84, 0.18);
+  }
+
+  .slide-import-dialog__head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .slide-import-dialog__head strong {
+    color: #1d426d;
+    font-size: 16px;
+  }
+
+  .slide-import-dialog__close {
+    width: 34px;
+    height: 34px;
+    border: 0;
+    border-radius: 999px;
+    background: #f1f5fa;
+    color: #5a6f89;
+    font: inherit;
+    font-size: 20px;
+    cursor: pointer;
+  }
+
+  .slide-import-dialog__copy {
+    margin: 0;
+    color: #6e8098;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .slide-import-dialog__select {
+    width: 100%;
+    min-height: 44px;
+    padding: 0 14px;
+    border: 1px solid #d8e2ef;
+    border-radius: 12px;
+    background: #fbfdff;
+    color: #2f425d;
+    font: inherit;
+  }
+
+  .slide-import-dialog__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .slide-import-dialog__button {
+    min-height: 38px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid #d6e0ec;
+    background: #ffffff;
+    color: #40526b;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .slide-import-dialog__button.is-confirm {
+    border-color: transparent;
+    background: #1c2434;
+    color: #ffffff;
   }
 
   .note-panel {

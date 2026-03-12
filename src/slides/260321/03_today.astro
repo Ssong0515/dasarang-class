@@ -2,47 +2,237 @@
 import SlideShell from "../../components/slides/SlideShell.astro";
 
 export const slideMeta = {
-  title: "슬라이드 3",
-  helpLabel: "준비 중",
-  order: 3,
+  title: "오늘 할 것",
+  helpLabel: "오늘의 순서",
 };
 ---
 
-<SlideShell>
-  <div class="placeholder">
-    <span class="placeholder__eyebrow">260321 Computer A 02</span>
-    <h1>슬라이드 3</h1>
-    <p>내용 준비 중</p>
+<SlideShell
+  backgroundImage="https://images.unsplash.com/photo-1496171367470-9ed9a91ea931?auto=format&fit=crop&w=1800&q=80"
+  overlay
+>
+  <div class="agenda">
+    <div class="agenda__hero">📚</div>
+    <h1>오늘 할 것</h1>
+
+    <div class="agenda__subtitle">
+      <p>오늘 수업에서 직접 해볼 내용을 먼저 봅니다</p>
+      <span>What we will do today</span>
+      <span>Что мы будем делать сегодня</span>
+    </div>
+
+    <div class="agenda__grid">
+      <article class="agenda__card">
+        <img
+          src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 720'%3E%3Cdefs%3E%3ClinearGradient id='bg1' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%23eff6ff'/%3E%3Cstop offset='100%25' stop-color='%23dbeafe'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='1200' height='720' rx='36' fill='url(%23bg1)'/%3E%3Crect x='220' y='120' width='420' height='250' rx='22' fill='%23334155'/%3E%3Crect x='245' y='145' width='370' height='200' rx='14' fill='%2393c5fd'/%3E%3Crect x='360' y='382' width='140' height='18' rx='8' fill='%2394a3b8'/%3E%3Crect x='315' y='400' width='230' height='20' rx='10' fill='%23cbd5e1'/%3E%3Crect x='255' y='470' width='350' height='92' rx='18' fill='%23e5e7eb' stroke='%2394a3b8' stroke-width='4'/%3E%3Cg fill='%23cbd5e1'%3E%3Crect x='282' y='492' width='34' height='18' rx='4'/%3E%3Crect x='322' y='492' width='34' height='18' rx='4'/%3E%3Crect x='362' y='492' width='34' height='18' rx='4'/%3E%3Crect x='402' y='492' width='34' height='18' rx='4'/%3E%3Crect x='442' y='492' width='34' height='18' rx='4'/%3E%3Crect x='482' y='492' width='34' height='18' rx='4'/%3E%3Crect x='522' y='492' width='56' height='18' rx='4'/%3E%3Crect x='282' y='518' width='62' height='18' rx='4'/%3E%3Crect x='350' y='518' width='34' height='18' rx='4'/%3E%3Crect x='390' y='518' width='34' height='18' rx='4'/%3E%3Crect x='430' y='518' width='110' height='18' rx='4'/%3E%3C/g%3E%3Crect x='670' y='170' width='180' height='330' rx='22' fill='%231f2937'/%3E%3Ccircle cx='760' cy='280' r='38' fill='%230f172a'/%3E%3Cpath d='M760 255 v32 M741 282 a19 19 0 1 0 38 0' stroke='%234ade80' stroke-width='11' stroke-linecap='round' fill='none'/%3E%3Ctext x='716' y='420' font-size='32' font-family='Arial,Helvetica,sans-serif' font-weight='700' fill='%23f8fafc'%3EPOWER%3C/text%3E%3Crect x='720' y='540' width='120' height='72' rx='30' fill='%23f8fafc' stroke='%2394a3b8' stroke-width='4'/%3E%3Ccircle cx='760' cy='575' r='8' fill='%2394a3b8'/%3E%3Cpath d='M640 250 C690 250 710 250 760 242' stroke='%2364748b' stroke-width='8' fill='none'/%3E%3Cpath d='M520 420 C585 458 645 496 720 540' stroke='%2364748b' stroke-width='8' fill='none'/%3E%3Cpath d='M760 500 C760 530 760 540 760 540' stroke='%2364748b' stroke-width='8' fill='none'/%3E%3Ccircle cx='980' cy='160' r='70' fill='%23ffffff' fill-opacity='0.9'/%3E%3Cpath d='M980 132 v42 M956 166 a24 24 0 1 0 48 0' stroke='%2322c55e' stroke-width='13' stroke-linecap='round' fill='none'/%3E%3Ctext x='182' y='88' font-size='38' font-family='Arial,Helvetica,sans-serif' font-weight='700' fill='%231e293b'%3E노트북 연결과 전원 준비%3C/text%3E%3C/svg%3E"
+          alt="노트북에 키보드와 마우스를 연결하고 전원을 준비하는 일러스트"
+        />
+        <div class="agenda__body">
+          <span class="agenda__step">1</span>
+          <strong>준비하기</strong>
+          <p>컴퓨터를 올바르게 연결하고, 켜고, 끄는 방법을 배웁니다</p>
+          <div class="agenda__translation">
+            <span>Learn how to connect the computer correctly and how to turn it on and off</span>
+            <span>Учимся правильно подключать компьютер и включать и выключать его</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="agenda__card">
+        <img
+          src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 720'%3E%3Cdefs%3E%3ClinearGradient id='bg2' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%23f8fafc'/%3E%3Cstop offset='100%25' stop-color='%23dbeafe'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='1200' height='720' rx='36' fill='url(%23bg2)'/%3E%3Crect x='90' y='140' width='320' height='210' rx='20' fill='%23334155'/%3E%3Crect x='112' y='160' width='276' height='170' rx='12' fill='%2393c5fd'/%3E%3Crect x='205' y='360' width='90' height='16' rx='8' fill='%2394a3b8'/%3E%3Crect x='178' y='376' width='144' height='18' rx='9' fill='%23cbd5e1'/%3E%3Ctext x='110' y='108' font-size='34' font-family='Arial,Helvetica,sans-serif' font-weight='800' fill='%231e293b'%3E모니터%3C/text%3E%3Cpath d='M250 120 L250 74' stroke='%2360a5fa' stroke-width='8'/%3E%3Crect x='455' y='430' width='300' height='90' rx='18' fill='%23e5e7eb' stroke='%2394a3b8' stroke-width='4'/%3E%3Cg fill='%23cbd5e1'%3E%3Crect x='480' y='452' width='34' height='18' rx='4'/%3E%3Crect x='520' y='452' width='34' height='18' rx='4'/%3E%3Crect x='560' y='452' width='34' height='18' rx='4'/%3E%3Crect x='600' y='452' width='34' height='18' rx='4'/%3E%3Crect x='640' y='452' width='34' height='18' rx='4'/%3E%3Crect x='680' y='452' width='48' height='18' rx='4'/%3E%3Crect x='480' y='478' width='64' height='18' rx='4'/%3E%3Crect x='550' y='478' width='34' height='18' rx='4'/%3E%3Crect x='590' y='478' width='34' height='18' rx='4'/%3E%3Crect x='630' y='478' width='96' height='18' rx='4'/%3E%3C/g%3E%3Ctext x='520' y='396' font-size='34' font-family='Arial,Helvetica,sans-serif' font-weight='800' fill='%231e293b'%3E키보드%3C/text%3E%3Cpath d='M605 404 L605 382' stroke='%2360a5fa' stroke-width='8'/%3E%3Crect x='865' y='420' width='120' height='160' rx='48' fill='%23f8fafc' stroke='%2394a3b8' stroke-width='4'/%3E%3Cline x1='925' y1='445' x2='925' y2='485' stroke='%2394a3b8' stroke-width='4'/%3E%3Ctext x='860' y='388' font-size='34' font-family='Arial,Helvetica,sans-serif' font-weight='800' fill='%231e293b'%3E마우스%3C/text%3E%3Cpath d='M925 396 L925 372' stroke='%2360a5fa' stroke-width='8'/%3E%3Ccircle cx='1045' cy='120' r='64' fill='%23ffffff' fill-opacity='0.9'/%3E%3Ctext x='1006' y='128' font-size='42' font-family='Arial,Helvetica,sans-serif' font-weight='800' fill='%232563eb'%3EA B C%3C/text%3E%3C/svg%3E"
+          alt="모니터, 키보드, 마우스 이름이 표시된 일러스트"
+        />
+        <div class="agenda__body">
+          <span class="agenda__step">2</span>
+          <strong>명칭 알기</strong>
+          <p>모니터, 키보드, 마우스 이름을 정확히 배웁니다</p>
+          <div class="agenda__translation">
+            <span>Learn the names of the monitor, keyboard, and mouse</span>
+            <span>Учим названия монитора, клавиатуры и мыши</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="agenda__card">
+        <img
+          src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 720'%3E%3Cdefs%3E%3ClinearGradient id='bg3' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%23eff6ff'/%3E%3Cstop offset='100%25' stop-color='%23e0f2fe'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='1200' height='720' rx='36' fill='url(%23bg3)'/%3E%3Crect x='160' y='90' width='520' height='300' rx='24' fill='%23263b5e'/%3E%3Crect x='188' y='118' width='464' height='244' rx='16' fill='%2393c5fd'/%3E%3Crect x='232' y='156' width='156' height='38' rx='12' fill='%23ffffff' fill-opacity='0.72'/%3E%3Ctext x='250' y='183' font-size='26' font-family='Arial,Helvetica,sans-serif' font-weight='700' fill='%231e293b'%3E타자 연습%3C/text%3E%3Crect x='232' y='220' width='120' height='86' rx='16' fill='%23ffffff' fill-opacity='0.74'/%3E%3Ctext x='260' y='275' font-size='44' font-family='Arial,Helvetica,sans-serif' font-weight='800' fill='%232563eb'%3E가%3C/text%3E%3Crect x='380' y='220' width='120' height='86' rx='16' fill='%23ffffff' fill-opacity='0.74'/%3E%3Ctext x='410' y='275' font-size='44' font-family='Arial,Helvetica,sans-serif' font-weight='800' fill='%232563eb'%3E나%3C/text%3E%3Crect x='528' y='220' width='96' height='86' rx='16' fill='%23ffffff' fill-opacity='0.74'/%3E%3Ctext x='550' y='275' font-size='44' font-family='Arial,Helvetica,sans-serif' font-weight='800' fill='%232563eb'%3E3%3C/text%3E%3Crect x='245' y='435' width='420' height='100' rx='20' fill='%23e5e7eb' stroke='%2394a3b8' stroke-width='4'/%3E%3Cg fill='%23cbd5e1'%3E%3Crect x='272' y='458' width='36' height='18' rx='4'/%3E%3Crect x='314' y='458' width='36' height='18' rx='4'/%3E%3Crect x='356' y='458' width='36' height='18' rx='4'/%3E%3Crect x='398' y='458' width='36' height='18' rx='4'/%3E%3Crect x='440' y='458' width='36' height='18' rx='4'/%3E%3Crect x='482' y='458' width='36' height='18' rx='4'/%3E%3Crect x='524' y='458' width='36' height='18' rx='4'/%3E%3Crect x='566' y='458' width='64' height='18' rx='4'/%3E%3Crect x='272' y='484' width='64' height='18' rx='4'/%3E%3Crect x='342' y='484' width='36' height='18' rx='4'/%3E%3Crect x='384' y='484' width='36' height='18' rx='4'/%3E%3Crect x='426' y='484' width='132' height='18' rx='4'/%3E%3C/g%3E%3Cg fill='%23fbbf24'%3E%3Cellipse cx='355' cy='610' rx='58' ry='40'/%3E%3Cellipse cx='552' cy='610' rx='58' ry='40'/%3E%3C/g%3E%3Cg fill='%23fde68a'%3E%3Crect x='318' y='565' width='74' height='64' rx='30'/%3E%3Crect x='515' y='565' width='74' height='64' rx='30'/%3E%3C/g%3E%3Ctext x='760' y='170' font-size='38' font-family='Arial,Helvetica,sans-serif' font-weight='800' fill='%231e293b'%3E타이핑 연습%3C/text%3E%3Crect x='760' y='210' width='280' height='74' rx='18' fill='%23ffffff' fill-opacity='0.78'/%3E%3Ctext x='795' y='257' font-size='30' font-family='Arial,Helvetica,sans-serif' font-weight='700' fill='%232563eb'%3E글자와 숫자 입력%3C/text%3E%3Ccircle cx='1010' cy='470' r='86' fill='%23ffffff' fill-opacity='0.9'/%3E%3Ctext x='972' y='486' font-size='54' font-family='Arial,Helvetica,sans-serif' font-weight='800' fill='%2322c55e'%3EABC%3C/text%3E%3C/svg%3E"
+          alt="키보드로 글자와 숫자를 입력하는 타이핑 연습 일러스트"
+        />
+        <div class="agenda__body">
+          <span class="agenda__step">3</span>
+          <strong>타이핑 연습</strong>
+          <p>손가락으로 글자와 숫자를 입력하는 연습을 합니다</p>
+          <div class="agenda__translation">
+            <span>Practice typing letters and numbers with your fingers</span>
+            <span>Практикуем ввод букв и цифр пальцами</span>
+          </div>
+        </div>
+      </article>
+    </div>
   </div>
 </SlideShell>
 
 <style>
-  .placeholder {
+  .agenda {
     min-height: 100%;
-    display: grid;
-    place-items: center;
+    padding: 22px 20px 22px;
+    display: flex;
+    flex-direction: column;
     text-align: center;
-    gap: 10px;
-    padding: 24px;
   }
 
-  .placeholder__eyebrow {
-    font-size: 14px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    opacity: 0.7;
+  .agenda__hero {
+    font-size: 52px;
+    line-height: 1;
   }
 
-  .placeholder h1 {
-    margin: 0;
-    font-size: clamp(42px, 6vw, 72px);
+  .agenda h1 {
+    margin: 10px 0 0;
+    font-size: clamp(32px, 4.2vw, 52px);
     line-height: 1.1;
   }
 
-  .placeholder p {
+  .agenda__subtitle {
+    display: grid;
+    gap: 2px;
+    margin-top: 10px;
+  }
+
+  .agenda__subtitle p {
     margin: 0;
-    font-size: clamp(18px, 2.2vw, 28px);
+    font-size: clamp(16px, 1.8vw, 22px);
+    line-height: 1.4;
+  }
+
+  .agenda__subtitle span {
+    font-size: 13px;
+    line-height: 1.35;
     opacity: 0.86;
+  }
+
+  .agenda__grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    margin-top: 18px;
+  }
+
+  .agenda__card {
+    overflow: hidden;
+    text-align: left;
+    border-radius: 22px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .agenda__card img {
+    display: block;
+    width: 100%;
+    height: 168px;
+    object-fit: cover;
+    background: #eaf3ff;
+  }
+
+  .agenda__body {
+    padding: 14px 14px 16px;
+  }
+
+  .agenda__step {
+    display: inline-flex;
+    width: 28px;
+    height: 28px;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 8px;
+    border-radius: 50%;
+    background: #fff;
+    color: #111827;
+    font-size: 14px;
+    font-weight: 900;
+  }
+
+  .agenda__body strong {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 22px;
+    line-height: 1.2;
+  }
+
+  .agenda__body p {
+    margin: 0;
+    font-size: 16px;
+    line-height: 1.4;
+  }
+
+  .agenda__translation {
+    display: grid;
+    gap: 4px;
+    margin-top: 8px;
+    font-size: 12px;
+    line-height: 1.35;
+    opacity: 0.82;
+  }
+
+  @media (max-width: 900px) {
+    .agenda__grid {
+      gap: 12px;
+    }
+
+    .agenda__card img {
+      height: 152px;
+    }
+
+    .agenda__body strong {
+      font-size: 19px;
+    }
+
+    .agenda__body p {
+      font-size: 14px;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .agenda {
+      padding: 18px 14px 20px;
+      text-align: left;
+    }
+
+    .agenda__hero {
+      font-size: 42px;
+    }
+
+    .agenda h1 {
+      font-size: 30px;
+    }
+
+    .agenda__subtitle p {
+      font-size: 15px;
+    }
+
+    .agenda__subtitle span {
+      font-size: 12px;
+    }
+
+    .agenda__grid {
+      grid-template-columns: 1fr;
+      margin-top: 14px;
+    }
+
+    .agenda__card img {
+      height: 150px;
+    }
+
+    .agenda__body strong {
+      font-size: 17px;
+    }
+
+    .agenda__body p {
+      font-size: 14px;
+    }
+
+    .agenda__translation {
+      font-size: 11px;
+    }
   }
 </style>

@@ -79,3 +79,9 @@ export const deleteSlideFromSession = async (slug: string, slideId: string) => {
 
   await writeSlideState(state);
 };
+
+export const resetSlideState = async (slug: string) => {
+  const state = await readSlideState();
+  delete state[slug];
+  await writeSlideState(state);
+};

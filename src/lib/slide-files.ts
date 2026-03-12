@@ -100,3 +100,51 @@ export const updateSlideMetaForSession = async (
 
   await fs.writeFile(filePath, nextSource, "utf-8");
 };
+
+export const importSlidesFromSession = async (targetSlug: string, sourceSlug: string) => {
+  if (!isLocalDev) {
+    throw new Error("slide_file_editing_unavailable");
+  }
+
+  const fs = await import("node:fs/promises");
+  const path = await import("node:path");
+  const slidesRoot = await getSlidesRoot();
+  const sourceDir = path.join(slidesRoot, sourceSlug.slice(0, 6));
+  const targetDir = path.join(slidesRoot, targetSlug.slice(0, 6));
+
+  const sourceEntries = await fs.readdir(sourceDir, { withFileTypes: true });
+  const sourceFiles = sourceEntries
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".astro"))
+    .map((entry) => entry.name)
+    .sort((left, right) => left.localeCompare(right, "ko"));
+
+  if (sourceFiles.length === 0) {
+    throw new Error("source_slides_not_found");
+  }
+
+  await fs.mkdir(targetDir, { recursive: true });
+  const targetEntries = await fs.readdir(targetDir, { withFileTypes: true });
+  const targetFiles = targetEntries
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".astro"))
+    .map((entry) => entry.name);
+  let nextOrder = targetFiles.reduce((max, fileName) => Math.max(max, parseOrder(fileName)), 0) + 1;
+
+  for (const fileName of sourceFiles) {
+    const sourcePath = path.join(sourceDir, fileName);
+    const targetFileName = `${String(nextOrder).padStart(2, "0")}_slide.astro`;
+    const targetPath = path.join(targetDir, targetFileName);
+    const source = await fs.readFile(sourcePath, "utf-8");
+    const nextSource = source
+      .replace(/(title:\s*)(["'])(.*?)\2/, `$1"슬라이드 ${nextOrder}"`)
+      .replace(/(order:\s*)\d+/, `$1${nextOrder}`);
+
+    await fs.writeFile(targetPath, nextSource, "utf-8");
+    nextOrder += 1;
+  }
+
+  return {
+    imported: sourceFiles.length,
+    sourceSlug,
+    targetSlug,
+  };
+};
