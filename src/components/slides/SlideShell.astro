@@ -23,26 +23,19 @@ const shellStyle =
 
 <section class:list={["slide-shell", backgroundImage && "has-background", shellClass]} style={shellStyle}>
   {overlay ? <div class="slide-shell__overlay"></div> : null}
-  <div class:list={["slide-frame", frameClass]}>
+  <div class:list={["slide-frame", "is-full-bleed", frameClass]}>
     <slot />
   </div>
 </section>
 
 <style>
   .slide-shell {
-    --slide-shell-padding: clamp(16px, 2.6vw, 32px);
-    --slide-frame-width: min(1100px, calc(100vw - (var(--slide-shell-padding) * 2)));
-    --slide-frame-height: calc(100vh - (var(--slide-shell-padding) * 2));
     width: 100%;
-    min-height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    min-height: 100vh;
     position: relative;
     overflow: hidden;
-    padding: var(--slide-shell-padding);
-    background: linear-gradient(180deg, #0f172a 0%, #172033 100%);
-    color: #fff;
+    background: linear-gradient(180deg, #f4f1eb 0%, #e9eef5 100%);
+    color: #2f3949;
   }
 
   .slide-shell.has-background {
@@ -55,32 +48,28 @@ const shellStyle =
   .slide-shell__overlay {
     position: absolute;
     inset: 0;
-    background: linear-gradient(180deg, rgba(15, 23, 42, 0.44), rgba(15, 23, 42, 0.84));
+    background: linear-gradient(180deg, rgba(244, 239, 232, 0.12), rgba(215, 226, 240, 0.22));
   }
 
   .slide-frame {
     position: relative;
     z-index: 1;
-    width: var(--slide-frame-width);
-    min-height: min(640px, var(--slide-frame-height));
-    max-width: var(--slide-frame-width);
-    border-radius: 28px;
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    background: rgba(15, 23, 42, 0.56);
-    backdrop-filter: blur(12px);
-    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+    width: 100%;
+    min-height: 100vh;
     overflow: visible;
+  }
+
+  .slide-frame.is-full-bleed {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
   }
 
   @media (max-width: 640px) {
     .slide-shell {
-      --slide-shell-padding: 12px;
-      --slide-frame-width: calc(100vw - 24px);
-    }
-
-    .slide-frame {
-      min-height: 0;
-      border-radius: 20px;
+      min-height: 100vh;
     }
   }
 </style>

@@ -1,0 +1,48 @@
+---
+import SlideShell from "../../components/slides/SlideShell.astro";
+
+export const slideMeta = {
+  title: "슬라이드 4",
+  helpLabel: "준비 중",
+  order: 4,
+};
+---
+
+<SlideShell>
+  <div class="placeholder">
+    <span class="placeholder__eyebrow">260321 Computer A 02</span>
+    <h1>슬라이드 4</h1>
+    <p>내용 준비 중</p>
+  </div>
+</SlideShell>
+
+<style>
+  .placeholder {
+    min-height: 100%;
+    display: grid;
+    place-items: center;
+    text-align: center;
+    gap: 10px;
+    padding: 24px;
+  }
+
+  .placeholder__eyebrow {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.7;
+  }
+
+  .placeholder h1 {
+    margin: 0;
+    font-size: clamp(42px, 6vw, 72px);
+    line-height: 1.1;
+  }
+
+  .placeholder p {
+    margin: 0;
+    font-size: clamp(18px, 2.2vw, 28px);
+    opacity: 0.86;
+  }
+</style>

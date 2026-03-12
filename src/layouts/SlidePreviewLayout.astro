@@ -40,12 +40,22 @@ const {
     <style>
       :root {
         color-scheme: only light;
-        --preview-bg: #e7edf5;
-        --preview-panel: rgba(255, 255, 255, 0.82);
-        --preview-line: rgba(42, 58, 85, 0.14);
+        --preview-bg: #ece8e1;
+        --preview-panel: rgba(251, 249, 245, 0.96);
+        --preview-line: rgba(79, 72, 62, 0.14);
+        --preview-line-strong: rgba(79, 72, 62, 0.18);
         --preview-text: #2b3850;
         --preview-muted: #6d7b92;
         --preview-accent: #1f4ac9;
+        --preview-back-bg: #fff3e8;
+        --preview-back-line: #f2c9a1;
+        --preview-back-text: #a85a16;
+        --preview-full-bg: #e8f1ff;
+        --preview-full-line: #b7ccff;
+        --preview-full-text: #1f4ac9;
+        --preview-prev-bg: #f2f4f8;
+        --preview-prev-line: #d4dae5;
+        --preview-prev-text: #51607a;
       }
 
       * {
@@ -61,8 +71,9 @@ const {
       body {
         margin: 0;
         background:
-          radial-gradient(circle at top left, rgba(31, 74, 201, 0.12), transparent 32%),
-          linear-gradient(180deg, #f4f7fb 0%, var(--preview-bg) 100%);
+          radial-gradient(circle at top left, rgba(44, 91, 160, 0.1), transparent 34%),
+          radial-gradient(circle at top right, rgba(214, 175, 120, 0.14), transparent 28%),
+          linear-gradient(180deg, #f4f1eb 0%, var(--preview-bg) 100%);
         color: var(--preview-text);
         font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
       }
@@ -77,24 +88,32 @@ const {
         position: sticky;
         top: 0;
         z-index: 10;
-        display: flex;
-        justify-content: space-between;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: start;
         gap: 16px;
-        align-items: center;
-        padding: 14px 20px;
+        padding: 10px 18px;
         border-bottom: 1px solid var(--preview-line);
-        background: rgba(244, 247, 251, 0.9);
+        background: rgba(244, 241, 235, 0.92);
         backdrop-filter: blur(16px);
       }
 
       .preview-meta {
+        min-width: 0;
         display: grid;
-        gap: 4px;
+        gap: 2px;
+      }
+
+      .preview-title-row {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        min-width: 0;
       }
 
       .preview-eyebrow {
         color: var(--preview-muted);
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 700;
         letter-spacing: 0.08em;
         text-transform: uppercase;
@@ -104,40 +123,73 @@ const {
         margin: 0;
         font-size: 18px;
         font-weight: 800;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       .preview-subtitle {
         color: var(--preview-muted);
-        font-size: 13px;
+        font-size: 12px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       .preview-actions {
+        flex: none;
         display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
         align-items: center;
+        gap: 8px;
+        flex-wrap: nowrap;
+        justify-self: end;
+        align-self: start;
       }
 
-      .preview-chip,
       .preview-button {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-height: 38px;
-        padding: 0 14px;
+        min-height: 34px;
+        min-width: 34px;
+        max-width: 34px;
+        padding: 0 10px;
         border-radius: 999px;
-        border: 1px solid var(--preview-line);
+        border: 1px solid var(--preview-line-strong);
         background: var(--preview-panel);
         color: inherit;
         text-decoration: none;
-        font-size: 13px;
+        font: inherit;
+        font-size: 12px;
         font-weight: 700;
+        line-height: 1;
+        white-space: nowrap;
+        cursor: pointer;
+        transition:
+          background-color 140ms ease,
+          border-color 140ms ease,
+          color 140ms ease;
       }
 
-      .preview-button {
-        background: #fff;
-        font: inherit;
-        cursor: pointer;
+      .preview-button svg {
+        width: 16px;
+        height: 16px;
+        stroke: currentColor;
+        stroke-width: 2;
+        fill: none;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .preview-button:hover {
+        background: #ffffff;
+        border-color: rgba(31, 74, 201, 0.24);
+      }
+
+      .preview-button.is-disabled,
+      .preview-button[aria-disabled="true"] {
+        opacity: 0.38;
+        pointer-events: none;
       }
 
       .preview-button.is-primary {
@@ -146,17 +198,55 @@ const {
         color: #fff;
       }
 
+      .preview-button.is-primary:hover {
+        border-color: transparent;
+        background: #1840b0;
+      }
+
+      .preview-button.is-back {
+        background: var(--preview-back-bg);
+        border-color: var(--preview-back-line);
+        color: var(--preview-back-text);
+      }
+
+      .preview-button.is-back:hover {
+        background: #ffecd8;
+        border-color: #ebb784;
+      }
+
+      .preview-button.is-fullscreen {
+        background: var(--preview-full-bg);
+        border-color: var(--preview-full-line);
+        color: var(--preview-full-text);
+      }
+
+      .preview-button.is-fullscreen:hover {
+        background: #dbe8ff;
+        border-color: #9ebdff;
+      }
+
+      .preview-button.is-prev {
+        background: var(--preview-prev-bg);
+        border-color: var(--preview-prev-line);
+        color: var(--preview-prev-text);
+      }
+
+      .preview-button.is-prev:hover {
+        background: #e9edf4;
+        border-color: #c4ccd9;
+      }
+
       .preview-stage {
         padding: 18px;
       }
 
       .preview-canvas {
         width: min(1280px, calc(100vw - 36px));
-        min-height: calc(100vh - 120px);
+        min-height: calc(100vh - 108px);
         margin: 0 auto;
         border-radius: 24px;
         border: 1px solid var(--preview-line);
-        background: rgba(255, 255, 255, 0.4);
+        background: rgba(255, 251, 245, 0.66);
         box-shadow: 0 28px 80px rgba(24, 35, 58, 0.12);
         overflow: hidden;
       }
@@ -175,13 +265,16 @@ const {
 
       @media (max-width: 920px) {
         .preview-topbar {
-          padding: 12px 14px;
-          flex-direction: column;
-          align-items: stretch;
+          padding: 10px 12px;
         }
 
-        .preview-actions {
-          justify-content: space-between;
+        .preview-title-row {
+          flex-wrap: wrap;
+          gap: 6px;
+        }
+
+        .preview-button {
+          flex: 0 0 auto;
         }
 
         .preview-stage {
@@ -190,8 +283,26 @@ const {
 
         .preview-canvas {
           width: min(100vw - 24px, 1280px);
-          min-height: calc(100vh - 160px);
+          min-height: calc(100vh - 150px);
           border-radius: 18px;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .preview-topbar {
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 10px;
+        }
+
+        .preview-actions {
+          gap: 6px;
+        }
+
+        .preview-button {
+          flex-basis: auto;
+          min-height: 32px;
+          min-width: 32px;
+          max-width: 32px;
         }
       }
     </style>
@@ -202,8 +313,10 @@ const {
         !embed && (
           <header class="preview-topbar">
             <div class="preview-meta">
-              <span class="preview-eyebrow">슬라이드 편집 화면</span>
-              <h1 class="preview-title">{title}</h1>
+              <div class="preview-title-row">
+                <span class="preview-eyebrow">편집</span>
+                <h1 class="preview-title">{title}</h1>
+              </div>
               <span class="preview-subtitle">
                 {sessionLabel} · {currentIndex} / {total}
                 {fileName ? ` · ${fileName}` : ""}
@@ -211,23 +324,44 @@ const {
             </div>
 
             <div class="preview-actions">
-              <a class="preview-button" href={backHref}>
-                수업 페이지
+              <a class="preview-button is-back" href={backHref} aria-label="수업 페이지로 돌아가기" title="수업 페이지로 돌아가기">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M10 7l-5 5 5 5" />
+                  <path d="M19 12H6" />
+                </svg>
               </a>
-              <button class="preview-button" type="button" data-preview-fullscreen>
-                전체화면
+              <button class="preview-button is-fullscreen" type="button" data-preview-fullscreen aria-label="전체화면" title="전체화면">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M8 3H3v5" />
+                  <path d="M16 3h5v5" />
+                  <path d="M21 16v5h-5" />
+                  <path d="M8 21H3v-5" />
+                </svg>
               </button>
-              <span class="preview-chip">수정하면 바로 반영</span>
-              {prevLink ? (
-                <a class="preview-button" href={prevLink.href}>
-                  {prevLink.label}
-                </a>
-              ) : null}
-              {nextLink ? (
-                <a class="preview-button is-primary" href={nextLink.href}>
-                  {nextLink.label}
-                </a>
-              ) : null}
+              <a
+                class:list={["preview-button", "is-prev", !prevLink && "is-disabled"]}
+                href={prevLink?.href}
+                aria-label={prevLink?.label ?? "이전 슬라이드 없음"}
+                title={prevLink?.label ?? "이전 슬라이드 없음"}
+                aria-disabled={prevLink ? undefined : "true"}
+                tabindex={prevLink ? undefined : "-1"}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M15 18l-6-6 6-6" />
+                </svg>
+              </a>
+              <a
+                class:list={["preview-button", "is-primary", !nextLink && "is-disabled"]}
+                href={nextLink?.href}
+                aria-label={nextLink?.label ?? "다음 슬라이드 없음"}
+                title={nextLink?.label ?? "다음 슬라이드 없음"}
+                aria-disabled={nextLink ? undefined : "true"}
+                tabindex={nextLink ? undefined : "-1"}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M9 6l6 6-6 6" />
+                </svg>
+              </a>
             </div>
           </header>
         )
@@ -245,7 +379,8 @@ const {
 
       const syncFullscreenLabel = () => {
         if (!(fullscreenButton instanceof HTMLButtonElement)) return;
-        fullscreenButton.textContent = document.fullscreenElement ? "전체화면 종료" : "전체화면";
+        fullscreenButton.setAttribute("aria-label", document.fullscreenElement ? "전체화면 종료" : "전체화면");
+        fullscreenButton.setAttribute("title", document.fullscreenElement ? "전체화면 종료" : "전체화면");
       };
 
       syncFullscreenLabel();

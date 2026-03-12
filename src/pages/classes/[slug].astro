@@ -1,7 +1,7 @@
 ---
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { sessions } from "../../data/schedule";
-import { getSlidesForSession, loadComponentSlides } from "../../lib/lesson-materials";
+import { getSlidesForSession } from "../../lib/lesson-materials";
 import type { SlideDocument } from "../../lib/lesson-materials";
 import { getNote } from "../../lib/notes";
 import { withBase } from "../../lib/site";
@@ -20,11 +20,11 @@ const material = session
   ? await getSlidesForSession(slug)
   : { slides: [], slidesDir: undefined, source: "none" as const };
 const slides = material.slides ?? [];
-const initialBadgeLabel = slides[0]?.helpLabel || "Slide Lesson";
 const isComponentSlideDeck = material.source === "component";
 type ComponentSlide = Extract<SlideDocument, { kind: "component" }>;
 const componentSlides = slides.filter((slide): slide is ComponentSlide => slide.kind === "component");
-const loadedComponentSlides = isComponentSlideDeck ? await loadComponentSlides(slug) : [];
+const startClassHref = componentSlides[0] ? withBase(componentSlides[0].previewPath) : undefined;
+const slideApiPath = withBase(`/api/slides/${slug}/`);
 ---
 
 <BaseLayout title={session ? session.label : "수업을 찾을 수 없습니다"}>
@@ -46,20 +46,21 @@ const loadedComponentSlides = isComponentSlideDeck ? await loadComponentSlides(s
             <summary class="note-panel__summary">
               <div>
                 <h2>수업 메모</h2>
-                <p class="section-copy">필요할 때만 열어서 적고, 저장하면 다시 접힙니다.</p>
+                <p class="section-copy">필요한 내용만 적어두고, 닫아두면 다시 깔끔해집니다.</p>
               </div>
               <div class="note-panel__meta">
                 {
                   note?.updatedAt ? (
                     <span class="section-meta">
-                      마지막 저장 {new Intl.DateTimeFormat("ko-KR", {
+                      마지막 저장{" "}
+                      {new Intl.DateTimeFormat("ko-KR", {
                         dateStyle: "medium",
                         timeStyle: "short",
                         timeZone: "Asia/Seoul",
                       }).format(new Date(note.updatedAt))}
                     </span>
                   ) : (
-                    <span class="section-meta">아직 저장된 메모 없음</span>
+                    <span class="section-meta">아직 저장한 메모 없음</span>
                   )
                 }
                 <span class="note-panel__arrow" aria-hidden="true"></span>
@@ -72,7 +73,7 @@ const loadedComponentSlides = isComponentSlideDeck ? await loadComponentSlides(s
                   class="note-textarea"
                   name="content"
                   rows={14}
-                  placeholder="오늘 수업 흐름, 주제, 아이디어, 준비할 것들을 자유롭게 적어두세요."
+                  placeholder="오늘 수업 이름, 주제, 아이디어, 준비할 것들을 자유롭게 적어보세요."
                 >{note?.content ?? ""}</textarea>
                 <div class="note-actions">
                   <p class="save-notice" data-note-status aria-live="polite"></p>
@@ -87,33 +88,80 @@ const loadedComponentSlides = isComponentSlideDeck ? await loadComponentSlides(s
           <section class="panel material-panel">
             <div class="section-head">
               <h2>슬라이드</h2>
-              <span class="section-badge">{componentSlides.length}장</span>
             </div>
-
-            <p class="section-copy">
-              `수업 시작`은 발표용 전체 슬라이드를 열고 바로 전체화면으로 들어갑니다. 아래 목록에서 각 슬라이드를 누르면 장별 편집 화면이 열립니다.
-            </p>
 
             <div class="workspace-panel">
               <div class="workspace-panel__meta">
-                <strong>수업과 편집을 분리했습니다</strong>
-                <span>수업할 때는 `수업 시작`, 수정할 때는 아래 슬라이드 목록에서 원하는 장을 누르면 됩니다.</span>
+                <strong>슬라이드 목록</strong>
               </div>
-              <button class="workspace-panel__button" type="button" data-open-class-player>수업 시작</button>
+              <div class="workspace-panel__actions">
+                <span class="section-badge" data-slide-count-badge>{componentSlides.length}장</span>
+                {startClassHref ? (
+                  <a class="workspace-panel__button" href={startClassHref} data-start-class-button>
+                    수업 시작
+                  </a>
+                ) : null}
+              </div>
             </div>
 
-            <div class="component-slide-list">
+            <div
+              class="component-slide-list"
+              data-slide-list
+              data-slide-api={slideApiPath}
+            >
               {componentSlides.map((slide, index) => (
-                <a class="component-slide-card" href={withBase(slide.previewPath)}>
-                  <span class="component-slide-card__index">{String(index + 1).padStart(2, "0")}</span>
+                <article
+                  class="component-slide-card"
+                  draggable="true"
+                  data-slide-card
+                  data-slide-id={slide.slideId}
+                  data-slide-href={withBase(slide.previewPath)}
+                >
+                  <button
+                    class="component-slide-card__handle"
+                    type="button"
+                    data-slide-handle
+                    aria-label={`${slide.title} 순서 이동`}
+                    title="드래그해서 순서 이동"
+                  >
+                    ⋮⋮
+                  </button>
+                  <span class="component-slide-card__index" data-slide-order-label>
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
                   <div class="component-slide-card__body">
-                    <strong>{slide.title}</strong>
-                    <span>{slide.helpLabel || "슬라이드 편집 화면 열기"}</span>
+                      <input
+                        class="component-slide-card__title-input is-plain"
+                        type="text"
+                        value={slide.title}
+                        data-slide-title-input
+                        aria-label="슬라이드 제목"
+                      />
+                      <input
+                        class="component-slide-card__help-input is-plain"
+                        type="text"
+                        value={slide.helpLabel || ""}
+                        placeholder="설명 입력"
+                        data-slide-help-input
+                        aria-label="슬라이드 설명"
+                      />
                   </div>
-                  <span class="component-slide-card__action">편집</span>
-                </a>
+                  <div class="component-slide-card__actions">
+                    <a class="component-slide-card__button is-edit" href={withBase(slide.previewPath)}>
+                      편집
+                    </a>
+                    <button class="component-slide-card__button is-delete" type="button" data-slide-delete>
+                      삭제
+                    </button>
+                  </div>
+                </article>
               ))}
             </div>
+
+            <button class="component-slide-add" type="button" data-slide-add aria-label="슬라이드 추가">
+              +
+            </button>
+            <p class="component-slide-list__empty" data-slide-empty hidden>표시할 슬라이드가 없습니다.</p>
           </section>
         ) : (
           <section class="panel empty-panel">
@@ -122,69 +170,6 @@ const loadedComponentSlides = isComponentSlideDeck ? await loadComponentSlides(s
             <a class="empty-panel__link" href={withBase("/classes/")}>강의 목록으로 돌아가기</a>
           </section>
         )}
-
-        {
-          isComponentSlideDeck && loadedComponentSlides.length > 0 ? (
-            <div class="class-player-modal" hidden data-class-player-modal>
-              <div class="class-player" data-slide-player data-fullscreen-shell>
-                <header class="class-player__topbar">
-                  <div class="class-player__meta">
-                    <span class="class-player__eyebrow">수업 모드</span>
-                    <strong class="class-player__title" data-slide-current-title>
-                      {loadedComponentSlides[0]?.meta.title ?? session.label}
-                    </strong>
-                    <span class="class-player__subtitle">
-                      {session.label} · <span data-page-info>1 / {loadedComponentSlides.length}</span>
-                    </span>
-                  </div>
-                  <div class="class-player__actions">
-                    <span class="class-player__badge" data-slide-badge>{initialBadgeLabel}</span>
-                    <button class="class-player__button" type="button" data-fullscreen-btn>전체화면</button>
-                    <button class="class-player__button class-player__button--secondary" type="button" data-close-class-player>
-                      닫기
-                    </button>
-                  </div>
-                </header>
-
-                <main class="class-player__stage">
-                  <div class="class-player__viewport">
-                    <div class="class-player__track" data-slide-track>
-                      {loadedComponentSlides.map((slide, index) => {
-                        const SlideComponent = slide.component;
-
-                        return (
-                          <section
-                            class="class-player__slide"
-                            data-slide-index={index}
-                            data-slide-badge-label={slide.meta.helpLabel || ""}
-                            data-slide-title={slide.meta.title}
-                            aria-label={`슬라이드 ${index + 1}`}
-                          >
-                            <div class="class-player__canvas">
-                              <div class="class-player__slide-meta">
-                                <span>{String(slide.meta.order).padStart(2, "0")}</span>
-                                <span>{slide.meta.fileName}</span>
-                              </div>
-                              <SlideComponent />
-                            </div>
-                          </section>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </main>
-
-                <nav class="class-player__controls">
-                  <button class="class-player__button" type="button" data-slide-prev>이전</button>
-                  <div class="class-player__controls-center">
-                    <div class="class-player__dots" data-slide-dots></div>
-                  </div>
-                  <button class="class-player__button" type="button" data-slide-next>다음</button>
-                </nav>
-              </div>
-            </div>
-          ) : null
-        }
       </>
     ) : (
       <section class="panel">
@@ -199,10 +184,11 @@ const loadedComponentSlides = isComponentSlideDeck ? await loadComponentSlides(s
   const notePanel = document.querySelector("[data-note-panel]");
   const noteForm = document.querySelector("[data-note-form]");
   const noteStatus = document.querySelector("[data-note-status]");
-  const classPlayerModal = document.querySelector("[data-class-player-modal]");
-  const classPlayerShell = classPlayerModal?.querySelector("[data-fullscreen-shell]");
-  const openClassPlayerButton = document.querySelector("[data-open-class-player]");
-  const closeClassPlayerButton = classPlayerModal?.querySelector("[data-close-class-player]");
+  const slideList = document.querySelector("[data-slide-list]");
+  const slideCountBadge = document.querySelector("[data-slide-count-badge]");
+  const emptySlideMessage = document.querySelector("[data-slide-empty]");
+  const startClassButton = document.querySelector("[data-start-class-button]");
+  const addSlideButton = document.querySelector("[data-slide-add]");
 
   if (notePanel instanceof HTMLDetailsElement && noteForm instanceof HTMLFormElement) {
     noteForm.addEventListener("submit", async (event) => {
@@ -243,115 +229,334 @@ const loadedComponentSlides = isComponentSlideDeck ? await loadComponentSlides(s
     });
   }
 
-  const openClassPlayer = async () => {
-    if (!(classPlayerModal instanceof HTMLElement) || !(classPlayerShell instanceof HTMLElement)) {
-      return;
-    }
+  if (slideList instanceof HTMLElement) {
+    const apiPath = slideList.dataset.slideApi || "";
+    let draggedCard = null;
 
-    classPlayerModal.hidden = false;
-    document.body.classList.add("class-player-open");
+    const getCards = () =>
+      Array.from(slideList.querySelectorAll("[data-slide-card]")).filter(
+        (entry) => entry instanceof HTMLElement,
+      );
 
-    try {
-      await classPlayerShell.requestFullscreen();
-    } catch {
-      // Fullscreen can fail if the browser blocks it; the overlay remains open.
-    }
-  };
+    const syncSlideState = () => {
+      const cards = getCards();
 
-  const closeClassPlayer = async () => {
-    if (!(classPlayerModal instanceof HTMLElement)) {
-      return;
-    }
-
-    if (document.fullscreenElement) {
-      await document.exitFullscreen();
-    }
-
-    classPlayerModal.hidden = true;
-    document.body.classList.remove("class-player-open");
-  };
-
-  openClassPlayerButton?.addEventListener("click", () => {
-    void openClassPlayer();
-  });
-
-  closeClassPlayerButton?.addEventListener("click", () => {
-    void closeClassPlayer();
-  });
-
-  const players = document.querySelectorAll("[data-slide-player]");
-
-  players.forEach((player) => {
-    const track = player.querySelector("[data-slide-track]");
-    const slides = Array.from(player.querySelectorAll("[data-slide-index]"));
-    const dots = player.querySelector("[data-slide-dots]");
-    const prevButton = player.querySelector("[data-slide-prev]");
-    const nextButton = player.querySelector("[data-slide-next]");
-    const pageInfo = player.querySelector("[data-page-info]");
-    const fullscreenButton = player.querySelector("[data-fullscreen-btn]");
-    const badge = player.querySelector("[data-slide-badge]");
-    const currentTitle = player.querySelector("[data-slide-current-title]");
-    const fullscreenShell = player.closest("[data-fullscreen-shell]");
-    let current = 0;
-
-    const goTo = (index) => {
-      current = Math.max(0, Math.min(index, slides.length - 1));
-      if (track instanceof HTMLElement) {
-        track.style.transform = `translateX(-${current * 100}%)`;
-      }
-      dots?.querySelectorAll(".deck-dot-btn").forEach((dot, dotIndex) => {
-        dot.classList.toggle("active", dotIndex === current);
+      cards.forEach((card, index) => {
+        const orderLabel = card.querySelector("[data-slide-order-label]");
+        if (orderLabel instanceof HTMLElement) {
+          orderLabel.textContent = String(index + 1).padStart(2, "0");
+        }
       });
-      if (prevButton instanceof HTMLButtonElement) prevButton.disabled = current === 0;
-      if (nextButton instanceof HTMLButtonElement) nextButton.disabled = current === slides.length - 1;
-      if (pageInfo) pageInfo.textContent = `${current + 1} / ${slides.length}`;
-      if (badge) badge.textContent = slides[current]?.dataset.slideBadgeLabel || "Slide Lesson";
-      if (currentTitle) currentTitle.textContent = slides[current]?.dataset.slideTitle || "";
+
+      if (slideCountBadge instanceof HTMLElement) {
+        slideCountBadge.textContent = `${cards.length}장`;
+      }
+
+      if (emptySlideMessage instanceof HTMLElement) {
+        emptySlideMessage.hidden = cards.length > 0;
+      }
+
+      if (startClassButton instanceof HTMLAnchorElement) {
+        const firstCard = cards[0];
+        const href = firstCard?.dataset.slideHref;
+
+        if (href) {
+          startClassButton.href = href;
+          startClassButton.removeAttribute("aria-disabled");
+          startClassButton.classList.remove("is-disabled");
+        } else {
+          startClassButton.removeAttribute("href");
+          startClassButton.setAttribute("aria-disabled", "true");
+          startClassButton.classList.add("is-disabled");
+        }
+      }
     };
 
-    if (dots instanceof HTMLElement) {
-      dots.innerHTML = "";
-      slides.forEach((_, index) => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "deck-dot-btn";
-        button.addEventListener("click", () => goTo(index));
-        dots.appendChild(button);
+    const persistOrder = async () => {
+      if (!apiPath) return;
+
+      const order = getCards()
+        .map((card) => card.dataset.slideId)
+        .filter((entry): entry is string => Boolean(entry));
+
+      await fetch(apiPath, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          action: "reorder",
+          order,
+        }),
       });
-    }
+    };
 
-    prevButton?.addEventListener("click", () => goTo(current - 1));
-    nextButton?.addEventListener("click", () => goTo(current + 1));
+    const getDropTarget = (clientY) => {
+      const cards = getCards().filter((card) => card !== draggedCard);
 
-    fullscreenButton?.addEventListener("click", async () => {
-      const target = fullscreenShell instanceof HTMLElement ? fullscreenShell : player;
+      return cards.reduce(
+        (closest, card) => {
+          const box = card.getBoundingClientRect();
+          const offset = clientY - box.top - box.height / 2;
 
-      if (document.fullscreenElement === target) {
-        await document.exitFullscreen();
-      } else if (target instanceof HTMLElement) {
-        await target.requestFullscreen();
+          if (offset < 0 && offset > closest.offset) {
+            return { offset, element: card };
+          }
+
+          return closest;
+        },
+        { offset: Number.NEGATIVE_INFINITY, element: null },
+      ).element;
+    };
+
+    slideList.addEventListener("dragstart", (event) => {
+      const target = event.target;
+      const card = target instanceof HTMLElement ? target.closest("[data-slide-card]") : null;
+      if (!(card instanceof HTMLElement)) return;
+
+      draggedCard = card;
+      card.classList.add("is-dragging");
+      event.dataTransfer?.setData("text/plain", card.dataset.slideId || "");
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = "move";
       }
     });
 
-    goTo(0);
-  });
+    slideList.addEventListener("dragend", async () => {
+      if (draggedCard instanceof HTMLElement) {
+        draggedCard.classList.remove("is-dragging");
+      }
 
-  document.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape") return;
-    if (!(classPlayerModal instanceof HTMLElement) || classPlayerModal.hidden) return;
-    if (document.fullscreenElement) return;
-    void closeClassPlayer();
+      draggedCard = null;
+      syncSlideState();
+      await persistOrder();
+    });
+
+    slideList.addEventListener("dragover", (event) => {
+      if (!(draggedCard instanceof HTMLElement)) return;
+
+      event.preventDefault();
+      const target = getDropTarget(event.clientY);
+
+      if (target instanceof HTMLElement) {
+        slideList.insertBefore(draggedCard, target);
+      } else {
+        slideList.appendChild(draggedCard);
+      }
+    });
+
+    slideList.addEventListener("click", async (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+
+      const deleteButton = target.closest("[data-slide-delete]");
+      const card = target.closest("[data-slide-card]");
+
+      if (!(card instanceof HTMLElement)) return;
+
+      if (deleteButton instanceof HTMLElement) {
+        const slideId = card.dataset.slideId;
+        if (!slideId || !apiPath) return;
+
+        const confirmed = window.confirm("이 슬라이드를 이 수업 목록에서 삭제할까요?");
+        if (!confirmed) return;
+
+        const response = await fetch(apiPath, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            action: "delete",
+            slideId,
+          }),
+        });
+
+        if (!response.ok) {
+          window.alert("삭제에 실패했습니다.");
+          return;
+        }
+
+        card.remove();
+        syncSlideState();
+      }
+    });
+
+    const saveTimers = new WeakMap();
+
+    const setCardDirty = (card, dirty) => {
+      if (!(card instanceof HTMLElement)) return;
+      card.dataset.dirty = dirty ? "true" : "false";
+    };
+
+    const saveCardMeta = async (card) => {
+      if (!(card instanceof HTMLElement)) return;
+
+      const slideId = card.dataset.slideId;
+      if (!slideId || !apiPath) return;
+
+      const titleInput = card.querySelector("[data-slide-title-input]");
+      const helpInput = card.querySelector("[data-slide-help-input]");
+
+      if (!(titleInput instanceof HTMLInputElement) || !(helpInput instanceof HTMLInputElement)) {
+        return;
+      }
+
+      const response = await fetch(apiPath, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          action: "update-meta",
+          slideId,
+          title: titleInput.value.trim() || "제목 없음",
+          helpLabel: helpInput.value.trim(),
+        }),
+      });
+
+      if (!response.ok) {
+        window.alert("텍스트 저장에 실패했습니다.");
+        return;
+      }
+
+      titleInput.value = titleInput.value.trim() || "제목 없음";
+      helpInput.value = helpInput.value.trim();
+      setCardDirty(card, false);
+    };
+
+    slideList.addEventListener("input", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement)) return;
+
+      const card = target.closest("[data-slide-card]");
+      if (!(card instanceof HTMLElement)) return;
+      setCardDirty(card, true);
+
+      const previousTimer = saveTimers.get(card);
+      if (previousTimer) {
+        window.clearTimeout(previousTimer);
+      }
+
+      const nextTimer = window.setTimeout(() => {
+        saveCardMeta(card);
+        saveTimers.delete(card);
+      }, 450);
+
+      saveTimers.set(card, nextTimer);
+    });
+
+    slideList.addEventListener("keydown", async (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement)) return;
+      if (!(event.key === "Enter" && (event.metaKey || event.ctrlKey))) return;
+
+      const card = target.closest("[data-slide-card]");
+      await saveCardMeta(card);
+    });
+
+    slideList.addEventListener("focusout", async (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement)) return;
+
+      const card = target.closest("[data-slide-card]");
+      if (!(card instanceof HTMLElement) || card.dataset.dirty !== "true") return;
+
+      const previousTimer = saveTimers.get(card);
+      if (previousTimer) {
+        window.clearTimeout(previousTimer);
+        saveTimers.delete(card);
+      }
+
+      await saveCardMeta(card);
+    });
+
+    syncSlideState();
+  }
+
+  addSlideButton?.addEventListener("click", async () => {
+    if (!(addSlideButton instanceof HTMLButtonElement) || !(slideList instanceof HTMLElement)) return;
+
+    const apiPath = slideList.dataset.slideApi || "";
+    if (!apiPath) return;
+
+    addSlideButton.disabled = true;
+
+    try {
+      const response = await fetch(apiPath, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          action: "add",
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("add_failed");
+      }
+
+      window.location.reload();
+    } catch {
+      window.alert("슬라이드 추가에 실패했습니다.");
+      addSlideButton.disabled = false;
+    }
   });
 </script>
 
 <style>
-  .lesson-header { background: linear-gradient(180deg, #ffffff 0%, #fcfaf7 100%); }
-  .lesson-header__heading { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
-  .lesson-header__schedule { color: #7d7568; font-size: 14px; font-weight: 700; }
-  .section-head { display: flex; justify-content: space-between; gap: 14px; align-items: center; margin-bottom: 12px; }
-  .section-copy { margin: 6px 0 0; color: #7b7b7b; font-size: 13px; }
-  .section-meta { color: #7b7b7b; font-size: 12px; font-weight: 700; }
-  .section-badge { padding: 8px 12px; border-radius: 999px; background: #eef6ff; color: #24538a; font-size: 12px; font-weight: 800; }
+  .lesson-header {
+    background: linear-gradient(180deg, #ffffff 0%, #fcfaf7 100%);
+  }
+
+  .lesson-header__heading {
+    display: flex;
+    gap: 12px;
+    align-items: baseline;
+    flex-wrap: wrap;
+  }
+
+  .lesson-header__schedule {
+    color: #7d7568;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .section-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+
+  .section-copy {
+    margin: 6px 0 0;
+    color: #7b7b7b;
+    font-size: 13px;
+    line-height: 1.7;
+  }
+
+  .section-meta {
+    color: #7b7b7b;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .section-badge {
+    padding: 8px 12px;
+    border-radius: 999px;
+    background: #eef6ff;
+    color: #24538a;
+    font-size: 12px;
+    font-weight: 800;
+  }
+
   .workspace-panel {
     display: flex;
     justify-content: space-between;
@@ -363,19 +568,30 @@ const loadedComponentSlides = isComponentSlideDeck ? await loadComponentSlides(s
     border-radius: 16px;
     background: linear-gradient(180deg, #f7fbff 0%, #eef5fc 100%);
   }
+
   .workspace-panel__meta {
     display: grid;
     gap: 6px;
   }
+
   .workspace-panel__meta strong {
     color: #25466f;
     font-size: 15px;
   }
+
   .workspace-panel__meta span {
     color: #5f7289;
     font-size: 13px;
     line-height: 1.65;
   }
+
+  .workspace-panel__actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
   .workspace-panel__button {
     flex: none;
     display: inline-flex;
@@ -392,23 +608,53 @@ const loadedComponentSlides = isComponentSlideDeck ? await loadComponentSlides(s
     border: 0;
     cursor: pointer;
   }
+
+  .workspace-panel__button.is-disabled,
+  .workspace-panel__button[aria-disabled="true"] {
+    opacity: 0.45;
+    pointer-events: none;
+  }
+
   .component-slide-list {
     display: grid;
     gap: 10px;
     margin-top: 14px;
   }
+
   .component-slide-card {
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
     gap: 14px;
     align-items: center;
     padding: 14px 16px;
     border: 1px solid #dde3ec;
     border-radius: 14px;
     background: #fafcff;
-    color: inherit;
-    text-decoration: none;
   }
+
+  .component-slide-card.is-dragging {
+    opacity: 0.5;
+  }
+
+  .component-slide-card__handle {
+    width: 34px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px dashed #c9d6e6;
+    border-radius: 10px;
+    background: #f6f9fd;
+    color: #7a8aa2;
+    font: inherit;
+    font-size: 16px;
+    cursor: grab;
+  }
+
+  .component-slide-card__handle:active {
+    cursor: grabbing;
+  }
+
   .component-slide-card__index {
     width: 34px;
     height: 34px;
@@ -421,33 +667,131 @@ const loadedComponentSlides = isComponentSlideDeck ? await loadComponentSlides(s
     font-size: 12px;
     font-weight: 800;
   }
+
   .component-slide-card__body {
     display: grid;
-    gap: 4px;
+    gap: 6px;
     min-width: 0;
   }
-  .component-slide-card__body strong {
-    font-size: 15px;
-    color: #2f3949;
+
+  .component-slide-card__title-input,
+  .component-slide-card__help-input {
+    width: 100%;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    padding: 4px 0;
+    outline: none;
   }
-  .component-slide-card__body span {
-    color: #758196;
-    font-size: 12px;
-    line-height: 1.5;
-  }
-  .component-slide-card__action {
-    color: #24538a;
-    font-size: 12px;
+
+  .component-slide-card__title-input {
+    font-size: 17px;
+    color: #183b68;
     font-weight: 800;
   }
+
+  .component-slide-card__help-input {
+    color: #5f7da6;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .component-slide-card__title-input::placeholder,
+  .component-slide-card__help-input::placeholder {
+    color: #95a1b2;
+  }
+
+  .component-slide-card__title-input.is-plain:hover,
+  .component-slide-card__help-input.is-plain:hover,
+  .component-slide-card__title-input.is-plain:focus,
+  .component-slide-card__help-input.is-plain:focus {
+    background: #ffffff;
+    box-shadow: inset 0 0 0 1px #d9e5f4;
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .component-slide-card__actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    flex-shrink: 0;
+  }
+
+  .component-slide-card__button {
+    min-height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 12px;
+    border-radius: 999px;
+    border: 1px solid #d6e0ec;
+    background: #ffffff;
+    color: #40526b;
+    text-decoration: none;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .component-slide-card__button.is-edit {
+    background: #edf5ff;
+    border-color: #d0e2ff;
+    color: #235091;
+  }
+
+  .component-slide-card__button.is-delete {
+    background: #fff2f2;
+    border-color: #f6cccc;
+    color: #ba3d3d;
+  }
+
+  .component-slide-list__empty {
+    margin: 12px 0 0;
+    color: #7b7b7b;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .component-slide-add {
+    width: 100%;
+    min-height: 52px;
+    margin-top: 12px;
+    border: 1px dashed #9fcbff;
+    border-radius: 16px;
+    background: linear-gradient(180deg, #eef8ff 0%, #dff1ff 100%);
+    color: #2670b9;
+    font: inherit;
+    font-size: 28px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .component-slide-add:hover {
+    background: linear-gradient(180deg, #e4f4ff 0%, #d1eaff 100%);
+    border-color: #7cb8ff;
+  }
+
+  .component-slide-add:disabled {
+    opacity: 0.6;
+    cursor: wait;
+  }
+
   .note-panel {
     border: 1px solid #dfdfdf;
     border-radius: 16px;
     background: #fcfcfc;
   }
+
   .note-panel[open] {
     background: #ffffff;
   }
+
   .note-panel__summary {
     display: flex;
     align-items: center;
@@ -457,214 +801,134 @@ const loadedComponentSlides = isComponentSlideDeck ? await loadComponentSlides(s
     cursor: pointer;
     list-style: none;
   }
+
   .note-panel__summary::-webkit-details-marker {
     display: none;
   }
+
   .note-panel__summary h2 {
     margin: 0;
   }
+
   .note-panel__meta {
     display: inline-flex;
     align-items: center;
     gap: 12px;
   }
+
   .note-panel__arrow::before {
-    content: "▸";
+    content: "▾";
     color: #6f6f6f;
     font-size: 14px;
   }
+
   .note-panel[open] .note-panel__arrow::before {
-    content: "▾";
+    content: "▴";
   }
+
   .note-panel__body {
     padding: 0 20px 20px;
     border-top: 1px solid #ececec;
   }
-  .note-form { display: grid; gap: 12px; padding-top: 16px; }
-  .note-textarea { width: 100%; min-height: 320px; padding: 16px; border: 1px solid #d6d6d6; border-radius: 14px; background: #fcfcfc; color: #3f3f3f; font: inherit; line-height: 1.7; resize: vertical; }
-  .note-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .save-notice { margin: 0; color: #1f6f43; font-size: 13px; font-weight: 700; }
-  .note-save { padding: 10px 18px; border: 0; border-radius: 12px; background: #1c2434; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
-  .note-save:disabled { opacity: 0.6; cursor: wait; }
-  .deck {
-    --deck-surface: rgba(255, 251, 245, 0.96);
-    --deck-line: #e4d7c6;
-    --deck-frame-max: min(1120px, calc(100vw - 96px));
-    --deck-frame-height: clamp(260px, calc(var(--deck-frame-max) * 9 / 16), 72vh);
+
+  .note-form {
     display: grid;
-    gap: 14px;
+    gap: 12px;
+    padding-top: 16px;
   }
-  .deck-topbar, .deck-controls, .deck-slide__inner { background: var(--deck-surface); border: 2px solid var(--deck-line); border-radius: 24px; }
-  .deck-topbar, .deck-controls { padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-  .deck-brand, .deck-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-  .deck-badge, .deck-top-btn, .deck-nav-btn { padding: 8px 12px; border-radius: 16px; font: inherit; }
-  .deck-top-btn, .deck-nav-btn, .empty-panel__link { background: #1c2434; color: #fff; border: 0; text-decoration: none; cursor: pointer; }
-  .deck-nav-btn { width: min(100%, 104px); max-width: 104px; text-align: center; }
-  .deck-viewport {
-    overflow: hidden;
-    border-radius: 34px;
-    width: min(100%, var(--deck-frame-max));
-    margin: 0 auto;
-  }
-  .deck-track { display: flex; transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1); }
-  .deck-slide { flex: 0 0 100%; }
-  .deck-slide__inner { overflow: hidden; }
-  .deck-slide__meta { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #ebebeb; background: #f8f8f8; color: #6f6f6f; font-size: 13px; }
-  .deck-slide__stage {
-    position: relative;
-    display: grid;
-    place-items: center;
+
+  .note-textarea {
     width: 100%;
-    height: var(--deck-frame-height);
-    overflow: hidden;
-    background: #e8edf3;
+    min-height: 320px;
+    padding: 16px;
+    border: 1px solid #d6d6d6;
+    border-radius: 14px;
+    background: #fcfcfc;
+    color: #3f3f3f;
+    font: inherit;
+    line-height: 1.7;
+    resize: vertical;
   }
-  .deck-slide__canvas {
-    width: 1600px;
-    height: 900px;
-    transform-origin: center center;
-    will-change: transform;
-  }
-  .deck-slide__canvas--component {
-    overflow: hidden;
-    background: #fff;
-  }
-  .deck-slide__frame {
-    display: block;
-    width: 1600px;
-    height: 900px;
-    border: 0;
-    background: #fff;
-  }
-  .deck-controls { display: grid; grid-template-columns: auto 1fr auto; align-items: center; }
-  .deck-controls__center {
-    min-width: 0;
+
+  .note-actions {
     display: flex;
-    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .save-notice {
+    margin: 0;
+    color: #1f6f43;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .note-save {
+    padding: 10px 18px;
+    border: 0;
+    border-radius: 12px;
+    background: #1c2434;
+    color: #fff;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .note-save:disabled {
+    opacity: 0.6;
+    cursor: wait;
+  }
+
+  .empty-panel {
+    text-align: center;
+  }
+
+  .empty-panel__link {
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-  }
-  .deck-dots { display: flex; justify-content: center; gap: 8px; }
-  .deck-dot-btn { width: 14px; height: 14px; border: 0; border-radius: 999px; background: #d3d9e4; cursor: pointer; }
-  .deck-dot-btn.active { width: 40px; background: #ff845d; }
-  .deck-page { color: #6f6f6f; font-size: 13px; font-weight: 700; text-align: center; }
-  .empty-panel { text-align: center; }
-  .class-player-modal {
-    position: fixed;
-    inset: 0;
-    z-index: 2000;
-    padding: 20px;
-    background: rgba(17, 24, 39, 0.7);
-    backdrop-filter: blur(12px);
-  }
-  .class-player-shell {
-    width: 100%;
-    height: 100%;
-    display: grid;
-    place-items: center;
-  }
-  .class-player-deck {
-    width: min(100%, 1480px);
-  }
-  .class-player-deck__topbar .deck-actions {
-    justify-content: flex-end;
-  }
-  .deck-top-btn--secondary {
-    background: #fff;
-    color: #1c2434;
-    border: 1px solid #cfd7e4;
-  }
-
-  .deck:fullscreen {
-    --deck-frame-max: min(1440px, calc(100vw - 48px));
-    --deck-frame-height: min(calc(100vh - 220px), calc(var(--deck-frame-max) * 9 / 16));
-    height: 100vh;
-    grid-template-rows: auto 1fr auto;
-    align-content: stretch;
-    justify-items: center;
-    padding: 20px;
-    background: linear-gradient(180deg, #f5ede2 0%, #efe3d1 100%);
-  }
-
-  .deck:fullscreen .deck-viewport {
-    width: min(100%, var(--deck-frame-max));
-    margin: 0 auto;
-    align-self: center;
-  }
-
-  .deck:fullscreen .deck-topbar,
-  .deck:fullscreen .deck-controls {
-    width: min(100%, var(--deck-frame-max));
-    padding: 10px 14px;
+    min-height: 42px;
+    margin-top: 16px;
+    padding: 0 16px;
+    border-radius: 999px;
+    background: #1c2434;
+    color: #fff;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 800;
   }
 
   @media (max-width: 900px) {
-    .deck {
-      --deck-frame-max: calc(100vw - 64px);
-      --deck-frame-height: clamp(220px, calc(var(--deck-frame-max) * 9 / 16), 62vh);
-    }
     .section-head,
     .note-panel__summary,
     .note-actions,
-    .deck-topbar,
     .workspace-panel {
       align-items: flex-start;
       flex-direction: column;
     }
-    .deck-dots {
-      justify-content: center;
-      flex-wrap: wrap;
-    }
-    .deck-slide__meta {
-      grid-template-columns: 1fr;
+
+    .workspace-panel__actions {
+      justify-content: flex-start;
     }
   }
 
-  @media (max-width: 640px) {
-    .deck {
-      --deck-frame-max: calc(100vw - 48px);
-      --deck-frame-height: clamp(190px, calc(var(--deck-frame-max) * 9 / 16), 52vh);
-    }
-    .deck-topbar,
-    .deck-controls,
-    .deck-slide__meta {
-      padding: 12px;
-    }
+  @media (max-width: 720px) {
     .component-slide-card {
-      grid-template-columns: auto 1fr;
-    }
-    .component-slide-card__action {
-      grid-column: 2;
-    }
-    .deck-topbar,
-    .deck-controls,
-    .deck-slide__inner {
-      border-radius: 18px;
-    }
-    .deck-viewport {
-      border-radius: 22px;
-    }
-    .class-player-modal {
+      grid-template-columns: auto auto 1fr;
+      align-items: start;
       padding: 12px;
     }
-    .deck-badge,
-    .deck-top-btn,
-    .deck-nav-btn {
-      width: min(100%, 104px);
-      justify-content: center;
-    }
-  }
 
-  @media (max-height: 760px) {
-    .deck {
-      --deck-frame-height: min(50vh, calc(var(--deck-frame-max) * 9 / 16));
+    .component-slide-card__actions {
+      grid-column: 1 / -1;
+      justify-content: flex-start;
     }
-  }
 
-  @media (max-height: 760px) and (min-width: 901px) {
-    .deck:fullscreen {
-      --deck-frame-height: min(calc(100vh - 205px), calc(var(--deck-frame-max) * 9 / 16));
+    .component-slide-card__handle,
+    .component-slide-card__index {
+      width: 30px;
+      height: 30px;
     }
   }
 </style>

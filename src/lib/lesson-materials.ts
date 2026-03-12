@@ -1,4 +1,5 @@
 import slideManifest from "../generated/slide-manifest";
+import { getSlideState } from "./slide-state";
 
 type ComponentSlideMeta = {
   title: string;
@@ -111,9 +112,34 @@ const getComponentSlidesForSlug = async (slug: string) => {
     }),
   );
 
-  return slides
+  const orderedSlides = slides
     .filter((entry): entry is ComponentSlideRecord & { componentKey: string } => Boolean(entry))
     .sort((left, right) => left.order - right.order);
+
+  const state = await getSlideState(slug);
+  const deleted = new Set(state.deleted);
+  const orderIndex = new Map(state.order.map((slideId, index) => [slideId, index]));
+
+  return orderedSlides
+    .filter((entry) => !deleted.has(entry.slideId))
+    .sort((left, right) => {
+      const leftIndex = orderIndex.get(left.slideId);
+      const rightIndex = orderIndex.get(right.slideId);
+
+      if (leftIndex === undefined && rightIndex === undefined) {
+        return left.order - right.order;
+      }
+
+      if (leftIndex === undefined) {
+        return 1;
+      }
+
+      if (rightIndex === undefined) {
+        return -1;
+      }
+
+      return leftIndex - rightIndex;
+    });
 };
 
 export const getLessonFolders = () =>
