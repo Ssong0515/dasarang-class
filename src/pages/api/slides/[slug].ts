@@ -29,71 +29,82 @@ export const POST: APIRoute = async ({ params, request }) => {
     ? (payload as { action: string }).action
     : "";
 
-  if (action === "reorder") {
-    const order = Array.isArray((payload as { order?: unknown[] }).order)
-      ? (payload as { order: unknown[] }).order.filter((entry): entry is string => typeof entry === "string")
-      : [];
+  try {
+    if (action === "reorder") {
+      const order = Array.isArray((payload as { order?: unknown[] }).order)
+        ? (payload as { order: unknown[] }).order.filter((entry): entry is string => typeof entry === "string")
+        : [];
 
-    await saveSlideOrder(slug, order);
+      await saveSlideOrder(slug, order);
 
-    return new Response(JSON.stringify({ ok: true }), {
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  if (action === "delete") {
-    const slideId = typeof (payload as { slideId?: unknown })?.slideId === "string"
-      ? (payload as { slideId: string }).slideId
-      : "";
-
-    if (!slideId) {
-      return new Response(JSON.stringify({ ok: false, error: "missing_slide_id" }), {
-        status: 400,
+      return new Response(JSON.stringify({ ok: true }), {
         headers: { "Content-Type": "application/json" },
       });
     }
 
-    await deleteSlideFromSession(slug, slideId);
+    if (action === "delete") {
+      const slideId = typeof (payload as { slideId?: unknown })?.slideId === "string"
+        ? (payload as { slideId: string }).slideId
+        : "";
 
-    return new Response(JSON.stringify({ ok: true }), {
-      headers: { "Content-Type": "application/json" },
-    });
-  }
+      if (!slideId) {
+        return new Response(JSON.stringify({ ok: false, error: "missing_slide_id" }), {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
 
-  if (action === "add") {
-    const created = await createSlideForSession(slug);
+      await deleteSlideFromSession(slug, slideId);
 
-    return new Response(JSON.stringify({ ok: true, created }), {
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  if (action === "update-meta") {
-    const slideId = typeof (payload as { slideId?: unknown })?.slideId === "string"
-      ? (payload as { slideId: string }).slideId
-      : "";
-    const title = typeof (payload as { title?: unknown })?.title === "string"
-      ? (payload as { title: string }).title
-      : undefined;
-    const helpLabel = typeof (payload as { helpLabel?: unknown })?.helpLabel === "string"
-      ? (payload as { helpLabel: string }).helpLabel
-      : undefined;
-
-    if (!slideId) {
-      return new Response(JSON.stringify({ ok: false, error: "missing_slide_id" }), {
-        status: 400,
+      return new Response(JSON.stringify({ ok: true }), {
         headers: { "Content-Type": "application/json" },
       });
     }
 
-    await updateSlideMetaForSession(slug, slideId, {
-      title,
-      helpLabel,
-    });
+    if (action === "add") {
+      const created = await createSlideForSession(slug);
 
-    return new Response(JSON.stringify({ ok: true }), {
-      headers: { "Content-Type": "application/json" },
-    });
+      return new Response(JSON.stringify({ ok: true, created }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "update-meta") {
+      const slideId = typeof (payload as { slideId?: unknown })?.slideId === "string"
+        ? (payload as { slideId: string }).slideId
+        : "";
+      const title = typeof (payload as { title?: unknown })?.title === "string"
+        ? (payload as { title: string }).title
+        : undefined;
+      const helpLabel = typeof (payload as { helpLabel?: unknown })?.helpLabel === "string"
+        ? (payload as { helpLabel: string }).helpLabel
+        : undefined;
+
+      if (!slideId) {
+        return new Response(JSON.stringify({ ok: false, error: "missing_slide_id" }), {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      await updateSlideMetaForSession(slug, slideId, {
+        title,
+        helpLabel,
+      });
+
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message === "slide_file_editing_unavailable") {
+      return new Response(JSON.stringify({ ok: false, error: "editing_unavailable_in_deployment" }), {
+        status: 501,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    throw error;
   }
 
   return new Response(JSON.stringify({ ok: false, error: "unknown_action" }), {

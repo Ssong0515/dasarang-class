@@ -1,8 +1,4 @@
-import fs from "node:fs/promises";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const slidesRoot = fileURLToPath(new URL("../slides", import.meta.url));
+const isLocalDev = import.meta.env.DEV;
 
 const parseOrder = (fileName: string) => {
   const match = fileName.match(/^(\d+)/);
@@ -22,7 +18,21 @@ export const slideMeta = {
 <SlideShell />
 `;
 
+const getSlidesRoot = async () => {
+  const { fileURLToPath } = await import("node:url");
+  return fileURLToPath(new URL("../slides", import.meta.url));
+};
+
+const escapeSingleQuoted = (value: string) => value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+
 export const createSlideForSession = async (slug: string) => {
+  if (!isLocalDev) {
+    throw new Error("slide_file_editing_unavailable");
+  }
+
+  const fs = await import("node:fs/promises");
+  const path = await import("node:path");
+  const slidesRoot = await getSlidesRoot();
   const dateKey = slug.slice(0, 6);
   const targetDir = path.join(slidesRoot, dateKey);
 
@@ -46,13 +56,18 @@ export const createSlideForSession = async (slug: string) => {
   };
 };
 
-const escapeSingleQuoted = (value: string) => value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
-
 export const updateSlideMetaForSession = async (
   slug: string,
   slideId: string,
   updates: { title?: string; helpLabel?: string },
 ) => {
+  if (!isLocalDev) {
+    throw new Error("slide_file_editing_unavailable");
+  }
+
+  const fs = await import("node:fs/promises");
+  const path = await import("node:path");
+  const slidesRoot = await getSlidesRoot();
   const dateKey = slug.slice(0, 6);
   const targetDir = path.join(slidesRoot, dateKey);
   const filePath = path.join(targetDir, `${slideId}.astro`);

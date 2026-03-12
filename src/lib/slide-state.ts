@@ -1,7 +1,3 @@
-import fs from "node:fs/promises";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
 export type SlideStateRecord = {
   order: string[];
   deleted: string[];
@@ -9,12 +5,20 @@ export type SlideStateRecord = {
 
 type SlideStateMap = Record<string, SlideStateRecord>;
 
-const getSlideStatePath = () => {
+const isLocalDev = import.meta.env.DEV;
+
+const getSlideStatePath = async () => {
+  const { fileURLToPath } = await import("node:url");
   return fileURLToPath(new URL("../../.local/slide-state.json", import.meta.url));
 };
 
 const readSlideState = async (): Promise<SlideStateMap> => {
-  const filePath = getSlideStatePath();
+  if (!isLocalDev) {
+    return {};
+  }
+
+  const fs = await import("node:fs/promises");
+  const filePath = await getSlideStatePath();
 
   try {
     const raw = await fs.readFile(filePath, "utf-8");
@@ -30,8 +34,15 @@ const readSlideState = async (): Promise<SlideStateMap> => {
 };
 
 const writeSlideState = async (state: SlideStateMap) => {
-  const filePath = getSlideStatePath();
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  if (!isLocalDev) {
+    return;
+  }
+
+  const fs = await import("node:fs/promises");
+  const { dirname } = await import("node:path");
+  const filePath = await getSlideStatePath();
+
+  await fs.mkdir(dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, JSON.stringify(state, null, 2), "utf-8");
 };
 
