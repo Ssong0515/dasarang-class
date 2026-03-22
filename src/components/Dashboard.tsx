@@ -62,7 +62,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             관리자 워크스페이스
           </span>
           <h1 className="text-6xl font-serif font-bold text-[#4A3728] mb-6 leading-tight">
-            다사랑 <span className="italic text-[#8B5E3C]">수업 허브</span>
+            다사랑 <span className="italic text-[#8B5E3C]">컴퓨터 수업</span>
           </h1>
           <p className="text-lg text-[#8B7E74] leading-relaxed mb-8">
             수업 콘텐츠를 미리 제작하고 라이브러리에 저장하세요. 각 클래스별 수업에서 저장된 콘텐츠를 불러와 사용할 수 있습니다.
