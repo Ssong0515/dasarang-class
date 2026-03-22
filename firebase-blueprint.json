@@ -1,0 +1,133 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "선생님 사용자 정보",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "teacher"] }
+      },
+      "required": ["email"]
+    },
+    "LessonFolder": {
+      "title": "Lesson Folder",
+      "description": "수업 폴더",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "ownerUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "ownerUid"]
+    },
+    "Lesson": {
+      "title": "Lesson",
+      "description": "개별 수업 정보",
+      "type": "object",
+      "properties": {
+        "folderId": { "type": "string" },
+        "folderName": { "type": "string" },
+        "date": { "type": "string" },
+        "title": { "type": "string" },
+        "ownerUid": { "type": "string" },
+        "attendance": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "studentName": { "type": "string" },
+              "status": { "type": "string", "enum": ["Present", "Absent", "Late"] },
+              "initials": { "type": "string" }
+            }
+          }
+        },
+        "resources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "type": { "type": "string", "enum": ["pdf", "link"] },
+              "info": { "type": "string" }
+            }
+          }
+        },
+        "memo": { "type": "string" },
+        "summary": {
+          "type": "object",
+          "properties": {
+            "text": { "type": "string" },
+            "attendanceRate": { "type": "string" },
+            "engagement": { "type": "string" },
+            "resourceCount": { "type": "string" }
+          }
+        }
+      },
+      "required": ["folderId", "date", "ownerUid"]
+    },
+    "Memo": {
+      "title": "Memo",
+      "description": "선생님 개인 메모",
+      "type": "object",
+      "properties": {
+        "content": { "type": "string" },
+        "date": { "type": "string" },
+        "ownerUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["content", "date", "ownerUid"]
+    },
+    "LessonCategory": {
+      "title": "Lesson Category",
+      "description": "수업 콘텐츠 카테고리",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "ownerUid": { "type": "string" }
+      },
+      "required": ["name", "ownerUid"]
+    },
+    "LessonContent": {
+      "title": "Lesson Content",
+      "description": "수업 콘텐츠 상세",
+      "type": "object",
+      "properties": {
+        "categoryId": { "type": "string" },
+        "title": { "type": "string" },
+        "html": { "type": "string" },
+        "ownerUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["categoryId", "title", "ownerUid"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "사용자 프로필"
+    },
+    "/folders/{folderId}": {
+      "schema": "LessonFolder",
+      "description": "수업 폴더 목록"
+    },
+    "/lessons/{lessonId}": {
+      "schema": "Lesson",
+      "description": "수업 상세 정보"
+    },
+    "/memos/{memoId}": {
+      "schema": "Memo",
+      "description": "개인 메모 목록"
+    },
+    "/categories/{categoryId}": {
+      "schema": "LessonCategory",
+      "description": "콘텐츠 카테고리"
+    },
+    "/contents/{contentId}": {
+      "schema": "LessonContent",
+      "description": "콘텐츠 상세"
+    }
+  }
+}

@@ -1,0 +1,119 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.ownerUid;
+    }
+
+    function isRequestOwner() {
+      return isAuthenticated() && request.auth.uid == request.resource.data.ownerUid;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "songes0515@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+    
+    function isValidUser(data) {
+      return data.keys().hasAll(['email']) &&
+             data.email is string &&
+             (!('displayName' in data) || data.displayName is string) &&
+             (!('role' in data) || data.role in ['admin', 'teacher']);
+    }
+
+    function isValidFolder(data) {
+      return data.keys().hasAll(['name', 'ownerUid']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.ownerUid == request.auth.uid;
+    }
+
+    function isValidLesson(data) {
+      return data.keys().hasAll(['folderId', 'date', 'ownerUid']) &&
+             data.folderId is string &&
+             data.date is string &&
+             data.ownerUid == request.auth.uid;
+    }
+
+    function isValidMemo(data) {
+      return data.keys().hasAll(['content', 'date', 'ownerUid']) &&
+             data.content is string && data.content.size() > 0 && data.content.size() < 5000 &&
+             data.date is string &&
+             data.ownerUid == request.auth.uid;
+    }
+
+    function isValidCategory(data) {
+      return data.keys().hasAll(['name', 'ownerUid']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.ownerUid == request.auth.uid;
+    }
+
+    function isValidContent(data) {
+      return data.keys().hasAll(['categoryId', 'title', 'ownerUid']) &&
+             data.categoryId is string &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             (!('html' in data) || data.html is string) &&
+             data.ownerUid == request.auth.uid;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create, update: if isOwner(userId) && isValidUser(request.resource.data);
+    }
+
+    match /folders/{folderId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAdmin() && isValidFolder(request.resource.data);
+      allow update: if isDocOwner() && isValidFolder(request.resource.data);
+      allow delete: if isDocOwner();
+    }
+
+    match /lessons/{lessonId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAdmin() && isValidLesson(request.resource.data);
+      allow update: if isDocOwner() && isValidLesson(request.resource.data);
+      allow delete: if isDocOwner();
+    }
+
+    match /memos/{memoId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAdmin() && isValidMemo(request.resource.data);
+      allow update: if isDocOwner() && isValidMemo(request.resource.data);
+      allow delete: if isDocOwner();
+    }
+
+    match /categories/{categoryId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAdmin() && isValidCategory(request.resource.data);
+      allow update: if isDocOwner() && isValidCategory(request.resource.data);
+      allow delete: if isDocOwner();
+    }
+
+    match /contents/{contentId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAdmin() && isValidContent(request.resource.data);
+      allow update: if isDocOwner() && isValidContent(request.resource.data);
+      allow delete: if isDocOwner();
+    }
+  }
+}

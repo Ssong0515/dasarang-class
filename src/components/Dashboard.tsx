@@ -6,9 +6,13 @@ import {
   StickyNote, 
   ArrowRight, 
   Star, 
-  Edit3 
+  Edit3,
+  Plus,
+  Users,
+  Library
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { Lesson } from '../types';
 
 const QuickNavCard: React.FC<{
   icon: React.ReactNode;
@@ -30,7 +34,21 @@ const QuickNavCard: React.FC<{
   </motion.div>
 );
 
-export const Dashboard: React.FC = () => {
+interface DashboardProps {
+  folders?: any[];
+  onStartLesson: () => void;
+  onSelectLesson: (lesson: Lesson) => void;
+  onManageFolder: (folder: any) => void;
+  onGoToLibrary: () => void;
+}
+
+export const Dashboard: React.FC<DashboardProps> = ({ 
+  folders = [], 
+  onStartLesson, 
+  onSelectLesson, 
+  onManageFolder,
+  onGoToLibrary
+}) => {
   return (
     <main className="flex-1 overflow-y-auto bg-[#FBFBFA] p-8">
       {/* Hero Section */}
@@ -41,14 +59,30 @@ export const Dashboard: React.FC = () => {
       >
         <div className="relative z-10 max-w-2xl">
           <span className="inline-block px-4 py-1.5 bg-[#EBD9C1] text-[#8B5E3C] text-[10px] font-bold uppercase tracking-widest rounded-full mb-6">
-            Instructor's Workspace
+            관리자 워크스페이스
           </span>
           <h1 className="text-6xl font-serif font-bold text-[#4A3728] mb-6 leading-tight">
             다사랑 <span className="italic text-[#8B5E3C]">수업 허브</span>
           </h1>
           <p className="text-lg text-[#8B7E74] leading-relaxed mb-8">
-            수업 폴더를 만들고, 그 안에서 인원, 리소스, 날짜 수업을 관리합니다. 선생님의 따뜻한 시선이 닿는 모든 공간을 함께합니다.
+            수업 콘텐츠를 미리 제작하고 라이브러리에 저장하세요. 각 클래스별 수업에서 저장된 콘텐츠를 불러와 사용할 수 있습니다.
           </p>
+          <div className="flex gap-4">
+            <button 
+              onClick={onGoToLibrary}
+              className="px-8 py-4 bg-[#8B5E3C] text-white rounded-2xl font-bold shadow-lg shadow-[#8B5E3C]/20 hover:bg-[#724D31] transition-all flex items-center gap-2"
+            >
+              <Library size={20} />
+              콘텐츠 라이브러리 가기
+            </button>
+            <button 
+              onClick={onStartLesson}
+              className="px-8 py-4 bg-white text-[#4A3728] rounded-2xl font-bold shadow-sm hover:shadow-md transition-all flex items-center gap-2 border border-[#E5E3DD]"
+            >
+              <Plus size={20} />
+              새 수업 배정하기
+            </button>
+          </div>
         </div>
 
         {/* Decorative Element */}
@@ -63,34 +97,95 @@ export const Dashboard: React.FC = () => {
         </div>
       </motion.section>
 
+      {/* Class Folders Section */}
+      <section className="mb-12">
+        <div className="flex items-center justify-between mb-8">
+          <h2 className="text-2xl font-serif font-bold text-[#4A3728]">수업 클래스 (인원 관리)</h2>
+          <span className="text-xs font-bold text-[#8B5E3C] bg-[#EBD9C1]/30 px-3 py-1 rounded-full">
+            {folders.length}개 클래스 운영 중
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {folders.map((folder, idx) => (
+            <motion.div
+              key={folder.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.1 }}
+              className="bg-white p-8 rounded-[40px] border border-[#E5E3DD] hover:border-[#8B5E3C] transition-all group relative overflow-hidden flex flex-col"
+            >
+              <div className="relative z-10 flex-1">
+                <div className="w-14 h-14 bg-[#F3F2EE] rounded-2xl flex items-center justify-center text-[#8B5E3C] mb-6 group-hover:bg-[#8B5E3C] group-hover:text-white transition-colors">
+                  <BookOpen size={28} />
+                </div>
+                <h3 className="text-2xl font-bold text-[#4A3728] mb-3">{folder.name}</h3>
+                <p className="text-sm text-[#8B7E74] mb-8">
+                  현재 등록된 학생: <span className="font-bold text-[#8B5E3C]">{folder.students?.length || 0}명</span>
+                </p>
+              </div>
+              
+              <div className="relative z-10 flex gap-3">
+                <button 
+                  onClick={() => onManageFolder(folder)}
+                  className="flex-1 py-3 bg-[#F3F2EE] text-[#8B5E3C] rounded-xl font-bold text-sm hover:bg-[#EBD9C1] transition-all flex items-center justify-center gap-2"
+                >
+                  <Users size={16} />
+                  인원 관리
+                </button>
+                <button 
+                  onClick={onStartLesson}
+                  className="w-12 h-12 bg-[#8B5E3C] text-white rounded-xl flex items-center justify-center hover:bg-[#724D31] transition-all"
+                >
+                  <Plus size={20} />
+                </button>
+              </div>
+              
+              <div className="absolute -right-4 -bottom-4 w-32 h-32 bg-[#F3F2EE]/50 rounded-full group-hover:bg-[#8B5E3C]/5 transition-colors"></div>
+            </motion.div>
+          ))}
+          {folders.length === 0 && (
+            <div className="col-span-full p-12 bg-white rounded-[32px] border border-dashed border-[#E5E3DD] text-center">
+              <p className="text-[#8B7E74]">아직 생성된 수업 클래스가 없습니다.</p>
+            </div>
+          )}
+        </div>
+      </section>
+
       {/* Quick Navigation */}
       <section className="mb-12">
         <div className="flex items-center justify-between mb-8">
           <h2 className="text-2xl font-serif font-bold text-[#4A3728]">빠른 이동</h2>
           <button className="text-[#8B5E3C] font-bold text-sm flex items-center gap-1 hover:underline">
-            See All Resources
+            모든 자료 보기
           </button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <QuickNavCard 
-            icon={<LayoutGrid size={24} />}
-            title="수업 폴더 전체 보기"
-            description="상위 수업 폴더를 만들고 날짜 수업을 추가합니다."
-            delay={0.1}
-          />
-          <QuickNavCard 
-            icon={<BookOpen size={24} />}
-            title="첫 수업 폴더 열기"
-            description="창의적 예술 교육 폴더를 바로 엽니다."
-            delay={0.2}
-          />
-          <QuickNavCard 
-            icon={<Calendar size={24} />}
-            title="최근 날짜 수업 열기"
-            description="2024-05-22 수업 상세 페이지로 이동합니다."
-            delay={0.3}
-          />
+          <div onClick={onStartLesson}>
+            <QuickNavCard 
+              icon={<LayoutGrid size={24} />}
+              title="수업 폴더 전체 보기"
+              description="상위 수업 폴더를 만들고 날짜 수업을 추가합니다."
+              delay={0.1}
+            />
+          </div>
+          <div onClick={onStartLesson}>
+            <QuickNavCard 
+              icon={<BookOpen size={24} />}
+              title="첫 수업 폴더 열기"
+              description="창의적 예술 교육 폴더를 바로 엽니다."
+              delay={0.2}
+            />
+          </div>
+          <div onClick={onStartLesson}>
+            <QuickNavCard 
+              icon={<Calendar size={24} />}
+              title="최근 날짜 수업 열기"
+              description="2024-05-22 수업 상세 페이지로 이동합니다."
+              delay={0.3}
+            />
+          </div>
           <QuickNavCard 
             icon={<StickyNote size={24} />}
             title="전체 메모 보기"
@@ -142,15 +237,15 @@ export const Dashboard: React.FC = () => {
             <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center mb-8">
               <Star size={24} className="fill-white" />
             </div>
-            <h2 className="text-2xl font-bold mb-4">Premium Tip</h2>
+            <h2 className="text-2xl font-bold mb-4">관리자 팁</h2>
             <p className="text-white/80 leading-relaxed text-sm">
-              자주 사용하는 자료는 수업 폴더 내 'Resources' 섹션에 고정하여 빠르게 접근할 수 있습니다.
+              자주 사용하는 자료는 수업 폴더 내 '수업 자료' 섹션에 고정하여 빠르게 접근할 수 있습니다.
             </p>
           </div>
 
           <div className="flex items-center justify-between mt-10">
             <button className="flex items-center gap-2 font-bold hover:gap-3 transition-all">
-              Learn more <ArrowRight size={18} />
+              더 알아보기 <ArrowRight size={18} />
             </button>
             <button className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20 transition-colors">
               <Edit3 size={20} />
