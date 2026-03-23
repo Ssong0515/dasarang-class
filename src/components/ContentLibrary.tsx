@@ -10,7 +10,8 @@ import {
   X,
   LayoutGrid,
   Type,
-  Code
+  Code,
+  Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { LessonCategory, LessonContent } from '../types';
@@ -20,13 +21,17 @@ interface ContentLibraryProps {
   contents: LessonContent[];
   onSaveCategory: (category: Partial<LessonCategory>) => Promise<void>;
   onSaveContent: (content: Partial<LessonContent>) => Promise<void>;
+  onDeleteCategory: (id: string) => Promise<void>;
+  onDeleteContent: (id: string) => Promise<void>;
 }
 
 export const ContentLibrary: React.FC<ContentLibraryProps> = ({
   categories,
   contents,
   onSaveCategory,
-  onSaveContent
+  onSaveContent,
+  onDeleteCategory,
+  onDeleteContent
 }) => {
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -125,7 +130,19 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                     <LayoutGrid size={18} />
                     <span className="font-bold">{category.name}</span>
                   </div>
-                  {expandedCategories.has(category.id) ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteCategory(category.id);
+                      }}
+                      className="p-2 text-[#A89F94] hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                      title="카테고리 삭제"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                    {expandedCategories.has(category.id) ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                  </div>
                 </button>
                 
                 <AnimatePresence>
@@ -140,10 +157,19 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                         <button 
                           key={content.id}
                           onClick={() => setEditingContent(content)}
-                          className="w-full flex items-center gap-3 p-3 text-sm text-[#8B7E74] hover:text-[#8B5E3C] hover:bg-[#FFF5E9] rounded-xl transition-all text-left"
+                          className="group w-full flex items-center gap-3 p-3 text-sm text-[#8B7E74] hover:text-[#8B5E3C] hover:bg-[#FFF5E9] rounded-xl transition-all text-left"
                         >
                           <FileText size={16} />
-                          <span className="truncate">{content.title}</span>
+                          <span className="truncate flex-1">{content.title}</span>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteContent(content.id);
+                            }}
+                            className="p-1.5 opacity-0 group-hover:opacity-100 text-[#A89F94] hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </button>
                       ))}
                       <button 
@@ -179,6 +205,18 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                     >
                       취소
                     </button>
+                    {editingContent.id && (
+                      <button 
+                        onClick={() => {
+                          onDeleteContent(editingContent.id!);
+                          setEditingContent(null);
+                        }}
+                        className="flex items-center gap-2 px-6 py-2.5 text-red-500 font-bold hover:bg-red-50 rounded-xl transition-all"
+                      >
+                        <Trash2 size={18} />
+                        삭제
+                      </button>
+                    )}
                     <button 
                       onClick={handleSaveContent}
                       className="flex items-center gap-2 px-8 py-2.5 bg-[#8B5E3C] text-white rounded-xl font-bold shadow-lg shadow-[#8B5E3C]/10 hover:bg-[#724D31] transition-all"

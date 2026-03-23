@@ -1,16 +1,21 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Calendar, StickyNote } from 'lucide-react';
+import { Plus, Trash2, Calendar, StickyNote, Users, BookOpen } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Memo } from '../types';
+import { Memo, LessonFolder, Lesson } from '../types';
 
 interface MemoSectionProps {
   memos: Memo[];
+  folders?: LessonFolder[];
+  lessons?: Lesson[];
   onAddMemo: (content: string) => void;
   onDeleteMemo: (id: string) => void;
 }
 
-export const MemoSection: React.FC<MemoSectionProps> = ({ memos, onAddMemo, onDeleteMemo }) => {
+type Tab = 'general' | 'lessons' | 'students';
+
+export const MemoSection: React.FC<MemoSectionProps> = ({ memos, folders = [], lessons = [], onAddMemo, onDeleteMemo }) => {
   const [newMemo, setNewMemo] = useState('');
+  const [activeTab, setActiveTab] = useState<Tab>('general');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,13 +57,44 @@ export const MemoSection: React.FC<MemoSectionProps> = ({ memos, onAddMemo, onDe
           </form>
         </section>
 
+        {/* Tabs */}
+        <div className="flex gap-4 border-b border-[#E5E3DD] mb-8">
+          {[
+            { id: 'general', label: '기타 메모', icon: StickyNote, count: memos.length },
+            { id: 'lessons', label: '수업별 메모', icon: BookOpen, count: lessons.filter(l => l.memo?.trim()).length },
+            { id: 'students', label: '학생별 메모', icon: Users, count: folders.reduce((acc, f) => acc + (f.students?.filter(s => s.memo?.trim()).length || 0), 0) },
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as Tab)}
+              className={`flex items-center gap-2 pb-4 font-bold text-sm transition-all relative ${
+                activeTab === tab.id ? 'text-[#8B5E3C]' : 'text-[#8B7E74] hover:text-[#4A3728]'
+              }`}
+            >
+              <tab.icon size={18} />
+              {tab.label}
+              <span className="ml-1 px-2 py-0.5 rounded-full bg-[#F3F2EE] text-[#A89F94] text-[10px]">&nbsp;{tab.count}&nbsp;</span>
+              {activeTab === tab.id && (
+                <motion.div 
+                  layoutId="activeMemoTab"
+                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#8B5E3C]" 
+                />
+              )}
+            </button>
+          ))}
+        </div>
+
         {/* Memo List */}
         <section className="space-y-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-xl font-serif font-bold text-[#4A3728]">저장된 메모 ({memos.length})</h3>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <AnimatePresence mode="wait">
+            {activeTab === 'general' && (
+              <motion.div
+                key="general"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="grid grid-cols-1 md:grid-cols-2 gap-6"
+              >
             <AnimatePresence mode="popLayout">
               {memos.map((memo) => (
                 <motion.div
@@ -90,17 +126,86 @@ export const MemoSection: React.FC<MemoSectionProps> = ({ memos, onAddMemo, onDe
                       {memo.content}
                     </p>
                   </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
+              </motion.div>
+                ))}
+              </AnimatePresence>
 
-            {memos.length === 0 && (
-              <div className="col-span-full py-20 flex flex-col items-center justify-center text-[#A89F94] bg-[#F3F2EE]/50 rounded-[32px] border-2 border-dashed border-[#E5E3DD]">
-                <StickyNote size={48} className="mb-4 opacity-20" />
-                <p>아직 저장된 메모가 없습니다.</p>
-              </div>
+              {memos.length === 0 && (
+                <div className="col-span-1 md:col-span-2 py-20 flex flex-col items-center justify-center text-[#A89F94] bg-[#F3F2EE]/50 rounded-[32px] border-2 border-dashed border-[#E5E3DD]">
+                  <StickyNote size={48} className="mb-4 opacity-20" />
+                  <p>아직 작성된 기타 메모가 없습니다.</p>
+                </div>
+              )}
+            </motion.div>
             )}
-          </div>
+
+            {activeTab === 'lessons' && (
+              <motion.div
+                key="lessons"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="grid grid-cols-1 md:grid-cols-2 gap-6"
+              >
+                {lessons.filter(l => l.memo?.trim()).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((lesson) => (
+                  <div key={lesson.id} className="bg-white p-6 rounded-[24px] border border-[#E5E3DD] shadow-sm relative">
+                    <div className="flex items-start justify-between mb-4">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="px-2 py-0.5 bg-[#FFF5E9] text-[#8B5E3C] text-[10px] font-bold rounded-full">{lesson.folderName}</span>
+                          <span className="text-[11px] font-bold text-[#A89F94] flex items-center gap-1"><Calendar size={12}/> {lesson.date}</span>
+                        </div>
+                        <h4 className="font-bold text-[#4A3728] text-sm">{lesson.title}</h4>
+                      </div>
+                    </div>
+                    <div className="flex gap-4">
+                      <div className="mt-1 text-[#EBD9C1]"><BookOpen size={20} /></div>
+                      <p className="text-[#4A3728] leading-relaxed whitespace-pre-wrap text-sm">{lesson.memo}</p>
+                    </div>
+                  </div>
+                ))}
+                {lessons.filter(l => l.memo?.trim()).length === 0 && (
+                  <div className="col-span-full py-20 flex flex-col items-center justify-center text-[#A89F94] bg-[#F3F2EE]/50 rounded-[32px] border-2 border-dashed border-[#E5E3DD]">
+                    <BookOpen size={48} className="mb-4 opacity-20" />
+                    <p>수업에 작성된 메모가 없습니다. (수업 대시보드에서 작성 가능)</p>
+                  </div>
+                )}
+              </motion.div>
+            )}
+
+            {activeTab === 'students' && (
+              <motion.div
+                key="students"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="grid grid-cols-1 md:grid-cols-2 gap-6"
+              >
+                {folders.flatMap(f => (f.students || []).filter(s => s.memo?.trim()).map(s => ({ ...s, folderName: f.name }))).map((student) => (
+                  <div key={student.id + student.folderName} className="bg-white p-6 rounded-[24px] border border-[#E5E3DD] shadow-sm relative">
+                    <div className="flex items-start justify-between mb-4">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="px-2 py-0.5 bg-[#EFF6FF] text-[#3B82F6] text-[10px] font-bold rounded-full">{student.folderName}</span>
+                        </div>
+                        <h4 className="font-bold text-[#4A3728] text-sm">{student.name} {student.age && `(${student.age}세)`}</h4>
+                      </div>
+                    </div>
+                    <div className="flex gap-4">
+                      <div className="mt-1 text-[#BFDBFE]"><Users size={20} /></div>
+                      <p className="text-[#4A3728] leading-relaxed whitespace-pre-wrap text-sm">{student.memo}</p>
+                    </div>
+                  </div>
+                ))}
+                {folders.flatMap(f => (f.students || []).filter(s => s.memo?.trim())).length === 0 && (
+                  <div className="col-span-full py-20 flex flex-col items-center justify-center text-[#A89F94] bg-[#F3F2EE]/50 rounded-[32px] border-2 border-dashed border-[#E5E3DD]">
+                    <Users size={48} className="mb-4 opacity-20" />
+                    <p>학생별로 작성된 메모가 없습니다. (학생 명단 관리에서 작성 가능)</p>
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </section>
       </div>
     </main>

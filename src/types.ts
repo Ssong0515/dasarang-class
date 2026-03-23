@@ -2,6 +2,9 @@ export interface Student {
   id: string;
   name: string;
   initials: string;
+  age?: string;
+  contact?: string;
+  memo?: string;
 }
 
 export interface AttendanceRecord {
@@ -40,6 +43,7 @@ export interface Lesson {
   title: string;
   folderName: string;
   contentId?: string; // Reference to LessonContent
+  contentIds?: string[]; // Multiple contents
   content?: string; // Cached or direct HTML content
   order?: number;
   attendance?: AttendanceRecord[];
@@ -60,6 +64,9 @@ export interface LessonFolder {
   students?: Student[];
   lessons?: Lesson[];
   isOpen?: boolean;
+  order?: number;
+  icon?: string;
+  color?: string;
 }
 
 export interface Memo {

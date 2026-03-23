@@ -24,7 +24,7 @@ service cloud.firestore {
     function isAdmin() {
       return isAuthenticated() && 
         (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-         (request.auth.token.email == "songes0515@gmail.com" && request.auth.token.email_verified == true));
+         request.auth.token.email == "songes0515@gmail.com");
     }
 
     // ===============================================================
@@ -82,38 +82,38 @@ service cloud.firestore {
     }
 
     match /folders/{folderId} {
-      allow read: if isDocOwner() || isAdmin();
+      allow read: if true;
       allow create: if isAdmin() && isValidFolder(request.resource.data);
-      allow update: if isDocOwner() && isValidFolder(request.resource.data);
-      allow delete: if isDocOwner();
+      allow update: if isDocOwner() || isAdmin();
+      allow delete: if isDocOwner() || isAdmin();
     }
 
     match /lessons/{lessonId} {
-      allow read: if isDocOwner() || isAdmin();
+      allow read: if true;
       allow create: if isAdmin() && isValidLesson(request.resource.data);
-      allow update: if isDocOwner() && isValidLesson(request.resource.data);
-      allow delete: if isDocOwner();
+      allow update: if isDocOwner() || isAdmin();
+      allow delete: if isDocOwner() || isAdmin();
     }
 
     match /memos/{memoId} {
       allow read: if isDocOwner() || isAdmin();
       allow create: if isAdmin() && isValidMemo(request.resource.data);
-      allow update: if isDocOwner() && isValidMemo(request.resource.data);
-      allow delete: if isDocOwner();
+      allow update: if isDocOwner() || isAdmin();
+      allow delete: if isDocOwner() || isAdmin();
     }
 
     match /categories/{categoryId} {
-      allow read: if isDocOwner() || isAdmin();
+      allow read: if true;
       allow create: if isAdmin() && isValidCategory(request.resource.data);
-      allow update: if isDocOwner() && isValidCategory(request.resource.data);
-      allow delete: if isDocOwner();
+      allow update: if isDocOwner() || isAdmin();
+      allow delete: if isDocOwner() || isAdmin();
     }
 
     match /contents/{contentId} {
-      allow read: if isDocOwner() || isAdmin();
+      allow read: if true;
       allow create: if isAdmin() && isValidContent(request.resource.data);
-      allow update: if isDocOwner() && isValidContent(request.resource.data);
-      allow delete: if isDocOwner();
+      allow update: if isDocOwner() || isAdmin();
+      allow delete: if isDocOwner() || isAdmin();
     }
   }
 }
