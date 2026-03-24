@@ -13,6 +13,7 @@ import {
   addDoc, 
   updateDoc, 
   deleteDoc,
+  writeBatch,
   serverTimestamp,
   orderBy,
   getDocFromServer
@@ -105,6 +106,7 @@ export {
   addDoc,
   updateDoc,
   deleteDoc,
+  writeBatch,
   serverTimestamp,
   orderBy
 };

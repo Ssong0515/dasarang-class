@@ -2,6 +2,7 @@ export interface Student {
   id: string;
   name: string;
   initials: string;
+  updatedAt: string;
   age?: string;
   contact?: string;
   memo?: string;

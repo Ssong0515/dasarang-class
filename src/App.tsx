@@ -23,6 +23,7 @@ import {
   getDocs,
   deleteDoc,
   doc,
+  writeBatch,
   orderBy,
   handleFirestoreError,
   OperationType
@@ -30,6 +31,18 @@ import {
 
 import { FolderDashboard } from './components/FolderDashboard';
 import { ContentLibrary } from './components/ContentLibrary';
+
+type GoogleSheetsSyncRequest = {
+  folderId: string;
+  mode?: 'upsert' | 'delete';
+  previousName?: string;
+  folderName?: string;
+};
+
+type GoogleSheetsSyncErrorState = {
+  message: string;
+  requests: GoogleSheetsSyncRequest[];
+};
 
 export default function App() {
   const [user, setUser] = useState<any>(null);
@@ -43,6 +56,8 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'admin' | 'student'>('student');
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
   const [activeFolder, setActiveFolder] = useState<LessonFolder | null>(null);
+  const [googleSheetsSyncError, setGoogleSheetsSyncError] = useState<GoogleSheetsSyncErrorState | null>(null);
+  const [isRetryingGoogleSheetsSync, setIsRetryingGoogleSheetsSync] = useState(false);
 
   // Login Modal State
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -52,6 +67,63 @@ export default function App() {
 
   const ADMIN_EMAIL = 'songes0515@gmail.com';
   const isAdmin = user?.email === ADMIN_EMAIL;
+
+  const postGoogleSheetsRequest = async (path: string, payload: unknown) => {
+    if (!user) {
+      throw new Error('Google Sheets 동기화를 위한 로그인 정보를 확인할 수 없습니다.');
+    }
+
+    const idToken = await user.getIdToken();
+    const response = await fetch(path, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorPayload = await response.json().catch(() => null);
+      throw new Error(errorPayload?.error || 'Google Sheets 동기화에 실패했습니다.');
+    }
+  };
+
+  const syncFoldersWithGoogleSheets = async (
+    requests: GoogleSheetsSyncRequest[],
+    options?: { isRetry?: boolean }
+  ) => {
+    if (!user || requests.length === 0) return;
+
+    if (options?.isRetry) {
+      setIsRetryingGoogleSheetsSync(true);
+    }
+
+    try {
+      await Promise.all(
+        requests.map((request) => postGoogleSheetsRequest('/api/google-sheets/sync-folder', request))
+      );
+      setGoogleSheetsSyncError(null);
+    } catch (error) {
+      setGoogleSheetsSyncError({
+        message: error instanceof Error ? error.message : 'Google Sheets 동기화에 실패했습니다.',
+        requests,
+      });
+    } finally {
+      if (options?.isRetry) {
+        setIsRetryingGoogleSheetsSync(false);
+      }
+    }
+  };
+
+  const triggerGoogleSheetsSync = (requests: GoogleSheetsSyncRequest[]) => {
+    void syncFoldersWithGoogleSheets(requests);
+  };
+
+  const handleRetryGoogleSheetsSync = async () => {
+    if (!googleSheetsSyncError) return;
+    await syncFoldersWithGoogleSheets(googleSheetsSyncError.requests, { isRetry: true });
+  };
 
   // Auth Listener
   useEffect(() => {
@@ -66,6 +138,13 @@ export default function App() {
     });
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setGoogleSheetsSyncError(null);
+      setIsRetryingGoogleSheetsSync(false);
+    }
+  }, [user]);
 
   // Data Listeners
   useEffect(() => {
@@ -223,17 +302,80 @@ export default function App() {
     if (!user) return;
     try {
       const folderRef = doc(db, 'folders', folderId);
-      await setDoc(folderRef, { students }, { merge: true });
+      const normalizedStudents = students.map((student) => ({
+        ...student,
+        updatedAt: student.updatedAt || new Date().toISOString(),
+      }));
+      await setDoc(folderRef, { students: normalizedStudents }, { merge: true });
+      triggerGoogleSheetsSync([{ folderId, mode: 'upsert' }]);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `folders/${folderId}`);
+    }
+  };
+
+  const handleMoveStudent = async (sourceFolderId: string, targetFolderId: string, studentId: string): Promise<void> => {
+    if (!user) return;
+
+    if (!targetFolderId) {
+      throw new Error('이동할 반을 선택해 주세요.');
+    }
+
+    if (sourceFolderId === targetFolderId) {
+      throw new Error('같은 반으로는 이동할 수 없습니다.');
+    }
+
+    const sourceFolder = folders.find(folder => folder.id === sourceFolderId);
+    const targetFolder = folders.find(folder => folder.id === targetFolderId);
+
+    if (!sourceFolder || !targetFolder) {
+      throw new Error('이동할 반 정보를 찾을 수 없습니다.');
+    }
+
+    const sourceStudents = sourceFolder.students || [];
+    const targetStudents = targetFolder.students || [];
+    const studentToMove = sourceStudents.find(student => student.id === studentId);
+
+    if (!studentToMove) {
+      throw new Error('이동할 학생 정보를 찾을 수 없습니다.');
+    }
+
+    if (targetStudents.some(student => student.id === studentId)) {
+      throw new Error('대상 반에 같은 학생이 이미 있습니다.');
+    }
+
+    try {
+      const movedStudent = {
+        ...studentToMove,
+        updatedAt: new Date().toISOString(),
+      };
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'folders', sourceFolderId), {
+        students: sourceStudents.filter(student => student.id !== studentId)
+      }, { merge: true });
+      batch.set(doc(db, 'folders', targetFolderId), {
+        students: [...targetStudents, movedStudent]
+      }, { merge: true });
+      await batch.commit();
+      triggerGoogleSheetsSync([
+        { folderId: sourceFolderId, mode: 'upsert' },
+        { folderId: targetFolderId, mode: 'upsert' },
+      ]);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `folders/${sourceFolderId} -> folders/${targetFolderId}`);
     }
   };
 
   const handleUpdateFolder = async (folderId: string, data: Partial<LessonFolder>) => {
     if (!user) return;
     try {
+      const previousFolder = folders.find(folder => folder.id === folderId);
       const folderRef = doc(db, 'folders', folderId);
       await setDoc(folderRef, data, { merge: true });
+      triggerGoogleSheetsSync([{
+        folderId,
+        mode: 'upsert',
+        previousName: previousFolder?.name,
+      }]);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `folders/${folderId}`);
     }
@@ -243,13 +385,14 @@ export default function App() {
     if (!user) return;
     try {
       const newOrder = folders.length;
-      await addDoc(collection(db, 'folders'), {
+      const folderRef = await addDoc(collection(db, 'folders'), {
         name: '새로운 클래스',
         ownerUid: user.uid,
         students: [],
         order: newOrder,
         createdAt: new Date().toISOString()
       });
+      triggerGoogleSheetsSync([{ folderId: folderRef.id, mode: 'upsert' }]);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'folders');
     }
@@ -258,6 +401,7 @@ export default function App() {
   const handleDeleteFolder = async (folderId: string) => {
     if (!user) return;
     try {
+      const folderToDelete = folders.find(folder => folder.id === folderId);
       // Delete all lessons belonging to this folder
       const folderLessons = lessons.filter(l => l.folderId === folderId);
       for (const lesson of folderLessons) {
@@ -268,6 +412,11 @@ export default function App() {
       // Navigate back to home
       setActiveFolder(null);
       setActiveTab('home');
+      triggerGoogleSheetsSync([{
+        folderId,
+        mode: 'delete',
+        folderName: folderToDelete?.name,
+      }]);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, 'folders/' + folderId);
     }
@@ -448,6 +597,21 @@ export default function App() {
         />
         <div className="flex-1 flex flex-col overflow-hidden">
           <Header user={user} />
+          {googleSheetsSyncError && (
+            <div className="mx-6 mt-4 flex items-center justify-between gap-4 rounded-[24px] border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900 shadow-sm">
+              <div>
+                <p className="font-bold">Google Sheets 동기화에 실패했습니다.</p>
+                <p className="text-amber-800/80">{googleSheetsSyncError.message}</p>
+              </div>
+              <button
+                onClick={() => void handleRetryGoogleSheetsSync()}
+                disabled={isRetryingGoogleSheetsSync}
+                className="shrink-0 rounded-xl bg-amber-500 px-4 py-2 font-bold text-white transition-all hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-amber-500"
+              >
+                {isRetryingGoogleSheetsSync ? '재시도 중...' : '다시 시도'}
+              </button>
+            </div>
+          )}
           {activeTab === 'home' && (
             <Dashboard 
               folders={folders}
@@ -476,6 +640,7 @@ export default function App() {
               contents={contents}
               initialLesson={selectedLesson}
               onSaveStudents={handleSaveStudents}
+              onMoveStudent={handleMoveStudent}
               onSelectLesson={handleSelectLesson}
               onCreateLesson={handleCreateLesson}
               onSaveLesson={handleSaveLesson}

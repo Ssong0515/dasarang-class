@@ -45,6 +45,7 @@ interface FolderDashboardProps {
   contents: LessonContent[];
   initialLesson?: Lesson | null;
   onSaveStudents: (folderId: string, students: Student[]) => Promise<void>;
+  onMoveStudent: (sourceFolderId: string, targetFolderId: string, studentId: string) => Promise<void>;
   onSelectLesson: (lesson: Lesson) => void;
   onCreateLesson: (folderId: string, date?: string) => void;
   onSaveLesson: (lesson: Lesson) => void;
@@ -93,6 +94,7 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
   contents,
   initialLesson,
   onSaveStudents,
+  onMoveStudent,
   onSelectLesson,
   onCreateLesson,
   onSaveLesson,
@@ -118,13 +120,16 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
   const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [studentSaveError, setStudentSaveError] = useState<string | null>(null);
-  const [studentAction, setStudentAction] = useState<'add' | 'edit' | 'delete' | null>(null);
+  const [studentAction, setStudentAction] = useState<'add' | 'edit' | 'delete' | 'move' | null>(null);
+  const [studentMoveTargets, setStudentMoveTargets] = useState<Record<string, string>>({});
   const [settingsDraft, setSettingsDraft] = useState({
     name: folder.name,
     color: folder.color || '#8B5E3C',
     icon: folder.icon || 'BookOpen'
   });
   const isSavingStudentAction = studentAction !== null;
+  const availableMoveFolders = folders.filter(candidate => candidate.id !== folder.id);
+  const defaultMoveTargetId = availableMoveFolders[0]?.id || '';
 
   // Sync draft when folder changes
   useEffect(() => {
@@ -138,6 +143,27 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
   useEffect(() => {
     setStudents(folder.students || []);
   }, [folder.students]);
+
+  useEffect(() => {
+    setStudentMoveTargets((previousTargets) => {
+      const nextTargets: Record<string, string> = {};
+
+      for (const student of students) {
+        const previousTarget = previousTargets[student.id];
+        if (
+          previousTarget &&
+          previousTarget !== folder.id &&
+          folders.some(candidate => candidate.id === previousTarget && candidate.id !== folder.id)
+        ) {
+          nextTargets[student.id] = previousTarget;
+        } else {
+          nextTargets[student.id] = defaultMoveTargetId;
+        }
+      }
+
+      return nextTargets;
+    });
+  }, [students, folders, folder.id, defaultMoveTargetId]);
 
   // Sync with initialLesson date if it changes
   useEffect(() => {
@@ -267,6 +293,7 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
       ...student,
       name,
       initials: getStudentInitials(name) || '??',
+      updatedAt: new Date().toISOString(),
       age: student.age?.trim() || undefined,
       contact: student.contact?.trim() || undefined,
       memo: student.memo?.trim() || undefined,
@@ -307,6 +334,7 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
       id: 'std-' + Date.now(),
       name,
       initials: '',
+      updatedAt: new Date().toISOString(),
       age: newStudentAge,
       contact: newStudentContact,
       memo: newStudentMemo,
@@ -365,6 +393,59 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
     if (!saved) return;
 
     setEditingStudent(null);
+  };
+
+  const handleMoveStudent = async (student: Student) => {
+    if (isSavingStudentAction) return;
+
+    const targetFolderId = studentMoveTargets[student.id] || defaultMoveTargetId;
+
+    if (!targetFolderId) {
+      setStudentSaveError('이동할 반을 선택해 주세요.');
+      return;
+    }
+
+    if (targetFolderId === folder.id) {
+      setStudentSaveError('같은 반으로는 이동할 수 없습니다.');
+      return;
+    }
+
+    const targetFolder = availableMoveFolders.find(candidate => candidate.id === targetFolderId);
+    if (!targetFolder) {
+      setStudentSaveError('이동할 반 정보를 찾을 수 없습니다.');
+      return;
+    }
+
+    if ((targetFolder.students || []).some(existingStudent => existingStudent.id === student.id)) {
+      setStudentSaveError('대상 반에 같은 학생이 이미 있습니다.');
+      return;
+    }
+
+    const shouldMove = window.confirm(`'${student.name}' 학생을 '${targetFolder.name}' 반으로 이동하시겠습니까?`);
+    if (!shouldMove) return;
+
+    setStudentSaveError(null);
+    setStudentAction('move');
+
+    try {
+      await onMoveStudent(folder.id, targetFolderId, student.id);
+      setStudents(currentStudents => currentStudents.filter(currentStudent => currentStudent.id !== student.id));
+      setExpandedStudent(currentExpandedStudent => currentExpandedStudent === student.id ? null : currentExpandedStudent);
+      setEditingStudent(currentEditingStudent => currentEditingStudent?.id === student.id ? null : currentEditingStudent);
+      setStudentMoveTargets((currentTargets) => {
+        const nextTargets = { ...currentTargets };
+        delete nextTargets[student.id];
+        return nextTargets;
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message && !error.message.startsWith('{')) {
+        setStudentSaveError(error.message);
+      } else {
+        setStudentSaveError('학생을 다른 반으로 이동하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+      }
+    } finally {
+      setStudentAction(null);
+    }
   };
 
   const getAttendanceStats = (lesson?: Lesson) => {
@@ -833,6 +914,41 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
                               {!student.age && !student.contact && !student.memo && (
                                 <p className="text-[#A89F94] italic">추가 정보 없음</p>
                               )}
+                              <div className="mt-4 border-t border-[#F3F2EE] pt-4">
+                                <p className="mb-2 text-[11px] font-bold tracking-wide text-[#A89F94]">반 이동</p>
+                                {availableMoveFolders.length > 0 ? (
+                                  <div className="flex gap-2">
+                                    <select
+                                      value={studentMoveTargets[student.id] || defaultMoveTargetId}
+                                      onChange={(e) => {
+                                        const nextTargetId = e.target.value;
+                                        setStudentMoveTargets((currentTargets) => ({
+                                          ...currentTargets,
+                                          [student.id]: nextTargetId
+                                        }));
+                                      }}
+                                      disabled={isSavingStudentAction}
+                                      className="flex-1 rounded-xl border border-[#E5E3DD] bg-white px-3 py-2 text-sm text-[#4A3728] outline-none focus:border-[#8B5E3C] disabled:cursor-not-allowed"
+                                    >
+                                      {availableMoveFolders.map(targetFolder => (
+                                        <option key={targetFolder.id} value={targetFolder.id}>
+                                          {targetFolder.name}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleMoveStudent(student)}
+                                      disabled={isSavingStudentAction || !(studentMoveTargets[student.id] || defaultMoveTargetId)}
+                                      className="px-4 py-2 bg-[#FFF5E9] text-[#8B5E3C] font-bold text-xs rounded-xl hover:bg-[#EBD9C1] transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-[#FFF5E9]"
+                                    >
+                                      {studentAction === 'move' ? '이동 중...' : '반 이동'}
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <p className="text-xs text-[#A89F94]">이동 가능한 다른 반이 없습니다.</p>
+                                )}
+                              </div>
                               <button
                                 disabled={isSavingStudentAction}
                                 onClick={() => setEditingStudent({ ...student })}
