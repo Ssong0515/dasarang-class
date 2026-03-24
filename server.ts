@@ -11,6 +11,7 @@ import {
   type FolderSyncPayload,
   type StudentSyncPayload,
 } from './server/googleSheetsSync';
+import { translateText, validateTranslatePayload } from './server/geminiTranslate';
 
 dotenv.config();
 
@@ -100,6 +101,18 @@ async function startServer() {
       res.status(500).json({
         error: error instanceof Error ? error.message : 'Failed to sync student to Google Sheets.',
       });
+    }
+  });
+
+  app.post(withBasePath(APP_BASE_PATH, '/api/translate'), async (req, res) => {
+    try {
+      const payload = validateTranslatePayload(req.body);
+      const translatedText = await translateText(payload);
+      res.json({ translatedText });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Translation failed.';
+      const statusCode = /required|must be/i.test(message) ? 400 : 500;
+      res.status(statusCode).json({ error: message });
     }
   });
 

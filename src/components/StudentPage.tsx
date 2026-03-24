@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { BookOpen, Calendar, Star, ArrowRight, Languages, ChevronDown, Sparkles, Loader2, FileText, ArrowLeft, GraduationCap, Code, Music, Brush, Globe, Cpu, Heart, Zap, Rocket, Lightbulb } from 'lucide-react';
 import { LessonFolder, Lesson, LessonCategory, LessonContent } from '../types';
+import { resolveAppPath } from '../utils/appPaths';
 
 const studentIconMap: Record<string, React.FC<{ size?: number; className?: string; style?: React.CSSProperties }>> = {
   BookOpen, GraduationCap, Code, Music, Brush, Globe, Cpu, Heart, Zap, Rocket, Star, Lightbulb
@@ -17,7 +18,6 @@ const FOLDER_COLORS: Record<string, string> = {
   '#14B8A6': '#F0FDFA',
   '#EF4444': '#FEF2F2',
 };
-import { GoogleGenAI } from "@google/genai";
 
 interface StudentPageProps {
   onBackToAdmin?: () => void;
@@ -30,6 +30,7 @@ interface StudentPageProps {
 }
 
 type Language = 'KO' | 'EN' | 'RU' | 'ZH';
+type TranslationLanguage = Exclude<Language, 'KO'>;
 
 const translations = {
   KO: {
@@ -123,6 +124,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({ onBackToAdmin, onLogin
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
   const [translatedContent, setTranslatedContent] = useState<string | null>(null);
   const [isTranslating, setIsTranslating] = useState(false);
+  const [translateError, setTranslateError] = useState<string | null>(null);
   const [selectedContent, setSelectedContent] = useState<LessonContent | null>(null);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
@@ -153,6 +155,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({ onBackToAdmin, onLogin
     setActiveFolderId(folderId);
     setSelectedContent(null);
     setTranslatedContent(null);
+    setTranslateError(null);
     setOpenDropdown(null);
   };
 
@@ -160,31 +163,58 @@ export const StudentPage: React.FC<StudentPageProps> = ({ onBackToAdmin, onLogin
     setActiveFolderId(null);
     setSelectedContent(null);
     setTranslatedContent(null);
+    setTranslateError(null);
     setOpenDropdown(null);
   };
 
-  const handleSmartTranslate = async (text: string) => {
-    if (lang === 'KO') {
+  const extractTextFromHtml = (html: string) => {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    return (doc.body.textContent || '')
+      .replace(/\r/g, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .replace(/[ \t]+\n/g, '\n')
+      .trim();
+  };
+
+  const handleSmartTranslate = async () => {
+    if (lang === 'KO' || !selectedContent) {
       setTranslatedContent(null);
+      setTranslateError(null);
       return;
     }
-    
+
+    const sourceText = extractTextFromHtml(selectedContent.html);
+    if (!sourceText) {
+      setTranslatedContent(null);
+      setTranslateError('번역할 텍스트가 없습니다.');
+      return;
+    }
+
     setIsTranslating(true);
+    setTranslateError(null);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `Translate the following Korean text into ${languageNames[lang]}. 
-        IMPORTANT: This is for a Korean language learning app. 
-        - DO NOT translate specific Korean vocabulary words or examples written in Hangul. 
-        - Keep them in their original Hangul form so students can learn them. 
-        - Only translate the surrounding explanation, context, and instructions. 
-        - If a word is in quotes like '사과', definitely keep it as '사과'.
-        Text to translate: ${text}`,
+      const response = await fetch(resolveAppPath('api/translate'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: sourceText,
+          targetLanguage: lang as TranslationLanguage,
+        }),
       });
-      setTranslatedContent(response.text || null);
+
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => null);
+        throw new Error(errorPayload?.error || 'Translation failed');
+      }
+
+      const payload = await response.json() as { translatedText?: string };
+      setTranslatedContent(payload.translatedText || null);
     } catch (error) {
       console.error("Translation failed", error);
+      setTranslateError(error instanceof Error ? error.message : '번역에 실패했습니다.');
+      setTranslatedContent(null);
     } finally {
       setIsTranslating(false);
     }
@@ -234,6 +264,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({ onBackToAdmin, onLogin
                       setLang(l);
                       setIsLangOpen(false);
                       setTranslatedContent(null);
+                      setTranslateError(null);
                     }}
                     className={`w-full text-left px-4 py-3 text-sm font-medium transition-colors hover:bg-[#FBFBFA] ${lang === l ? 'text-[#8B5E3C] bg-[#FFF5E9]' : 'text-[#4A3728]'}`}
                   >
@@ -356,6 +387,8 @@ export const StudentPage: React.FC<StudentPageProps> = ({ onBackToAdmin, onLogin
                               key={content.id}
                               onClick={() => {
                                 setSelectedContent(content);
+                                setTranslatedContent(null);
+                                setTranslateError(null);
                                 setOpenDropdown(null);
                               }}
                               className={`w-full text-left px-5 py-3.5 flex items-center gap-3 transition-all ${
@@ -390,7 +423,42 @@ export const StudentPage: React.FC<StudentPageProps> = ({ onBackToAdmin, onLogin
                       </div>
                       <h3 className="text-lg font-bold text-[#4A3728]">{selectedContent.title}</h3>
                     </div>
+                    {lang !== 'KO' && (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => void handleSmartTranslate()}
+                          disabled={isTranslating}
+                          className="inline-flex items-center gap-2 rounded-xl bg-[#8B5E3C] px-4 py-2 text-sm font-bold text-white transition-all hover:bg-[#724D31] disabled:cursor-wait disabled:opacity-70"
+                        >
+                          {isTranslating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                          <span>{isTranslating ? t.translating : t.translateBtn}</span>
+                        </button>
+                        {translatedContent && (
+                          <button
+                            onClick={() => {
+                              setTranslatedContent(null);
+                              setTranslateError(null);
+                            }}
+                            className="rounded-xl border border-[#E5E3DD] px-4 py-2 text-sm font-bold text-[#8B7E74] transition-all hover:bg-[#FBFBFA] hover:text-[#4A3728]"
+                          >
+                            {t.original}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
+                  {(translatedContent || translateError) && (
+                    <div className="border-b border-[#F3F2EE] bg-[#FBFBFA] px-8 py-6">
+                      <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-[#A89F94]">
+                        {languageNames[lang]}
+                      </p>
+                      {translatedContent ? (
+                        <p className="whitespace-pre-wrap text-sm leading-7 text-[#4A3728]">{translatedContent}</p>
+                      ) : (
+                        <p className="text-sm font-medium text-[#C84B31]">{translateError}</p>
+                      )}
+                    </div>
+                  )}
                   <iframe
                     srcDoc={selectedContent.html + `<script>
                       function sendHeight() {

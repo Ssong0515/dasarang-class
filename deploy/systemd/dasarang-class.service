@@ -1,10 +1,10 @@
 [Unit]
-Description=gemini_class_room Node server
+Description=dasarang-class Node server
 After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/gemini-class-room/current
+WorkingDirectory=/opt/dasarang-class/current
 ExecStart=/usr/bin/npm run start
 Restart=always
 RestartSec=5

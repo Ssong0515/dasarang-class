@@ -1,6 +1,6 @@
 # Lightsail deployment for `/dasarang-class`
 
-This app is not a static-only site. Production requires the Node/Express server in [server.ts](/C:/dev/gemini_class_room/server.ts), because the Google Sheets sync APIs must stay live.
+This app is not a static-only site. Production requires the Node/Express server in `server.ts`, because the Google Sheets sync APIs and Gemini translation API must stay live.
 
 Current target host:
 - Server: `15.164.105.38`
@@ -35,17 +35,17 @@ sudo systemctl status dasarang-center --no-pager
 ## 2. Deploy the app files
 
 ```bash
-sudo mkdir -p /opt/gemini-class-room
-sudo chown -R ubuntu:ubuntu /opt/gemini-class-room
-git clone https://github.com/Ssong0515/gemini_class_room.git /opt/gemini-class-room/current
-cd /opt/gemini-class-room/current
+sudo mkdir -p /opt/dasarang-class
+sudo chown -R ubuntu:ubuntu /opt/dasarang-class
+git clone https://github.com/Ssong0515/dasarang-class.git /opt/dasarang-class/current
+cd /opt/dasarang-class/current
 npm ci
 ```
 
 For updates:
 
 ```bash
-cd /opt/gemini-class-room/current
+cd /opt/dasarang-class/current
 git pull origin main
 npm ci
 ```
@@ -55,7 +55,7 @@ npm ci
 Copy the template and fill the required values:
 
 ```bash
-cd /opt/gemini-class-room/current
+cd /opt/dasarang-class/current
 cp .env.example .env
 chmod 600 .env
 ```
@@ -73,7 +73,7 @@ Required values:
 ## 4. Build and test the app directly
 
 ```bash
-cd /opt/gemini-class-room/current
+cd /opt/dasarang-class/current
 npm run build
 npm run start
 ```
@@ -94,26 +94,26 @@ Stop the foreground process after the health check.
 
 ## 5. Register the systemd service
 
-Use [deploy/systemd/gemini-class-room.service](/C:/dev/gemini_class_room/deploy/systemd/gemini-class-room.service):
+Use `deploy/systemd/dasarang-class.service`:
 
 ```bash
-cd /opt/gemini-class-room/current
-sudo cp deploy/systemd/gemini-class-room.service /etc/systemd/system/gemini-class-room.service
+cd /opt/dasarang-class/current
+sudo cp deploy/systemd/dasarang-class.service /etc/systemd/system/dasarang-class.service
 sudo systemctl daemon-reload
-sudo systemctl enable gemini-class-room
-sudo systemctl restart gemini-class-room
-sudo systemctl status gemini-class-room --no-pager
+sudo systemctl enable dasarang-class
+sudo systemctl restart dasarang-class
+sudo systemctl status dasarang-class --no-pager
 ```
 
 Log check:
 
 ```bash
-journalctl -u gemini-class-room -n 100 --no-pager
+journalctl -u dasarang-class -n 100 --no-pager
 ```
 
 ## 6. Add the Nginx route under `dasarang-center`
 
-Do not replace the whole `dasarang-center` server block. Only add the location snippet from [deploy/nginx/gemini-class-room.conf](/C:/dev/gemini_class_room/deploy/nginx/gemini-class-room.conf) inside the existing `server {}` block for `dasarang-center`.
+Do not replace the whole `dasarang-center` server block. Only add the location snippet from `deploy/nginx/dasarang-class.conf` inside the existing `server {}` block for `dasarang-center`.
 
 Back up the current site config first:
 
@@ -143,6 +143,7 @@ Then verify in the browser:
 - `http://15.164.105.38/dasarang-class` loads
 - direct refresh works
 - admin login works
+- Gemini translation works
 - student updates still write to Firestore
 - Google Sheets sync still succeeds
 
@@ -154,7 +155,7 @@ Confirm these are still healthy:
 sudo systemctl status dasarang-center --no-pager
 sudo systemctl status pulsebot-ui --no-pager
 sudo systemctl status pulsebot --no-pager
-sudo systemctl status gemini-class-room --no-pager
+sudo systemctl status dasarang-class --no-pager
 ```
 
 Also confirm the active listeners:
@@ -166,4 +167,24 @@ sudo ss -ltnp
 Expected shape:
 - `dasarang-center` still on `*:3000` via Nginx
 - `pulsebot-ui` still on its existing port
-- `gemini-class-room` on `*:3100`
+- `dasarang-class` on `*:3100`
+
+## 9. GitHub Actions auto deploy
+
+Set this repository configuration before relying on push-based deploys:
+
+- Secret: `LIGHTSAIL_SSH_KEY`
+- Variables:
+  - `LIGHTSAIL_HOST=15.164.105.38`
+  - `LIGHTSAIL_USER=ubuntu`
+  - `DEPLOY_PATH=/opt/dasarang-class/current`
+  - `SYSTEMD_SERVICE=dasarang-class`
+
+The workflow in `.github/workflows/deploy-lightsail.yml` will:
+
+1. Build and type-check on GitHub Actions
+2. SSH into Lightsail
+3. Reset the deployed checkout to `origin/main`
+4. Run `npm ci` and `npm run build`
+5. Restart `dasarang-class`
+6. Verify `http://127.0.0.1:3100/dasarang-class/api/health`

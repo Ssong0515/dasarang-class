@@ -31,6 +31,7 @@ import {
 
 import { FolderDashboard } from './components/FolderDashboard';
 import { ContentLibrary } from './components/ContentLibrary';
+import { resolveAppPath } from './utils/appPaths';
 
 type GoogleSheetsSyncRequest = {
   folderId: string;
@@ -67,11 +68,6 @@ export default function App() {
 
   const ADMIN_EMAIL = 'songes0515@gmail.com';
   const isAdmin = user?.email === ADMIN_EMAIL;
-  const appBaseUrl = ((import.meta.env.BASE_URL as string) || '/').replace(/\/?$/, '/');
-  const resolveAppPath = (relativePath: string) => {
-    const normalizedPath = relativePath.replace(/^\/+/, '');
-    return appBaseUrl === '/' ? `/${normalizedPath}` : `${appBaseUrl}${normalizedPath}`;
-  };
 
   const postGoogleSheetsRequest = async (path: string, payload: unknown) => {
     if (!user) {
