@@ -280,9 +280,16 @@ export const StudentPage: React.FC<StudentPageProps> = ({ onBackToAdmin, onLogin
             {folders.map((folder, idx) => {
               const folderLessons = lessons.filter(l => l.folderId === folder.id);
               const folderContentIds = new Set<string>();
+              const existingContentIds = new Set(contents.map(c => c.id));
+              
               folderLessons.forEach(l => {
-                if (l.contentIds) l.contentIds.forEach(id => folderContentIds.add(id));
-                else if (l.contentId) folderContentIds.add(l.contentId);
+                if (l.contentIds) {
+                  l.contentIds.forEach(id => {
+                    if (existingContentIds.has(id)) folderContentIds.add(id);
+                  });
+                } else if (l.contentId) {
+                  if (existingContentIds.has(l.contentId)) folderContentIds.add(l.contentId);
+                }
               });
               const folderColor = folder.color || '#8B5E3C';
               const folderBg = FOLDER_COLORS[folderColor] || '#FFF5E9';

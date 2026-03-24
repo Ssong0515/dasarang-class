@@ -373,6 +373,17 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
                           콘텐츠
                         </h2>
                       </div>
+                      {/* Warning for missing content */}
+                      {selectedIds.length > 0 && selectedContentsList.length === 0 && (
+                        <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-100 rounded-2xl mb-8 text-red-600 animate-pulse">
+                          <AlertCircle size={20} />
+                          <div className="text-sm">
+                            <p className="font-bold">연결된 콘텐츠를 찾을 수 없습니다.</p>
+                            <p className="opacity-80">콘텐츠가 삭제되었을 수 있습니다. 아래 목록에서 새로운 콘텐츠를 선택해주세요.</p>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Selected Content Bubbles (Multiple) */}
                       {selectedContentsList.length > 0 && (
                         <div className="flex flex-wrap gap-2 items-center mb-8 pb-8 border-b border-[#E5E3DD]">
