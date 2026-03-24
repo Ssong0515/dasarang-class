@@ -67,6 +67,11 @@ export default function App() {
 
   const ADMIN_EMAIL = 'songes0515@gmail.com';
   const isAdmin = user?.email === ADMIN_EMAIL;
+  const appBaseUrl = ((import.meta.env.BASE_URL as string) || '/').replace(/\/?$/, '/');
+  const resolveAppPath = (relativePath: string) => {
+    const normalizedPath = relativePath.replace(/^\/+/, '');
+    return appBaseUrl === '/' ? `/${normalizedPath}` : `${appBaseUrl}${normalizedPath}`;
+  };
 
   const postGoogleSheetsRequest = async (path: string, payload: unknown) => {
     if (!user) {
@@ -74,7 +79,7 @@ export default function App() {
     }
 
     const idToken = await user.getIdToken();
-    const response = await fetch(path, {
+    const response = await fetch(resolveAppPath(path), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -101,7 +106,7 @@ export default function App() {
 
     try {
       await Promise.all(
-        requests.map((request) => postGoogleSheetsRequest('/api/google-sheets/sync-folder', request))
+        requests.map((request) => postGoogleSheetsRequest('api/google-sheets/sync-folder', request))
       );
       setGoogleSheetsSyncError(null);
     } catch (error) {

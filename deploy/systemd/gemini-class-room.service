@@ -1,0 +1,15 @@
+[Unit]
+Description=gemini_class_room Node server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/gemini-class-room/current
+ExecStart=/usr/bin/npm run start
+Restart=always
+RestartSec=5
+User=ubuntu
+Group=ubuntu
+
+[Install]
+WantedBy=multi-user.target
