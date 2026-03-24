@@ -26,6 +26,8 @@ const normalizeBasePath = (value?: string) => {
   return `/${trimmed.replace(/^\/+|\/+$/g, '')}`;
 };
 
+const escapeForRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 const withBasePath = (basePath: string, routePath: string) => {
   const normalizedRoute = routePath === '/' ? '/' : `/${routePath.replace(/^\/+/, '')}`;
 
@@ -114,12 +116,12 @@ async function startServer() {
     };
 
     if (APP_BASE_PATH !== '/') {
-      app.get(APP_BASE_PATH, (req, res) => {
+      app.get(new RegExp(`^${escapeForRegExp(APP_BASE_PATH)}$`), (req, res) => {
         res.redirect(301, `${APP_BASE_PATH}/`);
       });
     }
 
-    app.use(APP_BASE_PATH, express.static(distPath, { index: false }));
+    app.use(APP_BASE_PATH, express.static(distPath, { index: false, redirect: false }));
 
     if (APP_BASE_PATH === '/') {
       app.get('/', sendIndex);
