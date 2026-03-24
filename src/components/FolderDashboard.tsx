@@ -44,7 +44,7 @@ interface FolderDashboardProps {
   categories: LessonCategory[];
   contents: LessonContent[];
   initialLesson?: Lesson | null;
-  onSaveStudents: (folderId: string, students: Student[]) => void;
+  onSaveStudents: (folderId: string, students: Student[]) => Promise<void>;
   onSelectLesson: (lesson: Lesson) => void;
   onCreateLesson: (folderId: string, date?: string) => void;
   onSaveLesson: (lesson: Lesson) => void;
@@ -117,11 +117,14 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
   const [newStudentMemo, setNewStudentMemo] = useState('');
   const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const [studentSaveError, setStudentSaveError] = useState<string | null>(null);
+  const [studentAction, setStudentAction] = useState<'add' | 'edit' | 'delete' | null>(null);
   const [settingsDraft, setSettingsDraft] = useState({
     name: folder.name,
     color: folder.color || '#8B5E3C',
     icon: folder.icon || 'BookOpen'
   });
+  const isSavingStudentAction = studentAction !== null;
 
   // Sync draft when folder changes
   useEffect(() => {
@@ -131,6 +134,10 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
       icon: folder.icon || 'BookOpen'
     });
   }, [folder]);
+
+  useEffect(() => {
+    setStudents(folder.students || []);
+  }, [folder.students]);
 
   // Sync with initialLesson date if it changes
   useEffect(() => {
@@ -244,38 +251,120 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
     });
   };
 
-  const handleAddStudent = () => {
-    if (!newStudentName.trim()) return;
-    const initials = newStudentName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-    const newStudent: Student = {
-      id: 'std-' + Date.now(),
-      name: newStudentName.trim(),
-      initials: initials || '??',
-      age: newStudentAge.trim() || undefined,
-      contact: newStudentContact.trim() || undefined,
-      memo: newStudentMemo.trim() || undefined,
+  const getStudentInitials = (name: string) =>
+    name
+      .split(' ')
+      .filter(Boolean)
+      .map(part => part[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+
+  const normalizeStudent = (student: Student): Student => {
+    const name = student.name.trim();
+
+    return {
+      ...student,
+      name,
+      initials: getStudentInitials(name) || '??',
+      age: student.age?.trim() || undefined,
+      contact: student.contact?.trim() || undefined,
+      memo: student.memo?.trim() || undefined,
     };
+  };
+
+  const persistStudents = async (
+    updatedStudents: Student[],
+    action: 'add' | 'edit' | 'delete',
+    errorMessage: string
+  ) => {
+    setStudentSaveError(null);
+    setStudentAction(action);
+
+    try {
+      await onSaveStudents(folder.id, updatedStudents);
+      setStudents(updatedStudents);
+      return true;
+    } catch {
+      setStudentSaveError(errorMessage);
+      return false;
+    } finally {
+      setStudentAction(null);
+    }
+  };
+
+  const handleAddStudent = async () => {
+    const name = newStudentName.trim();
+
+    if (isSavingStudentAction) return;
+
+    if (!name) {
+      setStudentSaveError('학생 이름은 필수입니다.');
+      return;
+    }
+
+    const newStudent = normalizeStudent({
+      id: 'std-' + Date.now(),
+      name,
+      initials: '',
+      age: newStudentAge,
+      contact: newStudentContact,
+      memo: newStudentMemo,
+    });
     const updated = [...students, newStudent];
-    setStudents(updated);
+    const saved = await persistStudents(
+      updated,
+      'add',
+      '학생 추가를 저장하지 못했습니다. 잠시 후 다시 시도해주세요.'
+    );
+
+    if (!saved) return;
+
     setNewStudentName('');
     setNewStudentAge('');
     setNewStudentContact('');
     setNewStudentMemo('');
-    onSaveStudents(folder.id, updated);
   };
 
-  const handleRemoveStudent = (id: string) => {
-    const updated = students.filter(s => s.id !== id);
-    setStudents(updated);
-    onSaveStudents(folder.id, updated);
-    if (expandedStudent === id) setExpandedStudent(null);
+  const handleRemoveStudent = async (student: Student) => {
+    if (isSavingStudentAction) return;
+
+    const shouldDelete = window.confirm(`'${student.name}' 학생을 삭제하시겠습니까?`);
+    if (!shouldDelete) return;
+
+    const updated = students.filter(s => s.id !== student.id);
+    const saved = await persistStudents(
+      updated,
+      'delete',
+      '학생 삭제를 저장하지 못했습니다. 잠시 후 다시 시도해주세요.'
+    );
+
+    if (!saved) return;
+
+    if (expandedStudent === student.id) setExpandedStudent(null);
+    if (editingStudent?.id === student.id) setEditingStudent(null);
   };
 
-  const handleSaveStudentEdit = (student: Student) => {
-    const updated = students.map(s => s.id === student.id ? student : s);
-    setStudents(updated);
+  const handleSaveStudentEdit = async (student: Student) => {
+    if (isSavingStudentAction) return;
+
+    const normalizedStudent = normalizeStudent(student);
+
+    if (!normalizedStudent.name) {
+      setStudentSaveError('학생 이름은 필수입니다.');
+      return;
+    }
+
+    const updated = students.map(s => s.id === normalizedStudent.id ? normalizedStudent : s);
+    const saved = await persistStudents(
+      updated,
+      'edit',
+      '학생 정보를 저장하지 못했습니다. 잠시 후 다시 시도해주세요.'
+    );
+
+    if (!saved) return;
+
     setEditingStudent(null);
-    onSaveStudents(folder.id, updated);
   };
 
   const getAttendanceStats = (lesson?: Lesson) => {
@@ -596,7 +685,7 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
                       type="text" 
                       value={newStudentName}
                       onChange={(e) => setNewStudentName(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleAddStudent()}
+                      disabled={isSavingStudentAction}
                       placeholder="이름 (필수)"
                       className="w-full pl-10 pr-4 py-3 bg-[#FBFBFA] border border-[#E5E3DD] rounded-2xl focus:outline-none focus:border-[#8B5E3C] transition-all text-sm"
                     />
@@ -606,6 +695,7 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
                     type="text" 
                     value={newStudentAge}
                     onChange={(e) => setNewStudentAge(e.target.value)}
+                    disabled={isSavingStudentAction}
                     placeholder="나이"
                     className="w-full px-4 py-3 bg-[#FBFBFA] border border-[#E5E3DD] rounded-2xl focus:outline-none focus:border-[#8B5E3C] transition-all text-sm"
                   />
@@ -613,24 +703,31 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
                     type="text" 
                     value={newStudentContact}
                     onChange={(e) => setNewStudentContact(e.target.value)}
+                    disabled={isSavingStudentAction}
                     placeholder="연락처"
                     className="w-full px-4 py-3 bg-[#FBFBFA] border border-[#E5E3DD] rounded-2xl focus:outline-none focus:border-[#8B5E3C] transition-all text-sm"
                   />
                   <textarea
                     value={newStudentMemo}
                     onChange={(e) => setNewStudentMemo(e.target.value)}
+                    disabled={isSavingStudentAction}
                     placeholder="기타 메모"
                     rows={2}
                     className="col-span-2 w-full px-4 py-3 bg-[#FBFBFA] border border-[#E5E3DD] rounded-2xl focus:outline-none focus:border-[#8B5E3C] transition-all text-sm resize-none"
                   />
                 </div>
                 <button 
-                  onClick={handleAddStudent}
-                  className="px-6 py-4 bg-[#8B5E3C] text-white rounded-2xl font-bold hover:bg-[#724D31] transition-all self-start shadow-md"
+                  onClick={() => void handleAddStudent()}
+                  disabled={isSavingStudentAction || !newStudentName.trim()}
+                  className="px-6 py-4 bg-[#8B5E3C] text-white rounded-2xl font-bold hover:bg-[#724D31] transition-all self-start shadow-md disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-[#8B5E3C]"
                 >
-                  추가
+                  {studentAction === 'add' ? '저장 중...' : '추가'}
                 </button>
               </div>
+
+              {studentSaveError && (
+                <p className="mb-6 text-sm font-medium text-red-500">{studentSaveError}</p>
+              )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {students.map((student, idx) => (
@@ -659,8 +756,12 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
                       </div>
                       <div className="flex items-center gap-1">
                         <button 
-                          onClick={(e) => { e.stopPropagation(); handleRemoveStudent(student.id); }}
-                          className="w-7 h-7 flex items-center justify-center rounded-full text-[#A89F94] hover:bg-red-100 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void handleRemoveStudent(student);
+                          }}
+                          disabled={isSavingStudentAction}
+                          className="w-7 h-7 flex items-center justify-center rounded-full text-[#A89F94] hover:bg-red-100 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#A89F94]"
                           title="학생 삭제"
                         >
                           <X size={14} />
@@ -683,6 +784,7 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
                               <input
                                 value={editingStudent.name}
                                 onChange={(e) => setEditingStudent({ ...editingStudent, name: e.target.value })}
+                                disabled={isSavingStudentAction}
                                 placeholder="이름"
                                 className="w-full px-3 py-2 border border-[#E5E3DD] rounded-xl text-sm focus:outline-none focus:border-[#8B5E3C]"
                               />
@@ -690,12 +792,14 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
                                 <input
                                   value={editingStudent.age || ''}
                                   onChange={(e) => setEditingStudent({ ...editingStudent, age: e.target.value })}
+                                  disabled={isSavingStudentAction}
                                   placeholder="나이"
                                   className="px-3 py-2 border border-[#E5E3DD] rounded-xl text-sm focus:outline-none focus:border-[#8B5E3C]"
                                 />
                                 <input
                                   value={editingStudent.contact || ''}
                                   onChange={(e) => setEditingStudent({ ...editingStudent, contact: e.target.value })}
+                                  disabled={isSavingStudentAction}
                                   placeholder="연락처"
                                   className="px-3 py-2 border border-[#E5E3DD] rounded-xl text-sm focus:outline-none focus:border-[#8B5E3C]"
                                 />
@@ -703,18 +807,21 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
                               <textarea
                                 value={editingStudent.memo || ''}
                                 onChange={(e) => setEditingStudent({ ...editingStudent, memo: e.target.value })}
+                                disabled={isSavingStudentAction}
                                 placeholder="기타 메모"
                                 rows={2}
                                 className="w-full px-3 py-2 border border-[#E5E3DD] rounded-xl text-sm focus:outline-none focus:border-[#8B5E3C] resize-none"
                               />
                               <div className="flex gap-2 pt-1">
                                 <button
-                                  onClick={() => handleSaveStudentEdit(editingStudent)}
-                                  className="flex-1 py-2 bg-[#8B5E3C] text-white font-bold text-sm rounded-xl hover:bg-[#724D31] transition-all"
-                                >저장</button>
+                                  onClick={() => void handleSaveStudentEdit(editingStudent)}
+                                  disabled={isSavingStudentAction || !editingStudent.name.trim()}
+                                  className="flex-1 py-2 bg-[#8B5E3C] text-white font-bold text-sm rounded-xl hover:bg-[#724D31] transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-[#8B5E3C]"
+                                >{studentAction === 'edit' ? '저장 중...' : '저장'}</button>
                                 <button
                                   onClick={() => setEditingStudent(null)}
-                                  className="px-4 py-2 bg-[#F3F2EE] text-[#8B7E74] font-bold text-sm rounded-xl hover:bg-[#E5E3DD] transition-all"
+                                  disabled={isSavingStudentAction}
+                                  className="px-4 py-2 bg-[#F3F2EE] text-[#8B7E74] font-bold text-sm rounded-xl hover:bg-[#E5E3DD] transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-[#F3F2EE]"
                                 >취소</button>
                               </div>
                             </div>
@@ -727,8 +834,9 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
                                 <p className="text-[#A89F94] italic">추가 정보 없음</p>
                               )}
                               <button
+                                disabled={isSavingStudentAction}
                                 onClick={() => setEditingStudent({ ...student })}
-                                className="mt-2 px-4 py-1.5 bg-[#F3F2EE] text-[#8B5E3C] font-bold text-xs rounded-xl hover:bg-[#EBD9C1] transition-all"
+                                className="mt-2 px-4 py-1.5 bg-[#F3F2EE] text-[#8B5E3C] font-bold text-xs rounded-xl hover:bg-[#EBD9C1] transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-[#F3F2EE]"
                               >수정</button>
                             </div>
                           )}

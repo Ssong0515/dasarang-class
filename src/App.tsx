@@ -219,12 +219,11 @@ export default function App() {
     }
   };
 
-  const handleSaveFolder = async (folderId: string, students: Student[]) => {
+  const handleSaveStudents = async (folderId: string, students: Student[]): Promise<void> => {
     if (!user) return;
     try {
       const folderRef = doc(db, 'folders', folderId);
       await setDoc(folderRef, { students }, { merge: true });
-      setActiveTab('home');
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `folders/${folderId}`);
     }
@@ -476,7 +475,7 @@ export default function App() {
               categories={categories}
               contents={contents}
               initialLesson={selectedLesson}
-              onSaveStudents={handleSaveFolder}
+              onSaveStudents={handleSaveStudents}
               onSelectLesson={handleSelectLesson}
               onCreateLesson={handleCreateLesson}
               onSaveLesson={handleSaveLesson}
