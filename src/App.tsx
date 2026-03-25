@@ -147,6 +147,16 @@ export default function App() {
     }
   }, [user]);
 
+  // Auto-hide Google Sheets sync error alert after 5 seconds
+  useEffect(() => {
+    if (googleSheetsSyncError) {
+      const timer = setTimeout(() => {
+        setGoogleSheetsSyncError(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [googleSheetsSyncError]);
+
   // Data Listeners
   useEffect(() => {
     // Folders Listener

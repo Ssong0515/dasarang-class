@@ -500,6 +500,11 @@ export const verifyAdminIdToken = async (idToken: string) => {
 
 export const syncFolderToGoogleSheets = async (payload: FolderSyncPayload) => {
   try {
+    if (!hasGoogleSheetsConfig()) {
+      console.warn('Google Sheets sync skipped: GOOGLE_SPREADSHEET_ID or credentials not configured.');
+      return { skipped: true, reason: 'Not configured' };
+    }
+
     if ((payload.mode || 'upsert') === 'delete') {
       return await deleteFolderSheet(payload);
     }
