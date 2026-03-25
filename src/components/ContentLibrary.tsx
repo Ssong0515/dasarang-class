@@ -11,7 +11,8 @@ import {
   LayoutGrid,
   Type,
   Code,
-  Trash2
+  Trash2,
+  Eye
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { LessonCategory, LessonContent } from '../types';
@@ -38,6 +39,7 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
   const [editingContent, setEditingContent] = useState<Partial<LessonContent> | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [editorTab, setEditorTab] = useState<'edit' | 'preview'>('edit');
 
   const toggleCategory = (id: string) => {
     const next = new Set(expandedCategories);
@@ -242,15 +244,59 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-[#8B5E3C] uppercase tracking-widest mb-2 flex items-center gap-2">
-                      <Code size={14} /> HTML 내용
-                    </label>
-                    <textarea 
-                      value={editingContent.html}
-                      onChange={(e) => setEditingContent({ ...editingContent, html: e.target.value })}
-                      placeholder="HTML 코드를 입력하세요"
-                      className="w-full h-[400px] bg-[#F3F2EE] border-none rounded-2xl px-6 py-4 font-mono text-sm text-[#4A3728] focus:ring-2 focus:ring-[#8B5E3C] outline-none resize-none"
-                    />
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-xs font-bold text-[#8B5E3C] uppercase tracking-widest flex items-center gap-2">
+                        <Code size={14} /> HTML 내용
+                      </label>
+                      <div className="flex items-center bg-[#F3F2EE] rounded-xl p-1 gap-1">
+                        <button
+                          onClick={() => setEditorTab('edit')}
+                          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                            editorTab === 'edit'
+                              ? 'bg-white text-[#8B5E3C] shadow-sm'
+                              : 'text-[#8B7E74] hover:text-[#4A3728]'
+                          }`}
+                        >
+                          <Code size={13} />
+                          편집
+                        </button>
+                        <button
+                          onClick={() => setEditorTab('preview')}
+                          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                            editorTab === 'preview'
+                              ? 'bg-white text-[#8B5E3C] shadow-sm'
+                              : 'text-[#8B7E74] hover:text-[#4A3728]'
+                          }`}
+                        >
+                          <Eye size={13} />
+                          미리보기
+                        </button>
+                      </div>
+                    </div>
+                    {editorTab === 'edit' ? (
+                      <textarea 
+                        value={editingContent.html}
+                        onChange={(e) => setEditingContent({ ...editingContent, html: e.target.value })}
+                        placeholder="HTML 코드를 입력하세요"
+                        className="w-full h-[400px] bg-[#F3F2EE] border-none rounded-2xl px-6 py-4 font-mono text-sm text-[#4A3728] focus:ring-2 focus:ring-[#8B5E3C] outline-none resize-none"
+                      />
+                    ) : (
+                      <div className="w-full h-[400px] bg-white border border-[#E5E3DD] rounded-2xl overflow-hidden">
+                        {editingContent.html?.trim() ? (
+                          <iframe
+                            srcDoc={editingContent.html}
+                            title="콘텐츠 미리보기"
+                            className="w-full h-full border-none"
+                            sandbox="allow-scripts allow-same-origin"
+                          />
+                        ) : (
+                          <div className="flex flex-col items-center justify-center h-full text-[#8B7E74]">
+                            <Eye size={32} className="mb-3 opacity-30" />
+                            <p className="text-sm">HTML을 입력하면 여기에 미리보기가 표시됩니다</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </motion.div>
