@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { BookOpen, Calendar, Star, ArrowRight, Languages, ChevronDown, Sparkles, Loader2, FileText, ArrowLeft, GraduationCap, Code, Music, Brush, Globe, Cpu, Heart, Zap, Rocket, Lightbulb } from 'lucide-react';
 import { LessonFolder, Lesson, LessonCategory, LessonContent } from '../types';
@@ -118,6 +118,98 @@ const languageNames = {
   ZH: '中文'
 };
 
+const iframeResponsiveStyleTag = `
+  <style>
+    :root {
+      color-scheme: light;
+    }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      max-width: none;
+      overflow-x: hidden;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    img, video, iframe, canvas, svg {
+      max-width: 100% !important;
+      height: auto;
+    }
+
+    body > :is(main, section, article, [class*="container"], [class*="wrapper"], [class*="content"], [class*="inner"], [style*="max-width"]),
+    .student-content-root,
+    .student-content-root > :is(main, section, article, [class*="container"], [class*="wrapper"], [class*="content"], [class*="inner"], [style*="max-width"]) {
+      width: 100%;
+      max-width: none !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+    }
+  </style>
+`;
+
+const iframeHeightScriptTag = `
+  <script>
+    function sendHeight() {
+      var h = document.documentElement.scrollHeight;
+      window.parent.postMessage({ type: 'iframe-height', height: h }, '*');
+    }
+
+    window.addEventListener('load', function () { setTimeout(sendHeight, 100); });
+    new MutationObserver(sendHeight).observe(document.body, { childList: true, subtree: true, attributes: true });
+    window.addEventListener('resize', sendHeight);
+    setTimeout(sendHeight, 300);
+    setTimeout(sendHeight, 1000);
+  <\/script>
+`;
+
+const injectIframeMarkup = (html: string, styleTag: string, scriptTag: string) => {
+  let nextHtml = html;
+
+  if (/<\/head>/i.test(nextHtml)) {
+    nextHtml = nextHtml.replace(/<\/head>/i, `${styleTag}</head>`);
+  } else if (/<body[^>]*>/i.test(nextHtml)) {
+    nextHtml = nextHtml.replace(/<body([^>]*)>/i, `<body$1>${styleTag}`);
+  } else {
+    nextHtml = `${styleTag}${nextHtml}`;
+  }
+
+  if (/<\/body>/i.test(nextHtml)) {
+    nextHtml = nextHtml.replace(/<\/body>/i, `${scriptTag}</body>`);
+  } else {
+    nextHtml = `${nextHtml}${scriptTag}`;
+  }
+
+  return nextHtml;
+};
+
+const buildResponsiveSrcDoc = (html: string) => {
+  const trimmedHtml = html.trim();
+  if (!trimmedHtml) {
+    return '';
+  }
+
+  if (/<html[\s>]/i.test(trimmedHtml) || /<body[\s>]/i.test(trimmedHtml) || /<!doctype/i.test(trimmedHtml)) {
+    return injectIframeMarkup(trimmedHtml, iframeResponsiveStyleTag, iframeHeightScriptTag);
+  }
+
+  return `<!DOCTYPE html>
+    <html lang="ko">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        ${iframeResponsiveStyleTag}
+      </head>
+      <body>
+        <div class="student-content-root">${trimmedHtml}</div>
+        ${iframeHeightScriptTag}
+      </body>
+    </html>`;
+};
+
 export const StudentPage: React.FC<StudentPageProps> = ({ onBackToAdmin, onLogin, isAdmin, lessons = [], folders = [], categories = [], contents = [] }) => {
   const [lang, setLang] = useState<Language>('KO');
   const [isLangOpen, setIsLangOpen] = useState(false);
@@ -127,9 +219,27 @@ export const StudentPage: React.FC<StudentPageProps> = ({ onBackToAdmin, onLogin
   const [translateError, setTranslateError] = useState<string | null>(null);
   const [selectedContent, setSelectedContent] = useState<LessonContent | null>(null);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   const t = translations[lang];
   const activeFolder = folders.find(f => f.id === activeFolderId);
+
+  useEffect(() => {
+    const handleIframeHeightMessage = (event: MessageEvent) => {
+      if (event.data?.type !== 'iframe-height' || !event.data.height || !iframeRef.current) {
+        return;
+      }
+
+      if (iframeRef.current.contentWindow && event.source !== iframeRef.current.contentWindow) {
+        return;
+      }
+
+      iframeRef.current.style.height = `${event.data.height}px`;
+    };
+
+    window.addEventListener('message', handleIframeHeightMessage);
+    return () => window.removeEventListener('message', handleIframeHeightMessage);
+  }, []);
 
   // Lessons for active folder
   const filteredLessons = activeFolderId
@@ -219,6 +329,8 @@ export const StudentPage: React.FC<StudentPageProps> = ({ onBackToAdmin, onLogin
       setIsTranslating(false);
     }
   };
+
+  const selectedContentSrcDoc = selectedContent ? buildResponsiveSrcDoc(selectedContent.html) : '';
 
   return (
     <div className="min-h-screen bg-[#FBFBFA] font-sans text-[#4A3728]">
@@ -353,13 +465,13 @@ export const StudentPage: React.FC<StudentPageProps> = ({ onBackToAdmin, onLogin
         </main>
       ) : (
         /* =================== FOLDER DETAIL VIEW =================== */
-        <main className="max-w-5xl mx-auto p-8">
+        <main className="w-full px-4 py-8 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
           {/* Category Dropdown Nav Bar */}
           {contentsByCategory.length > 0 ? (
             <>
-              <div className="bg-white rounded-2xl border border-[#E5E3DD] shadow-sm p-2 mb-8 flex flex-wrap gap-1 relative">
+              <div className="relative mb-8 flex w-full max-w-none flex-wrap gap-1 rounded-2xl border border-[#E5E3DD] bg-white p-2 shadow-sm">
                 {contentsByCategory.map((group) => (
-                  <div key={group.category.id} className="relative">
+                  <div key={group.category.id} className="relative max-w-full">
                     <button
                       onClick={() => setOpenDropdown(openDropdown === group.category.id ? null : group.category.id)}
                       className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${
@@ -414,9 +526,9 @@ export const StudentPage: React.FC<StudentPageProps> = ({ onBackToAdmin, onLogin
                   key={selectedContent.id}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="bg-white rounded-[32px] border border-[#E5E3DD] shadow-sm overflow-hidden"
+                  className="w-full max-w-none overflow-hidden rounded-[32px] border border-[#E5E3DD] bg-white shadow-sm"
                 >
-                  <div className="flex items-center justify-between px-8 py-5 border-b border-[#F3F2EE]">
+                  <div className="flex flex-col gap-4 border-b border-[#F3F2EE] px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 bg-[#FFF5E9] rounded-xl flex items-center justify-center">
                         <FileText size={16} className="text-[#8B5E3C]" />
@@ -424,7 +536,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({ onBackToAdmin, onLogin
                       <h3 className="text-lg font-bold text-[#4A3728]">{selectedContent.title}</h3>
                     </div>
                     {lang !== 'KO' && (
-                      <div className="flex items-center gap-2">
+                      <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
                         <button
                           onClick={() => void handleSmartTranslate()}
                           disabled={isTranslating}
@@ -448,7 +560,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({ onBackToAdmin, onLogin
                     )}
                   </div>
                   {(translatedContent || translateError) && (
-                    <div className="border-b border-[#F3F2EE] bg-[#FBFBFA] px-8 py-6">
+                    <div className="border-b border-[#F3F2EE] bg-[#FBFBFA] px-5 py-6 sm:px-8">
                       <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-[#A89F94]">
                         {languageNames[lang]}
                       </p>
@@ -460,17 +572,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({ onBackToAdmin, onLogin
                     </div>
                   )}
                   <iframe
-                    srcDoc={selectedContent.html + `<script>
-                      function sendHeight() {
-                        var h = document.documentElement.scrollHeight;
-                        window.parent.postMessage({type:'iframe-height', height: h}, '*');
-                      }
-                      window.addEventListener('load', function() { setTimeout(sendHeight, 100); });
-                      new MutationObserver(sendHeight).observe(document.body, {childList:true, subtree:true, attributes:true});
-                      window.addEventListener('resize', sendHeight);
-                      setTimeout(sendHeight, 300);
-                      setTimeout(sendHeight, 1000);
-                    <\/script>`}
+                    srcDoc={selectedContentSrcDoc}
                     className="w-full rounded-b-[32px]"
                     style={{ border: 'none', overflow: 'hidden' }}
                     scrolling="no"
@@ -483,23 +585,14 @@ export const StudentPage: React.FC<StudentPageProps> = ({ onBackToAdmin, onLogin
                         if (h) iframe.style.height = h + 'px';
                       } catch(_) {}
                     }}
-                    ref={(el) => {
-                      if (!el) return;
-                      const handler = (e: MessageEvent) => {
-                        if (e.data?.type === 'iframe-height' && e.data.height) {
-                          el.style.height = e.data.height + 'px';
-                        }
-                      };
-                      window.addEventListener('message', handler);
-                      (el as any)._cleanupHandler = handler;
-                    }}
+                    ref={iframeRef}
                   />
                 </motion.section>
               ) : (
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="bg-white rounded-[32px] border border-[#E5E3DD] p-16 text-center"
+                  className="w-full max-w-none rounded-[32px] border border-[#E5E3DD] bg-white p-10 text-center sm:p-16"
                 >
                   <FileText size={48} className="text-[#E5E3DD] mx-auto mb-4" />
                   <p className="text-lg font-bold text-[#8B7E74] mb-2">위의 카테고리를 클릭하여 콘텐츠를 선택하세요</p>
@@ -511,7 +604,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({ onBackToAdmin, onLogin
             <motion.section
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-white rounded-[40px] p-12 mb-12 border border-[#E5E3DD] shadow-sm text-center"
+              className="mb-12 w-full max-w-none rounded-[40px] border border-[#E5E3DD] bg-white p-12 text-center shadow-sm"
             >
               <BookOpen size={48} className="text-[#E5E3DD] mx-auto mb-4" />
               <p className="text-lg font-bold text-[#8B7E74]">{t.noLessons}</p>
