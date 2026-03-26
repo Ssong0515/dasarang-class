@@ -446,16 +446,43 @@ export default function App() {
     }
   };
 
-  const handleSaveContent = async (content: Partial<LessonContent>) => {
-    if (!user) return;
+  const handleSaveContent = async (content: Partial<LessonContent>): Promise<LessonContent> => {
+    if (!user) {
+      throw new Error('콘텐츠를 저장하려면 로그인이 필요합니다.');
+    }
+
+    if (!content.categoryId || !content.title) {
+      throw new Error('콘텐츠 저장에 필요한 정보가 부족합니다.');
+    }
+
+    const contentRef = content.id
+      ? doc(db, 'contents', content.id)
+      : doc(collection(db, 'contents'));
+    const createdAt = content.createdAt ?? new Date().toISOString();
+    const savedContent: LessonContent = {
+      id: contentRef.id,
+      categoryId: content.categoryId,
+      ownerUid: user.uid,
+      title: content.title,
+      html: content.html ?? '',
+      createdAt,
+    };
+
     try {
-      if (content.id) {
-        await setDoc(doc(db, 'contents', content.id), { ...content, ownerUid: user.uid }, { merge: true });
-      } else {
-        await addDoc(collection(db, 'contents'), { ...content, ownerUid: user.uid, createdAt: new Date().toISOString() });
-      }
+      await setDoc(
+        contentRef,
+        {
+          ...content,
+          ownerUid: user.uid,
+          createdAt,
+        },
+        { merge: true }
+      );
+
+      return savedContent;
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'contents');
+      throw error;
     }
   };
 
