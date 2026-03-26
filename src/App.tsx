@@ -613,12 +613,9 @@ export default function App() {
       <div className="flex h-screen bg-[#FBFBFA] font-sans text-[#4A3728]">
         <Sidebar 
           folders={folders} 
-          lessons={lessons}
-          selectedLessonId={selectedLesson?.id}
           activeFolderId={activeFolder?.id}
           activeTab={activeTab} 
           onTabChange={setActiveTab} 
-          onSelectLesson={handleSelectLesson}
           onManageFolder={handleManageFolder}
           onLogout={handleLogout}
           onSwitchToStudent={() => setViewMode('student')}
