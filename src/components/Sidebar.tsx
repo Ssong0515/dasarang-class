@@ -27,6 +27,9 @@ import { Reorder } from 'motion/react';
 import { LessonFolder } from '../types';
 
 const MOBILE_MEDIA_QUERY = '(max-width: 768px)';
+const WIDE_MEDIA_QUERY = '(min-width: 1280px)';
+
+type ViewportMode = 'mobile' | 'compactDesktop' | 'wideDesktop';
 
 const sidebarIconMap: Record<
   string,
@@ -46,12 +49,24 @@ const sidebarIconMap: Record<
   Lightbulb,
 };
 
-const getIsMobileViewport = () => {
+const getViewportMode = (): ViewportMode => {
   if (typeof window === 'undefined') {
-    return false;
+    return 'wideDesktop';
   }
 
-  return window.matchMedia(MOBILE_MEDIA_QUERY).matches;
+  if (window.matchMedia(MOBILE_MEDIA_QUERY).matches) {
+    return 'mobile';
+  }
+
+  if (window.matchMedia(WIDE_MEDIA_QUERY).matches) {
+    return 'wideDesktop';
+  }
+
+  return 'compactDesktop';
+};
+
+const getDefaultDesktopCollapsed = (viewportMode: ViewportMode) => {
+  return viewportMode === 'compactDesktop';
 };
 
 interface SidebarProps {
@@ -135,11 +150,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCreateFolder,
 }) => {
   const [localFolders, setLocalFolders] = React.useState(folders);
-  const [isDesktopCollapsed, setIsDesktopCollapsed] = React.useState(false);
-  const [isMobileViewport, setIsMobileViewport] = React.useState(getIsMobileViewport);
+  const [viewportMode, setViewportMode] = React.useState<ViewportMode>(getViewportMode);
+  const [isDesktopCollapsed, setIsDesktopCollapsed] = React.useState(() =>
+    getDefaultDesktopCollapsed(getViewportMode())
+  );
 
-  const isCollapsed = isMobileViewport || isDesktopCollapsed;
-  const showToggleButton = !isMobileViewport;
+  const isCollapsed = viewportMode === 'mobile' || isDesktopCollapsed;
+  const showToggleButton = viewportMode !== 'mobile';
   const showBrand = !isCollapsed;
   const showHeader = showBrand || showToggleButton;
 
@@ -167,21 +184,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
       return;
     }
 
-    const mediaQuery = window.matchMedia(MOBILE_MEDIA_QUERY);
-    const handleViewportChange = (event: MediaQueryListEvent) => {
-      setIsMobileViewport(event.matches);
+    const mobileMediaQuery = window.matchMedia(MOBILE_MEDIA_QUERY);
+    const wideMediaQuery = window.matchMedia(WIDE_MEDIA_QUERY);
+    const handleViewportChange = () => {
+      setViewportMode(getViewportMode());
     };
 
-    setIsMobileViewport(mediaQuery.matches);
+    handleViewportChange();
 
-    if (typeof mediaQuery.addEventListener === 'function') {
-      mediaQuery.addEventListener('change', handleViewportChange);
-      return () => mediaQuery.removeEventListener('change', handleViewportChange);
+    if (
+      typeof mobileMediaQuery.addEventListener === 'function' &&
+      typeof wideMediaQuery.addEventListener === 'function'
+    ) {
+      mobileMediaQuery.addEventListener('change', handleViewportChange);
+      wideMediaQuery.addEventListener('change', handleViewportChange);
+      return () => {
+        mobileMediaQuery.removeEventListener('change', handleViewportChange);
+        wideMediaQuery.removeEventListener('change', handleViewportChange);
+      };
     }
 
-    mediaQuery.addListener(handleViewportChange);
-    return () => mediaQuery.removeListener(handleViewportChange);
+    mobileMediaQuery.addListener(handleViewportChange);
+    wideMediaQuery.addListener(handleViewportChange);
+    return () => {
+      mobileMediaQuery.removeListener(handleViewportChange);
+      wideMediaQuery.removeListener(handleViewportChange);
+    };
   }, []);
+
+  React.useEffect(() => {
+    setIsDesktopCollapsed(getDefaultDesktopCollapsed(viewportMode));
+  }, [viewportMode]);
 
   const handleReorder = (newOrder: LessonFolder[]) => {
     setLocalFolders(newOrder);
@@ -189,7 +222,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const handleToggleSidebar = () => {
-    if (isMobileViewport) {
+    if (viewportMode === 'mobile') {
       return;
     }
 
