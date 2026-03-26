@@ -168,6 +168,8 @@ export const StudentContentCard: React.FC<StudentContentCardProps> = ({
   headerControls,
   details,
 }) => {
+  const hasDescription = Boolean(content.description?.trim());
+
   return (
     <section className={`w-full max-w-none overflow-hidden rounded-[32px] border border-[#E5E3DD] bg-white shadow-sm ${className}`.trim()}>
       <div className="flex flex-col gap-4 border-b border-[#F3F2EE] px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8">
@@ -183,6 +185,13 @@ export const StudentContentCard: React.FC<StudentContentCardProps> = ({
           </div>
         ) : null}
       </div>
+
+      {hasDescription ? (
+        <div className="border-b border-[#F3F2EE] bg-[#FFFDF9] px-5 py-5 sm:px-8">
+          <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-[#A89F94]">수업 설명</p>
+          <p className="whitespace-pre-wrap text-sm leading-7 text-[#4A3728]">{content.description}</p>
+        </div>
+      ) : null}
 
       {details}
 

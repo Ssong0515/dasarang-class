@@ -7,7 +7,7 @@ import { LessonDetail } from './components/LessonDetail';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { StudentPage } from './components/StudentPage';
 import { LessonFolder, Memo, Lesson, Student, LessonCategory, LessonContent } from './types';
-import { 
+import {
   auth, 
   db, 
   signInWithEmailAndPassword,
@@ -30,7 +30,7 @@ import {
 } from './firebase';
 
 import { FolderDashboard } from './components/FolderDashboard';
-import { ContentLibrary } from './components/ContentLibrary';
+import { ContentLibrary, CONTENT_EDIT_DISCARD_WARNING } from './components/ContentLibrary';
 import { resolveAppPath } from './utils/appPaths';
 
 type GoogleSheetsSyncRequest = {
@@ -50,6 +50,8 @@ type ContentReorderUpdate = {
   categoryId: string | null;
   order: number;
 };
+
+type AdminTab = 'home' | 'memo' | 'lesson-detail' | 'folder-management' | 'content-library';
 
 const UNCATEGORIZED_CATEGORY_ID = null;
 const MISC_CATEGORY_NAME = '기타';
@@ -117,10 +119,11 @@ export default function App() {
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [categories, setCategories] = useState<LessonCategory[]>([]);
   const [contents, setContents] = useState<LessonContent[]>([]);
-  const [activeTab, setActiveTab] = useState<'home' | 'memo' | 'lesson-detail' | 'folder-management' | 'content-library'>('home');
+  const [activeTab, setActiveTab] = useState<AdminTab>('home');
   const [viewMode, setViewMode] = useState<'admin' | 'student'>('student');
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
   const [activeFolder, setActiveFolder] = useState<LessonFolder | null>(null);
+  const [isContentLibraryDirty, setIsContentLibraryDirty] = useState(false);
   const [googleSheetsSyncError, setGoogleSheetsSyncError] = useState<GoogleSheetsSyncErrorState | null>(null);
   const [isRetryingGoogleSheetsSync, setIsRetryingGoogleSheetsSync] = useState(false);
 
@@ -132,6 +135,32 @@ export default function App() {
 
   const ADMIN_EMAIL = 'songes0515@gmail.com';
   const isAdmin = user?.email === ADMIN_EMAIL;
+
+  const confirmContentLibraryNavigation = () => {
+    if (activeTab !== 'content-library' || !isContentLibraryDirty) {
+      return true;
+    }
+
+    return window.confirm(CONTENT_EDIT_DISCARD_WARNING);
+  };
+
+  const runWithContentLibraryNavigationGuard = (action: () => void) => {
+    if (!confirmContentLibraryNavigation()) {
+      return false;
+    }
+
+    action();
+    return true;
+  };
+
+  const handleTabChange = (nextTab: AdminTab) => {
+    if (nextTab === activeTab) return;
+    runWithContentLibraryNavigationGuard(() => setActiveTab(nextTab));
+  };
+
+  const handleSwitchToStudent = () => {
+    runWithContentLibraryNavigationGuard(() => setViewMode('student'));
+  };
 
   const postGoogleSheetsRequest = async (path: string, payload: unknown) => {
     if (!user) {
@@ -302,6 +331,7 @@ export default function App() {
           categoryId: typeof data.categoryId === 'string' ? data.categoryId : UNCATEGORIZED_CATEGORY_ID,
           ownerUid: data.ownerUid ?? '',
           title: data.title ?? '',
+          description: data.description ?? '',
           html: data.html ?? '',
           createdAt: data.createdAt ?? new Date(0).toISOString(),
           order: hasNumericOrder(data.order) ? data.order : undefined,
@@ -359,6 +389,10 @@ export default function App() {
   };
 
   const handleLogout = async () => {
+    if (!confirmContentLibraryNavigation()) {
+      return;
+    }
+
     try {
       await signOut(auth);
       setActiveTab('home');
@@ -544,6 +578,7 @@ export default function App() {
       : doc(collection(db, 'contents'));
     const categoryId = typeof content.categoryId === 'string' ? content.categoryId : UNCATEGORIZED_CATEGORY_ID;
     const createdAt = content.createdAt ?? new Date().toISOString();
+    const description = content.description ?? '';
     const order =
       content.id
         ? content.order
@@ -553,6 +588,7 @@ export default function App() {
       categoryId,
       ownerUid: user.uid,
       title: content.title.trim(),
+      description,
       html: content.html ?? '',
       createdAt,
       order,
@@ -565,6 +601,7 @@ export default function App() {
           ...content,
           categoryId,
           title: content.title.trim(),
+          description,
           order,
           ownerUid: user.uid,
           createdAt,
@@ -648,9 +685,11 @@ export default function App() {
   const handleCreateLesson = (folderId?: string, date?: string) => {
     const targetFolder = folderId ? folders.find(f => f.id === folderId) : folders[0];
     if (targetFolder) {
-      setActiveFolder(targetFolder);
-      setSelectedLesson(null); // Ensure we start fresh
-      setActiveTab('folder-management');
+      runWithContentLibraryNavigationGuard(() => {
+        setActiveFolder(targetFolder);
+        setSelectedLesson(null); // Ensure we start fresh
+        setActiveTab('folder-management');
+      });
     }
   };
 
@@ -684,16 +723,20 @@ export default function App() {
   const handleSelectLesson = (lesson: Lesson) => {
     const targetFolder = folders.find(f => f.id === lesson.folderId);
     if (targetFolder) {
-      setActiveFolder(targetFolder);
-      setSelectedLesson(lesson);
-      setActiveTab('folder-management');
+      runWithContentLibraryNavigationGuard(() => {
+        setActiveFolder(targetFolder);
+        setSelectedLesson(lesson);
+        setActiveTab('folder-management');
+      });
     }
   };
 
   const handleManageFolder = (folder: LessonFolder) => {
-    setActiveFolder(folder);
-    setSelectedLesson(null);
-    setActiveTab('folder-management');
+    runWithContentLibraryNavigationGuard(() => {
+      setActiveFolder(folder);
+      setSelectedLesson(null);
+      setActiveTab('folder-management');
+    });
   };
 
   const renderContent = () => {
@@ -750,10 +793,10 @@ export default function App() {
           folders={folders} 
           activeFolderId={activeFolder?.id}
           activeTab={activeTab} 
-          onTabChange={setActiveTab} 
+          onTabChange={handleTabChange} 
           onManageFolder={handleManageFolder}
           onLogout={handleLogout}
-          onSwitchToStudent={() => setViewMode('student')}
+          onSwitchToStudent={handleSwitchToStudent}
           onCreateFolder={handleCreateFolder}
           onReorderFolders={async (newOrder) => {
             try {
@@ -788,7 +831,7 @@ export default function App() {
               onStartLesson={handleCreateLesson} 
               onSelectLesson={handleSelectLesson}
               onManageFolder={handleManageFolder}
-              onGoToLibrary={() => setActiveTab('content-library')}
+              onGoToLibrary={() => handleTabChange('content-library')}
             />
           )}
           {activeTab === 'memo' && (
@@ -814,7 +857,7 @@ export default function App() {
               onSelectLesson={handleSelectLesson}
               onCreateLesson={handleCreateLesson}
               onSaveLesson={handleSaveLesson}
-              onGoToLibrary={() => setActiveTab('content-library')}
+              onGoToLibrary={() => handleTabChange('content-library')}
               onUpdateFolder={handleUpdateFolder}
               onDeleteFolder={handleDeleteFolder}
             />
@@ -829,6 +872,7 @@ export default function App() {
               onReorderContents={handleReorderContents}
               onDeleteCategory={handleDeleteCategory}
               onDeleteContent={handleDeleteContent}
+              onDirtyStateChange={setIsContentLibraryDirty}
             />
           )}
           {activeTab === 'lesson-detail' && (

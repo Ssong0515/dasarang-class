@@ -33,6 +33,7 @@ export interface LessonContent {
   categoryId: string | null;
   ownerUid: string;
   title: string;
+  description: string;
   html: string;
   createdAt: string;
   order?: number;

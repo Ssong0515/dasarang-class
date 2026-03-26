@@ -29,10 +29,13 @@ interface ContentLibraryProps {
   onReorderContents: (updates: Array<{ id: string; categoryId: string | null; order: number }>) => Promise<void>;
   onDeleteCategory: (id: string) => Promise<void>;
   onDeleteContent: (id: string) => Promise<void>;
+  onDirtyStateChange: (isDirty: boolean) => void;
 }
 
-type EditorTab = 'edit' | 'preview';
-type ContentMode = 'create' | 'preview' | 'edit';
+export const CONTENT_EDIT_DISCARD_WARNING =
+  '저장하지 않은 변경 사항이 있습니다. 저장하지 않고 이동하면 수정한 내용이 모두 사라집니다. 계속할까요?';
+
+type EditorTab = 'edit' | 'preview' | 'description';
 type CategoryDropTarget = { targetId: string; position: 'before' | 'after' } | null;
 type DraggedContent = { id: string; categoryId: string | null };
 type ContentDropTarget = { categoryId: string | null; index: number } | null;
@@ -42,6 +45,40 @@ const UNCATEGORIZED_ID = '__uncategorized__';
 const getContainerId = (categoryId: string | null) => categoryId ?? UNCATEGORIZED_ID;
 const getContentsForCategory = (items: LessonContent[], categoryId: string | null) =>
   items.filter((item) => (item.categoryId ?? null) === categoryId);
+const createEmptyContentDraft = (categoryId: string | null): Partial<LessonContent> => ({
+  categoryId,
+  title: '',
+  description: '',
+  html: '',
+});
+const normalizeContentDraft = (draft: Partial<LessonContent> | null | undefined, fallbackCategoryId: string | null) => ({
+  categoryId: typeof draft?.categoryId === 'string' ? draft.categoryId : fallbackCategoryId,
+  title: draft?.title?.trim() ?? '',
+  description: draft?.description ?? '',
+  html: draft?.html ?? '',
+});
+const isContentDraftDirty = (
+  draft: Partial<LessonContent> | null,
+  snapshot: LessonContent | null
+) => {
+  if (!draft) return false;
+
+  const current = normalizeContentDraft(
+    draft,
+    typeof draft.categoryId === 'string' ? draft.categoryId : null
+  );
+  const baseline = normalizeContentDraft(
+    snapshot ?? createEmptyContentDraft(current.categoryId),
+    current.categoryId
+  );
+
+  return (
+    current.categoryId !== baseline.categoryId ||
+    current.title !== baseline.title ||
+    current.description !== baseline.description ||
+    current.html !== baseline.html
+  );
+};
 
 const reorderCategories = (
   items: LessonCategory[],
@@ -177,6 +214,7 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
   onReorderContents,
   onDeleteCategory,
   onDeleteContent,
+  onDirtyStateChange,
 }) => {
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -185,7 +223,6 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
   const [selectedContainerId, setSelectedContainerId] = useState<string | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [editorTab, setEditorTab] = useState<EditorTab>('edit');
-  const [contentMode, setContentMode] = useState<ContentMode>('create');
   const [isFullscreenPreviewOpen, setIsFullscreenPreviewOpen] = useState(false);
   const [isSavingContent, setIsSavingContent] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -207,6 +244,7 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
         categoryId: editingContent.categoryId ?? null,
         ownerUid: editingContent.ownerUid ?? '',
         title: editingContent.title?.trim() || '미리보기 콘텐츠',
+        description: editingContent.description ?? '',
         html: editingContent.html ?? '',
         createdAt: editingContent.createdAt ?? new Date().toISOString(),
         order: editingContent.order,
@@ -215,10 +253,11 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
 
   const uncategorizedContents = getContentsForCategory(displayedContents, null);
   const hasPreviewHtml = Boolean(previewContent?.html.trim());
-  const isPreviewMode = contentMode === 'preview';
   const isExistingContent = Boolean(editingContent?.id);
-  const editorTitle =
-    contentMode === 'create' ? '새 콘텐츠 작성' : isPreviewMode ? '콘텐츠 미리보기' : '콘텐츠 수정';
+  const hasUnsavedChanges = isContentDraftDirty(editingContent, savedContentSnapshot);
+  const editorTitle = isExistingContent ? '콘텐츠 미리보기' : '새 콘텐츠 작성';
+  const isDescriptionTab = editorTab === 'description';
+  const editorSectionTitle = isDescriptionTab ? '수업 설명' : 'HTML 내용';
 
   useEffect(() => {
     if (!editingContent?.html?.trim()) setIsFullscreenPreviewOpen(false);
@@ -237,13 +276,18 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
     if (!categories.some((category) => category.id === selectedContainerId)) setSelectedContainerId(null);
   }, [categories, selectedContainerId]);
 
+  useEffect(() => {
+    onDirtyStateChange(hasUnsavedChanges);
+  }, [hasUnsavedChanges, onDirtyStateChange]);
+
   useEffect(
     () => () => {
+      onDirtyStateChange(false);
       if (dragCleanupTimeoutRef.current !== null) {
         clearTimeout(dragCleanupTimeoutRef.current);
       }
     },
-    []
+    [onDirtyStateChange]
   );
 
   const clearDragState = () => {
@@ -354,23 +398,29 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
     setIsAddingCategory(false);
   };
 
+  const confirmDiscardUnsavedChanges = () =>
+    !hasUnsavedChanges || window.confirm(CONTENT_EDIT_DISCARD_WARNING);
+
   const handleStartNewContent = (categoryId: string | null) => {
-    setEditingContent({ categoryId, title: '', html: '' });
+    if (!confirmDiscardUnsavedChanges()) return;
+    setEditingContent(createEmptyContentDraft(categoryId));
     setSavedContentSnapshot(null);
     setSelectedContainerId(getContainerId(categoryId));
-    setContentMode('create');
     setEditorTab('edit');
+    setIsFullscreenPreviewOpen(false);
     setIsSavingContent(false);
     setSaveError(null);
     ensureCategoryExpanded(categoryId);
   };
 
   const handleOpenSavedContent = (content: LessonContent) => {
+    if (editingContent?.id === content.id) return;
+    if (!confirmDiscardUnsavedChanges()) return;
     setEditingContent(content);
     setSavedContentSnapshot(content);
     setSelectedContainerId(getContainerId(content.categoryId ?? null));
-    setContentMode('preview');
     setEditorTab('preview');
+    setIsFullscreenPreviewOpen(false);
     setIsSavingContent(false);
     setSaveError(null);
     ensureCategoryExpanded(content.categoryId ?? null);
@@ -379,26 +429,14 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
   const handleCloseEditor = () => {
     setEditingContent(null);
     setSavedContentSnapshot(null);
-    setContentMode('create');
     setEditorTab('edit');
     setIsFullscreenPreviewOpen(false);
     setIsSavingContent(false);
     setSaveError(null);
   };
 
-  const handleCancel = () => {
-    if (contentMode === 'create') return handleCloseEditor();
-    if (contentMode === 'edit' && savedContentSnapshot) {
-      setEditingContent(savedContentSnapshot);
-      setContentMode('preview');
-      setEditorTab('preview');
-      return;
-    }
-    handleCloseEditor();
-  };
-
   const handleSaveContent = async () => {
-    if (!editingContent?.title?.trim()) return;
+    if (!editingContent?.title?.trim() || !hasUnsavedChanges) return;
     setIsSavingContent(true);
     setSaveError(null);
 
@@ -411,8 +449,6 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
       setEditingContent(savedContent);
       setSavedContentSnapshot(savedContent);
       setSelectedContainerId(getContainerId(savedContent.categoryId ?? null));
-      setContentMode('preview');
-      setEditorTab('preview');
       ensureCategoryExpanded(savedContent.categoryId ?? null);
     } catch (error) {
       setSaveError(getSaveErrorMessage(error));
@@ -479,7 +515,6 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
   };
 
   const inputBaseClassName = 'w-full rounded-2xl border-none px-6 py-4 outline-none transition-all';
-  const readOnlyInputClassName = `${inputBaseClassName} cursor-default bg-[#F8F6F2] text-[#8B7E74]`;
   const editableInputClassName = `${inputBaseClassName} bg-[#F3F2EE] text-[#4A3728] focus:ring-2 focus:ring-[#8B5E3C]`;
 
   const getCategoryDragPosition = (event: React.DragEvent<HTMLElement>) => {
@@ -899,15 +934,6 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                 <div className="mb-8 flex items-center justify-between">
                   <h2 className="text-2xl font-bold text-[#4A3728]">{editorTitle}</h2>
                   <div className="flex gap-2">
-                    {!isPreviewMode && (
-                      <button
-                        onClick={handleCancel}
-                        disabled={isSavingContent}
-                        className="rounded-xl px-6 py-2.5 font-bold text-[#8B7E74] transition-all hover:bg-[#F3F2EE] disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        취소
-                      </button>
-                    )}
                     {isExistingContent && (
                       <button
                         onClick={() => handleContentDelete(editingContent.id!)}
@@ -918,31 +944,18 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                         삭제
                       </button>
                     )}
-                    {isPreviewMode ? (
-                      <button
-                        onClick={() => {
-                          setContentMode('edit');
-                          setEditorTab('edit');
-                        }}
-                        className="flex items-center gap-2 rounded-xl bg-[#8B5E3C] px-8 py-2.5 font-bold text-white shadow-lg shadow-[#8B5E3C]/10 transition-all hover:bg-[#724D31]"
-                      >
-                        <Edit3 size={18} />
-                        수정
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => void handleSaveContent()}
-                        disabled={isSavingContent || !editingContent.title?.trim()}
-                        className="flex items-center gap-2 rounded-xl bg-[#8B5E3C] px-8 py-2.5 font-bold text-white shadow-lg shadow-[#8B5E3C]/10 transition-all hover:bg-[#724D31] disabled:cursor-not-allowed disabled:bg-[#B8AA9A] disabled:shadow-none"
-                      >
-                        <Save size={18} />
-                        {isSavingContent ? '저장 중...' : '저장'}
-                      </button>
-                    )}
+                    <button
+                      onClick={() => void handleSaveContent()}
+                      disabled={isSavingContent || !editingContent.title?.trim() || !hasUnsavedChanges}
+                      className="flex items-center gap-2 rounded-xl bg-[#8B5E3C] px-8 py-2.5 font-bold text-white shadow-lg shadow-[#8B5E3C]/10 transition-all hover:bg-[#724D31] disabled:cursor-not-allowed disabled:bg-[#B8AA9A] disabled:shadow-none"
+                    >
+                      <Save size={18} />
+                      {isSavingContent ? '저장 중...' : '저장'}
+                    </button>
                   </div>
                 </div>
 
-                {saveError && !isPreviewMode && (
+                {saveError && (
                   <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
                     {saveError}
                   </div>
@@ -956,32 +969,40 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                     <input
                       type="text"
                       value={editingContent.title ?? ''}
-                      readOnly={isPreviewMode}
                       onChange={(event) => {
                         setSaveError(null);
                         setEditingContent({ ...editingContent, title: event.target.value });
                       }}
                       placeholder="콘텐츠 제목을 입력하세요"
-                      className={`${isPreviewMode ? readOnlyInputClassName : editableInputClassName} text-lg font-bold`}
+                      className={`${editableInputClassName} text-lg font-bold`}
                     />
                   </div>
 
                   <div>
                     <div className="mb-2 flex items-center justify-between">
                       <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#8B5E3C]">
-                        <Code size={14} /> HTML 내용
+                        {isDescriptionTab ? <FileText size={14} /> : <Code size={14} />}
+                        {editorSectionTitle}
                       </label>
                       <div className="flex items-center gap-2">
                         <div className="flex items-center gap-1 rounded-xl bg-[#F3F2EE] p-1">
                           <button
                             onClick={() => setEditorTab('edit')}
-                            disabled={isPreviewMode}
-                            className={`flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-bold transition-all disabled:cursor-not-allowed disabled:opacity-45 ${
+                            className={`flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-bold transition-all ${
                               editorTab === 'edit' ? 'bg-white text-[#8B5E3C] shadow-sm' : 'text-[#8B7E74] hover:text-[#4A3728]'
                             }`}
                           >
                             <Code size={13} />
                             편집
+                          </button>
+                          <button
+                            onClick={() => setEditorTab('description')}
+                            className={`flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-bold transition-all ${
+                              editorTab === 'description' ? 'bg-white text-[#8B5E3C] shadow-sm' : 'text-[#8B7E74] hover:text-[#4A3728]'
+                            }`}
+                          >
+                            <FileText size={13} />
+                            수업 설명
                           </button>
                           <button
                             onClick={() => setEditorTab('preview')}
@@ -1006,17 +1027,14 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                     {editorTab === 'edit' ? (
                       <textarea
                         value={editingContent.html ?? ''}
-                        readOnly={isPreviewMode}
                         onChange={(event) => {
                           setSaveError(null);
                           setEditingContent({ ...editingContent, html: event.target.value });
                         }}
                         placeholder="HTML 코드를 입력하세요"
-                        className={`h-[400px] w-full resize-none rounded-2xl border-none px-6 py-4 font-mono text-sm outline-none transition-all ${
-                          isPreviewMode ? 'cursor-default bg-[#F8F6F2] text-[#8B7E74]' : 'bg-[#F3F2EE] text-[#4A3728] focus:ring-2 focus:ring-[#8B5E3C]'
-                        }`}
+                        className="h-[400px] w-full resize-none rounded-2xl border-none bg-[#F3F2EE] px-6 py-4 font-mono text-sm text-[#4A3728] outline-none transition-all focus:ring-2 focus:ring-[#8B5E3C]"
                       />
-                    ) : (
+                    ) : editorTab === 'preview' ? (
                       <div className="h-[400px] w-full overflow-hidden rounded-2xl border border-[#E5E3DD] bg-white">
                         {editingContent.html?.trim() ? (
                           <StudentContentPreviewFrame
@@ -1032,6 +1050,16 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                           </div>
                         )}
                       </div>
+                    ) : (
+                      <textarea
+                        value={editingContent.description ?? ''}
+                        onChange={(event) => {
+                          setSaveError(null);
+                          setEditingContent({ ...editingContent, description: event.target.value });
+                        }}
+                        placeholder="이 콘텐츠를 수업에서 어떻게 설명할지 입력하세요"
+                        className="h-[240px] w-full resize-none rounded-2xl border-none bg-[#F3F2EE] px-6 py-4 text-sm leading-7 text-[#4A3728] outline-none transition-all focus:ring-2 focus:ring-[#8B5E3C]"
+                      />
                     )}
                   </div>
                 </div>
