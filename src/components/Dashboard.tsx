@@ -40,6 +40,7 @@ interface DashboardProps {
   onSelectLesson: (lesson: Lesson) => void;
   onManageFolder: (folder: any) => void;
   onGoToLibrary: () => void;
+  onSwitchToStudent: () => void;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ 
@@ -47,7 +48,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onStartLesson, 
   onSelectLesson, 
   onManageFolder,
-  onGoToLibrary
+  onGoToLibrary,
+  onSwitchToStudent
 }) => {
   return (
     <main className="flex-1 overflow-y-auto bg-[#FBFBFA] p-8">
@@ -76,11 +78,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
               콘텐츠 라이브러리 가기
             </button>
             <button 
-              onClick={onStartLesson}
+              onClick={onSwitchToStudent}
               className="px-8 py-4 bg-white text-[#4A3728] rounded-2xl font-bold shadow-sm hover:shadow-md transition-all flex items-center gap-2 border border-[#E5E3DD]"
             >
-              <Plus size={20} />
-              새 수업 배정하기
+              <Users size={20} />
+              학생 페이지로 이동
             </button>
           </div>
         </div>

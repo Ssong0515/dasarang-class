@@ -832,6 +832,7 @@ export default function App() {
               onSelectLesson={handleSelectLesson}
               onManageFolder={handleManageFolder}
               onGoToLibrary={() => handleTabChange('content-library')}
+              onSwitchToStudent={handleSwitchToStudent}
             />
           )}
           {activeTab === 'memo' && (
