@@ -25,15 +25,17 @@ export interface LessonCategory {
   id: string;
   name: string;
   ownerUid: string;
+  order?: number;
 }
 
 export interface LessonContent {
   id: string;
-  categoryId: string;
+  categoryId: string | null;
   ownerUid: string;
   title: string;
   html: string;
   createdAt: string;
+  order?: number;
 }
 
 export interface Lesson {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Plus,
   FolderPlus,
@@ -14,6 +14,7 @@ import {
   Trash2,
   Eye,
   Maximize2,
+  GripVertical,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { LessonCategory, LessonContent } from '../types';
@@ -24,18 +25,156 @@ interface ContentLibraryProps {
   contents: LessonContent[];
   onSaveCategory: (category: Partial<LessonCategory>) => Promise<void>;
   onSaveContent: (content: Partial<LessonContent>) => Promise<LessonContent>;
+  onReorderCategories: (nextCategories: LessonCategory[]) => Promise<void>;
+  onReorderContents: (updates: Array<{ id: string; categoryId: string | null; order: number }>) => Promise<void>;
   onDeleteCategory: (id: string) => Promise<void>;
   onDeleteContent: (id: string) => Promise<void>;
 }
 
 type EditorTab = 'edit' | 'preview';
 type ContentMode = 'create' | 'preview' | 'edit';
+type CategoryDropTarget = { targetId: string; position: 'before' | 'after' } | null;
+type DraggedContent = { id: string; categoryId: string | null };
+type ContentDropTarget = { categoryId: string | null; index: number } | null;
+
+const UNCATEGORIZED_ID = '__uncategorized__';
+
+const getContainerId = (categoryId: string | null) => categoryId ?? UNCATEGORIZED_ID;
+const getContentsForCategory = (items: LessonContent[], categoryId: string | null) =>
+  items.filter((item) => (item.categoryId ?? null) === categoryId);
+
+const reorderCategories = (
+  items: LessonCategory[],
+  draggingId: string,
+  targetId: string,
+  position: 'before' | 'after'
+) => {
+  const nextItems = [...items];
+  const sourceIndex = nextItems.findIndex((item) => item.id === draggingId);
+  if (sourceIndex === -1) return nextItems;
+  const [draggingItem] = nextItems.splice(sourceIndex, 1);
+  const targetIndex = nextItems.findIndex((item) => item.id === targetId);
+  if (targetIndex === -1) return items;
+  nextItems.splice(position === 'after' ? targetIndex + 1 : targetIndex, 0, draggingItem);
+  return nextItems;
+};
+
+const hasCategoryOrderChanged = (currentItems: LessonCategory[], nextItems: LessonCategory[]) =>
+  currentItems.length !== nextItems.length ||
+  nextItems.some((item, index) => item.id !== currentItems[index]?.id);
+
+const hasNumericOrder = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value);
+
+const compareContentCreatedAt = (left: LessonContent, right: LessonContent) =>
+  new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+
+const sortDisplayedContents = (items: LessonContent[]) =>
+  [...items].sort((left, right) => {
+    const leftHasOrder = hasNumericOrder(left.order);
+    const rightHasOrder = hasNumericOrder(right.order);
+
+    if ((left.categoryId ?? '') !== (right.categoryId ?? '')) {
+      return (left.categoryId ?? '').localeCompare(right.categoryId ?? '');
+    }
+
+    if (leftHasOrder && rightHasOrder && left.order !== right.order) {
+      return left.order - right.order;
+    }
+
+    if (leftHasOrder !== rightHasOrder) {
+      return leftHasOrder ? -1 : 1;
+    }
+
+    const createdAtDiff = compareContentCreatedAt(left, right);
+    if (createdAtDiff !== 0) {
+      return createdAtDiff;
+    }
+
+    return left.title.localeCompare(right.title);
+  });
+
+const applyContentReorderUpdates = (
+  items: LessonContent[],
+  updates: Array<{ id: string; categoryId: string | null; order: number }>
+) => {
+  const updateMap = new Map(updates.map((update) => [update.id, update]));
+
+  return sortDisplayedContents(
+    items.map((item) => {
+      const update = updateMap.get(item.id);
+      return update
+        ? {
+            ...item,
+            categoryId: update.categoryId,
+            order: update.order,
+          }
+        : item;
+    })
+  );
+};
+
+const buildContentReorderUpdates = (
+  items: LessonContent[],
+  draggingContentId: string,
+  targetCategoryId: string | null,
+  targetIndex: number
+) => {
+  const movingContent = items.find((item) => item.id === draggingContentId);
+  if (!movingContent) return [];
+
+  const sourceCategoryId = movingContent.categoryId ?? null;
+  const sourceItems = getContentsForCategory(items, sourceCategoryId);
+  const sourceIndex = sourceItems.findIndex((item) => item.id === draggingContentId);
+  const sourceWithoutMoving = sourceItems.filter((item) => item.id !== draggingContentId);
+  const targetBase =
+    sourceCategoryId === targetCategoryId
+      ? sourceWithoutMoving
+      : getContentsForCategory(items, targetCategoryId).filter((item) => item.id !== draggingContentId);
+
+  let safeTargetIndex = Math.max(0, Math.min(targetIndex, targetBase.length));
+  if (sourceCategoryId === targetCategoryId && sourceIndex !== -1) {
+    const isMovingDownWithinList = targetIndex > sourceIndex && targetIndex < sourceItems.length;
+    const isAppendingToEnd = targetIndex >= sourceItems.length;
+
+    if (isMovingDownWithinList) {
+      safeTargetIndex -= 1;
+    } else if (isAppendingToEnd) {
+      safeTargetIndex = targetBase.length;
+    }
+  }
+
+  const nextTarget = [...targetBase];
+  nextTarget.splice(safeTargetIndex, 0, { ...movingContent, categoryId: targetCategoryId });
+
+  const affectedLists =
+    sourceCategoryId === targetCategoryId
+      ? [{ categoryId: targetCategoryId, items: nextTarget }]
+      : [
+          { categoryId: sourceCategoryId, items: sourceWithoutMoving },
+          { categoryId: targetCategoryId, items: nextTarget },
+        ];
+
+  return affectedLists
+    .flatMap(({ categoryId, items: affectedItems }) =>
+      affectedItems.map((item, index) => ({ id: item.id, categoryId, order: index }))
+    )
+    .filter((update) => {
+      const original = items.find((item) => item.id === update.id);
+      return Boolean(
+        original &&
+          ((original.categoryId ?? null) !== update.categoryId || original.order !== update.order)
+      );
+    });
+};
 
 export const ContentLibrary: React.FC<ContentLibraryProps> = ({
   categories,
   contents,
   onSaveCategory,
   onSaveContent,
+  onReorderCategories,
+  onReorderContents,
   onDeleteCategory,
   onDeleteContent,
 }) => {
@@ -43,78 +182,198 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
   const [newCategoryName, setNewCategoryName] = useState('');
   const [editingContent, setEditingContent] = useState<Partial<LessonContent> | null>(null);
   const [savedContentSnapshot, setSavedContentSnapshot] = useState<LessonContent | null>(null);
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [selectedContainerId, setSelectedContainerId] = useState<string | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [editorTab, setEditorTab] = useState<EditorTab>('edit');
   const [contentMode, setContentMode] = useState<ContentMode>('create');
   const [isFullscreenPreviewOpen, setIsFullscreenPreviewOpen] = useState(false);
+  const [isSavingContent, setIsSavingContent] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [displayedCategories, setDisplayedCategories] = useState<LessonCategory[]>(categories);
+  const [displayedContents, setDisplayedContents] = useState<LessonContent[]>(contents);
+  const [categoryReorderError, setCategoryReorderError] = useState<string | null>(null);
+  const [contentReorderError, setContentReorderError] = useState<string | null>(null);
+  const [draggingCategoryId, setDraggingCategoryId] = useState<string | null>(null);
+  const [categoryDropTarget, setCategoryDropTarget] = useState<CategoryDropTarget>(null);
+  const [draggingContent, setDraggingContent] = useState<DraggedContent | null>(null);
+  const [contentDropTarget, setContentDropTarget] = useState<ContentDropTarget>(null);
+  const categoryDragRef = useRef<string | null>(null);
+  const contentDragRef = useRef<DraggedContent | null>(null);
+  const dragCleanupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const previewContent = editingContent?.categoryId
+  const previewContent = editingContent
     ? ({
         id: editingContent.id ?? '__preview__',
-        categoryId: editingContent.categoryId,
+        categoryId: editingContent.categoryId ?? null,
         ownerUid: editingContent.ownerUid ?? '',
         title: editingContent.title?.trim() || '미리보기 콘텐츠',
         html: editingContent.html ?? '',
         createdAt: editingContent.createdAt ?? new Date().toISOString(),
+        order: editingContent.order,
       } satisfies LessonContent)
     : null;
 
+  const uncategorizedContents = getContentsForCategory(displayedContents, null);
   const hasPreviewHtml = Boolean(previewContent?.html.trim());
   const isPreviewMode = contentMode === 'preview';
   const isExistingContent = Boolean(editingContent?.id);
   const editorTitle =
-    contentMode === 'create'
-      ? '새 콘텐츠 작성'
-      : isPreviewMode
-        ? '콘텐츠 미리보기'
-        : '콘텐츠 수정';
+    contentMode === 'create' ? '새 콘텐츠 작성' : isPreviewMode ? '콘텐츠 미리보기' : '콘텐츠 수정';
 
   useEffect(() => {
-    if (!editingContent?.html?.trim()) {
-      setIsFullscreenPreviewOpen(false);
-    }
+    if (!editingContent?.html?.trim()) setIsFullscreenPreviewOpen(false);
   }, [editingContent]);
 
-  const toggleCategory = (id: string) => {
-    const next = new Set(expandedCategories);
-    if (next.has(id)) {
-      next.delete(id);
-    } else {
-      next.add(id);
-      setSelectedCategoryId(id);
+  useEffect(() => {
+    setDisplayedCategories(categories);
+  }, [categories]);
+
+  useEffect(() => {
+    setDisplayedContents(contents);
+  }, [contents]);
+
+  useEffect(() => {
+    if (!selectedContainerId || selectedContainerId === UNCATEGORIZED_ID) return;
+    if (!categories.some((category) => category.id === selectedContainerId)) setSelectedContainerId(null);
+  }, [categories, selectedContainerId]);
+
+  useEffect(
+    () => () => {
+      if (dragCleanupTimeoutRef.current !== null) {
+        clearTimeout(dragCleanupTimeoutRef.current);
+      }
+    },
+    []
+  );
+
+  const clearDragState = () => {
+    setDraggingCategoryId(null);
+    setCategoryDropTarget(null);
+    setDraggingContent(null);
+    setContentDropTarget(null);
+  };
+
+  const cancelPendingDragCleanup = () => {
+    if (dragCleanupTimeoutRef.current !== null) {
+      clearTimeout(dragCleanupTimeoutRef.current);
+      dragCleanupTimeoutRef.current = null;
     }
-    setExpandedCategories(next);
+  };
+
+  const finalizeDragState = () => {
+    cancelPendingDragCleanup();
+    clearDragState();
+    categoryDragRef.current = null;
+    contentDragRef.current = null;
+  };
+
+  const scheduleDragStateCleanup = () => {
+    cancelPendingDragCleanup();
+    dragCleanupTimeoutRef.current = setTimeout(() => {
+      dragCleanupTimeoutRef.current = null;
+      clearDragState();
+      categoryDragRef.current = null;
+      contentDragRef.current = null;
+    }, 0);
+  };
+
+  const setCategoryDropTargetIfChanged = (nextTarget: CategoryDropTarget) => {
+    setCategoryDropTarget((current) => {
+      if (
+        current?.targetId === nextTarget?.targetId &&
+        current?.position === nextTarget?.position
+      ) {
+        return current;
+      }
+
+      return nextTarget;
+    });
+  };
+
+  const setContentDropTargetIfChanged = (nextTarget: ContentDropTarget) => {
+    setContentDropTarget((current) => {
+      if (
+        current?.categoryId === nextTarget?.categoryId &&
+        current?.index === nextTarget?.index
+      ) {
+        return current;
+      }
+
+      return nextTarget;
+    });
+  };
+
+  const getSaveErrorMessage = (error: unknown) => {
+    if (error instanceof Error && error.message) {
+      return `콘텐츠 저장에 실패했습니다. ${error.message}`;
+    }
+
+    return '콘텐츠 저장에 실패했습니다. Firestore 규칙 배포 상태를 확인하세요.';
+  };
+
+  const getCategoryReorderErrorMessage = (error: unknown) => {
+    if (error instanceof Error && error.message) {
+      return `카테고리 순서 저장에 실패했습니다. ${error.message}`;
+    }
+
+    return '카테고리 순서 저장에 실패했습니다. 잠시 후 다시 시도하세요.';
+  };
+
+  const getContentReorderErrorMessage = (error: unknown) => {
+    if (error instanceof Error && error.message) {
+      return `콘텐츠 이동 저장에 실패했습니다. ${error.message}`;
+    }
+
+    return '콘텐츠 이동 저장에 실패했습니다. 잠시 후 다시 시도하세요.';
+  };
+
+  const ensureCategoryExpanded = (categoryId: string | null) => {
+    if (!categoryId) return;
+    setExpandedCategories((current) => {
+      if (current.has(categoryId)) return current;
+      const next = new Set(current);
+      next.add(categoryId);
+      return next;
+    });
+  };
+
+  const toggleCategory = (id: string) => {
+    setExpandedCategories((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+    setSelectedContainerId(id);
   };
 
   const handleCreateCategory = async () => {
-    if (!newCategoryName.trim()) {
-      return;
-    }
-
-    await onSaveCategory({ name: newCategoryName });
+    if (!newCategoryName.trim()) return;
+    await onSaveCategory({ name: newCategoryName.trim() });
     setNewCategoryName('');
     setIsAddingCategory(false);
   };
 
-  const handleStartNewContent = (categoryId: string) => {
-    setEditingContent({
-      categoryId,
-      title: '',
-      html: '',
-    });
+  const handleStartNewContent = (categoryId: string | null) => {
+    setEditingContent({ categoryId, title: '', html: '' });
     setSavedContentSnapshot(null);
-    setSelectedCategoryId(categoryId);
+    setSelectedContainerId(getContainerId(categoryId));
     setContentMode('create');
     setEditorTab('edit');
+    setIsSavingContent(false);
+    setSaveError(null);
+    ensureCategoryExpanded(categoryId);
   };
 
   const handleOpenSavedContent = (content: LessonContent) => {
     setEditingContent(content);
     setSavedContentSnapshot(content);
-    setSelectedCategoryId(content.categoryId);
+    setSelectedContainerId(getContainerId(content.categoryId ?? null));
     setContentMode('preview');
     setEditorTab('preview');
+    setIsSavingContent(false);
+    setSaveError(null);
+    ensureCategoryExpanded(content.categoryId ?? null);
   };
 
   const handleCloseEditor = () => {
@@ -123,190 +382,511 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
     setContentMode('create');
     setEditorTab('edit');
     setIsFullscreenPreviewOpen(false);
+    setIsSavingContent(false);
+    setSaveError(null);
   };
 
   const handleCancel = () => {
-    if (contentMode === 'create') {
-      handleCloseEditor();
-      return;
-    }
-
+    if (contentMode === 'create') return handleCloseEditor();
     if (contentMode === 'edit' && savedContentSnapshot) {
       setEditingContent(savedContentSnapshot);
       setContentMode('preview');
       setEditorTab('preview');
       return;
     }
-
     handleCloseEditor();
-  };
-
-  const handleEnterEditMode = () => {
-    setContentMode('edit');
-    setEditorTab('edit');
   };
 
   const handleSaveContent = async () => {
-    if (!editingContent?.title?.trim() || !editingContent?.categoryId) {
-      return;
+    if (!editingContent?.title?.trim()) return;
+    setIsSavingContent(true);
+    setSaveError(null);
+
+    try {
+      const savedContent = await onSaveContent({
+        ...editingContent,
+        categoryId: editingContent.categoryId ?? null,
+        title: editingContent.title.trim(),
+      });
+      setEditingContent(savedContent);
+      setSavedContentSnapshot(savedContent);
+      setSelectedContainerId(getContainerId(savedContent.categoryId ?? null));
+      setContentMode('preview');
+      setEditorTab('preview');
+      ensureCategoryExpanded(savedContent.categoryId ?? null);
+    } catch (error) {
+      setSaveError(getSaveErrorMessage(error));
+    } finally {
+      setIsSavingContent(false);
     }
-
-    const savedContent = await onSaveContent({
-      ...editingContent,
-      title: editingContent.title.trim(),
-    });
-
-    setEditingContent(savedContent);
-    setSavedContentSnapshot(savedContent);
-    setSelectedCategoryId(savedContent.categoryId);
-    setContentMode('preview');
-    setEditorTab('preview');
   };
 
-  const handleDeleteCurrentContent = () => {
-    if (!editingContent?.id) {
-      return;
-    }
-
-    void onDeleteContent(editingContent.id);
-    handleCloseEditor();
-  };
-
-  const handleDeleteCategory = (categoryId: string) => {
-    void onDeleteCategory(categoryId);
-  };
-
-  const handleDeleteListContent = (contentId: string) => {
+  const handleContentDelete = (contentId: string) => {
     void onDeleteContent(contentId);
-    if (editingContent?.id === contentId) {
-      handleCloseEditor();
+    if (editingContent?.id === contentId) handleCloseEditor();
+  };
+
+  const handleCategoryDragStart = (event: React.DragEvent<HTMLDivElement>, categoryId: string) => {
+    cancelPendingDragCleanup();
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', categoryId);
+    categoryDragRef.current = categoryId;
+    contentDragRef.current = null;
+    setDraggingCategoryId(categoryId);
+    setDraggingContent(null);
+    setContentDropTarget(null);
+    setCategoryDropTarget(null);
+    setCategoryReorderError(null);
+  };
+
+  const handleContentDragStart = (event: React.DragEvent<HTMLDivElement>, content: LessonContent) => {
+    cancelPendingDragCleanup();
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', content.id);
+    const dragPayload = { id: content.id, categoryId: content.categoryId ?? null };
+    categoryDragRef.current = null;
+    contentDragRef.current = dragPayload;
+    setDraggingCategoryId(null);
+    setCategoryDropTarget(null);
+    setDraggingContent(dragPayload);
+    setContentDropTarget({
+      categoryId: content.categoryId ?? null,
+      index: getContentsForCategory(displayedContents, content.categoryId ?? null).findIndex((item) => item.id === content.id),
+    });
+    setContentReorderError(null);
+  };
+
+  const moveContentTo = async (targetCategoryId: string | null, targetIndex: number) => {
+    cancelPendingDragCleanup();
+    const activeDrag = contentDragRef.current ?? draggingContent;
+    if (!activeDrag) return finalizeDragState();
+    const previousContents = displayedContents;
+    const updates = buildContentReorderUpdates(previousContents, activeDrag.id, targetCategoryId, targetIndex);
+    finalizeDragState();
+    if (updates.length === 0) return;
+    const nextContents = applyContentReorderUpdates(previousContents, updates);
+    if (targetCategoryId) ensureCategoryExpanded(targetCategoryId);
+    setSelectedContainerId(getContainerId(targetCategoryId));
+    setDisplayedContents(nextContents);
+    setContentReorderError(null);
+
+    try {
+      await onReorderContents(updates);
+    } catch (error) {
+      setDisplayedContents(previousContents);
+      setContentReorderError(getContentReorderErrorMessage(error));
     }
   };
 
-  const inputBaseClassName =
-    'w-full border-none rounded-2xl px-6 py-4 outline-none transition-all';
-  const readOnlyInputClassName = `${inputBaseClassName} bg-[#F8F6F2] text-[#8B7E74] cursor-default`;
+  const inputBaseClassName = 'w-full rounded-2xl border-none px-6 py-4 outline-none transition-all';
+  const readOnlyInputClassName = `${inputBaseClassName} cursor-default bg-[#F8F6F2] text-[#8B7E74]`;
   const editableInputClassName = `${inputBaseClassName} bg-[#F3F2EE] text-[#4A3728] focus:ring-2 focus:ring-[#8B5E3C]`;
+
+  const getCategoryDragPosition = (event: React.DragEvent<HTMLElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return event.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+  };
+
+  const handleCategoryDragOver = (event: React.DragEvent<HTMLElement>, categoryId: string) => {
+    const activeCategoryId = categoryDragRef.current ?? draggingCategoryId;
+    if (!activeCategoryId || activeCategoryId === categoryId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setCategoryDropTargetIfChanged({
+      targetId: categoryId,
+      position: getCategoryDragPosition(event),
+    });
+  };
+
+  const handleCategoryDropZoneDragOver = (
+    event: React.DragEvent<HTMLElement>,
+    categoryId: string,
+    position: 'before' | 'after'
+  ) => {
+    const activeCategoryId = categoryDragRef.current ?? draggingCategoryId;
+    if (!activeCategoryId || activeCategoryId === categoryId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setCategoryDropTargetIfChanged({ targetId: categoryId, position });
+  };
+
+  const handleCategoryDrop = async (
+    event: React.DragEvent<HTMLElement>,
+    explicitTarget?: CategoryDropTarget
+  ) => {
+    cancelPendingDragCleanup();
+    const activeCategoryId = categoryDragRef.current ?? draggingCategoryId;
+    if (!activeCategoryId) return finalizeDragState();
+    event.preventDefault();
+    event.stopPropagation();
+
+    const dropTarget = explicitTarget ?? categoryDropTarget;
+    if (!dropTarget || dropTarget.targetId === activeCategoryId) {
+      return finalizeDragState();
+    }
+
+    const previousCategories = displayedCategories;
+    const nextCategories = reorderCategories(
+      displayedCategories,
+      activeCategoryId,
+      dropTarget.targetId,
+      dropTarget.position
+    );
+
+    finalizeDragState();
+    if (!hasCategoryOrderChanged(previousCategories, nextCategories)) return;
+
+    setDisplayedCategories(nextCategories);
+    setCategoryReorderError(null);
+
+    try {
+      await onReorderCategories(nextCategories);
+    } catch (error) {
+      setDisplayedCategories(previousCategories);
+      setCategoryReorderError(getCategoryReorderErrorMessage(error));
+    }
+  };
+
+  const getContentDropIndex = (event: React.DragEvent<HTMLElement>, index: number) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return event.clientY < rect.top + rect.height / 2 ? index : index + 1;
+  };
+
+  const getResolvedContentDropTarget = (
+    categoryId: string | null,
+    fallbackIndex: number
+  ) => {
+    if (contentDropTarget?.categoryId === categoryId) {
+      return contentDropTarget;
+    }
+
+    return { categoryId, index: fallbackIndex };
+  };
+
+  const handleContentRowDragOver = (
+    event: React.DragEvent<HTMLElement>,
+    categoryId: string | null,
+    index: number
+  ) => {
+    const activeDrag = contentDragRef.current ?? draggingContent;
+    if (!activeDrag) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setContentDropTargetIfChanged({ categoryId, index: getContentDropIndex(event, index) });
+  };
+
+  const handleContentRowDrop = async (
+    event: React.DragEvent<HTMLElement>,
+    categoryId: string | null,
+    index: number
+  ) => {
+    if (!(contentDragRef.current ?? draggingContent)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const resolvedTarget = getResolvedContentDropTarget(
+      categoryId,
+      getContentDropIndex(event, index)
+    );
+    await moveContentTo(resolvedTarget.categoryId, resolvedTarget.index);
+  };
+
+  const handleContentAppendDragOver = (event: React.DragEvent<HTMLElement>, categoryId: string | null) => {
+    const activeDrag = contentDragRef.current ?? draggingContent;
+    if (!activeDrag) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setContentDropTargetIfChanged({
+      categoryId,
+      index: getContentsForCategory(displayedContents, categoryId).length,
+    });
+  };
+
+  const handleContentAppendDrop = async (event: React.DragEvent<HTMLElement>, categoryId: string | null) => {
+    if (!(contentDragRef.current ?? draggingContent)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const resolvedTarget = getResolvedContentDropTarget(
+      categoryId,
+      getContentsForCategory(displayedContents, categoryId).length
+    );
+    await moveContentTo(resolvedTarget.categoryId, resolvedTarget.index);
+  };
+
+  const renderDropIndicator = (categoryId: string | null, index: number) => {
+    const isActive =
+      Boolean(draggingContent) &&
+      contentDropTarget?.categoryId === categoryId &&
+      contentDropTarget.index === index;
+    return (
+      <div className="px-1 py-0.5">
+        <div
+          className={`h-1 rounded-full bg-[#8B5E3C] transition-opacity ${
+            isActive ? 'opacity-100' : 'opacity-0'
+          }`}
+        />
+      </div>
+    );
+  };
+
+  const renderAppendZone = (categoryId: string | null, isEmpty: boolean) => {
+    const itemCount = getContentsForCategory(displayedContents, categoryId).length;
+    const isActive =
+      Boolean(draggingContent) &&
+      contentDropTarget?.categoryId === categoryId &&
+      contentDropTarget.index === itemCount;
+    return (
+      <div
+        onDragOver={(event) => handleContentAppendDragOver(event, categoryId)}
+        onDrop={(event) => void handleContentAppendDrop(event, categoryId)}
+        className={isEmpty ? 'pt-1.5' : 'py-0.5'}
+      >
+        <div
+          className={`rounded-2xl border border-dashed transition-colors ${
+            isEmpty
+              ? isActive
+                ? 'min-h-[76px] border-[#8B5E3C] bg-[#FFF5E9]'
+                : 'min-h-[76px] border-[#E5E3DD] bg-[#FBFBFA]'
+              : isActive
+                ? 'h-4 border-[#8B5E3C] bg-[#FFF5E9]'
+                : 'h-4 border-transparent bg-transparent'
+          }`}
+        />
+      </div>
+    );
+  };
+
+  const renderContentRow = (content: LessonContent, categoryId: string | null, index: number) => (
+    <React.Fragment key={content.id}>
+      {renderDropIndicator(categoryId, index)}
+      <div
+        onDragOver={(event) => handleContentRowDragOver(event, categoryId, index)}
+        onDrop={(event) => void handleContentRowDrop(event, categoryId, index)}
+        className={`group grid grid-cols-[auto_auto_minmax(0,1fr)_2.5rem] items-center gap-1.5 rounded-xl px-1 py-0.5 transition-all sm:gap-2 ${draggingContent?.id === content.id ? 'opacity-40' : 'opacity-100'}`}
+      >
+        <div
+          draggable
+          onDragStart={(event) => handleContentDragStart(event, content)}
+          onDragEnd={scheduleDragStateCleanup}
+          className="cursor-grab rounded-lg p-1.5 text-[#A89F94] transition-all hover:bg-[#F3F2EE] hover:text-[#8B5E3C] active:cursor-grabbing sm:p-2"
+        >
+          <GripVertical size={14} />
+        </div>
+        <div className="flex h-8 w-8 items-center justify-center text-[#A89F94] sm:h-9 sm:w-9">
+          <FileText size={16} />
+        </div>
+        <button
+          onClick={() => handleOpenSavedContent(content)}
+          className="min-w-0 rounded-xl px-2 py-2 text-left text-[13px] text-[#8B7E74] transition-all hover:bg-[#FFF5E9] hover:text-[#8B5E3C] sm:px-3 sm:text-sm"
+        >
+          <span className="block truncate font-medium">{content.title}</span>
+        </button>
+        <div className="flex w-10 justify-end">
+          <button
+            onClick={() => handleContentDelete(content.id)}
+            className="rounded-lg p-1.5 text-[#A89F94] transition-all hover:bg-red-50 hover:text-red-500 sm:p-2"
+            title="콘텐츠 삭제"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      </div>
+    </React.Fragment>
+  );
+
+  const renderCategorySection = (category: LessonCategory) => {
+    const categoryContents = getContentsForCategory(displayedContents, category.id);
+    const isSelected = selectedContainerId === category.id;
+    const isExpanded = expandedCategories.has(category.id);
+    const isDropBefore = categoryDropTarget?.targetId === category.id && categoryDropTarget.position === 'before';
+    const isDropAfter = categoryDropTarget?.targetId === category.id && categoryDropTarget.position === 'after';
+    const isHeaderContentTarget =
+      Boolean(draggingContent) &&
+      contentDropTarget?.categoryId === category.id &&
+      contentDropTarget.index === categoryContents.length;
+
+    return (
+      <div key={category.id} className="relative">
+        {draggingCategoryId && draggingCategoryId !== category.id && (
+          <>
+            <div
+              onDragOver={(event) => handleCategoryDropZoneDragOver(event, category.id, 'before')}
+              onDrop={(event) => void handleCategoryDrop(event, { targetId: category.id, position: 'before' })}
+              className="absolute inset-x-0 -top-2 z-20 h-4"
+            >
+              <div
+                className={`pointer-events-none absolute inset-x-4 top-1/2 h-1 -translate-y-1/2 rounded-full bg-[#8B5E3C] transition-opacity ${
+                  isDropBefore ? 'opacity-100' : 'opacity-0'
+                }`}
+              />
+            </div>
+            <div
+              onDragOver={(event) => handleCategoryDropZoneDragOver(event, category.id, 'after')}
+              onDrop={(event) => void handleCategoryDrop(event, { targetId: category.id, position: 'after' })}
+              className="absolute inset-x-0 -bottom-2 z-20 h-4"
+            >
+              <div
+                className={`pointer-events-none absolute inset-x-4 top-1/2 h-1 -translate-y-1/2 rounded-full bg-[#8B5E3C] transition-opacity ${
+                  isDropAfter ? 'opacity-100' : 'opacity-0'
+                }`}
+              />
+            </div>
+          </>
+        )}
+        <div
+          onDragOver={(event) => {
+            if (draggingCategoryId) return handleCategoryDragOver(event, category.id);
+            handleContentAppendDragOver(event, category.id);
+          }}
+          onDrop={(event) => {
+            if (draggingCategoryId) {
+              return void handleCategoryDrop(
+                event,
+                categoryDropTarget?.targetId === category.id ? categoryDropTarget : null
+              );
+            }
+            void handleContentAppendDrop(event, category.id);
+          }}
+          className={`rounded-2xl border transition-all ${isSelected ? 'border-[#8B5E3C] bg-[#FFF5E9] text-[#8B5E3C]' : 'border-[#E5E3DD] bg-white text-[#4A3728]'} ${isHeaderContentTarget || isDropBefore || isDropAfter ? 'ring-2 ring-[#8B5E3C]/30' : ''}`}
+        >
+          <div className="flex items-center gap-2 p-2">
+            <div
+              draggable
+              onDragStart={(event) => handleCategoryDragStart(event, category.id)}
+              onDragEnd={scheduleDragStateCleanup}
+              className="cursor-grab rounded-xl p-2 text-[#A89F94] transition-all hover:bg-[#F3F2EE] hover:text-[#8B5E3C] active:cursor-grabbing"
+            >
+              <GripVertical size={16} />
+            </div>
+            <button onClick={() => toggleCategory(category.id)} className="flex flex-1 items-center justify-between rounded-xl px-3 py-2 transition-all hover:bg-white/60">
+              <div className="flex items-center gap-3">
+                <LayoutGrid size={18} />
+                <span className="font-bold">{category.name}</span>
+                <span className="rounded-full bg-white/80 px-2 py-0.5 text-xs font-bold text-[#8B7E74]">{categoryContents.length}</span>
+              </div>
+              {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+            </button>
+            <button onClick={() => void onDeleteCategory(category.id)} className="rounded-xl p-2 text-[#A89F94] transition-all hover:bg-red-50 hover:text-red-500" title="카테고리 삭제">
+              <Trash2 size={16} />
+            </button>
+          </div>
+          <AnimatePresence initial={false}>
+            {isExpanded && (
+              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden px-4 pb-4">
+                <div className="space-y-0.5 border-l border-[#E5E3DD] pl-3 sm:pl-4">
+                  {categoryContents.map((content, index) => renderContentRow(content, category.id, index))}
+                  {renderDropIndicator(category.id, categoryContents.length)}
+                  {renderAppendZone(category.id, categoryContents.length === 0)}
+                  <button onClick={() => handleStartNewContent(category.id)} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold text-[#8B5E3C] transition-all hover:bg-[#FFF5E9]">
+                    <Plus size={16} />
+                    새 콘텐츠 추가
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="flex-1 overflow-y-auto bg-[#FBFBFA] p-8">
-      <div className="max-w-5xl mx-auto">
-        <header className="flex items-center justify-between mb-12">
+      <div className="mx-auto max-w-6xl">
+        <header className="mb-12 flex items-center justify-between gap-4">
           <div>
-            <h1 className="text-4xl font-serif font-bold text-[#4A3728] mb-2">수업 콘텐츠 라이브러리</h1>
-            <p className="text-[#8B7E74]">수업에 사용할 콘텐츠를 미리 만들고 분류해서 관리하세요.</p>
+            <h1 className="mb-2 text-4xl font-bold text-[#4A3728]">수업 콘텐츠 라이브러리</h1>
+            <p className="text-[#8B7E74]">카테고리 안팎에서 콘텐츠를 만들고 정리하세요.</p>
           </div>
-          <button
-            onClick={() => setIsAddingCategory(true)}
-            className="flex items-center gap-2 px-6 py-3 bg-[#8B5E3C] text-white rounded-2xl font-bold shadow-lg shadow-[#8B5E3C]/10 hover:bg-[#724D31] transition-all"
-          >
-            <FolderPlus size={20} />
-            새 카테고리
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => handleStartNewContent(null)}
+              className="flex items-center gap-2 rounded-2xl bg-[#4A3728] px-6 py-3 font-bold text-white transition-all hover:bg-[#35271d]"
+            >
+              <Plus size={18} />
+              새 콘텐츠
+            </button>
+            <button
+              onClick={() => setIsAddingCategory(true)}
+              className="flex items-center gap-2 rounded-2xl bg-[#8B5E3C] px-6 py-3 font-bold text-white shadow-lg shadow-[#8B5E3C]/10 transition-all hover:bg-[#724D31]"
+            >
+              <FolderPlus size={18} />
+              새 카테고리
+            </button>
+          </div>
         </header>
 
         {isAddingCategory && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-white p-6 rounded-3xl border border-[#E5E3DD] mb-8 flex items-center gap-4"
+            className="mb-8 flex items-center gap-4 rounded-3xl border border-[#E5E3DD] bg-white p-6"
           >
             <input
               type="text"
               value={newCategoryName}
-              onChange={(e) => setNewCategoryName(e.target.value)}
+              onChange={(event) => setNewCategoryName(event.target.value)}
               placeholder="카테고리 이름을 입력하세요"
-              className="flex-1 bg-[#F3F2EE] border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-[#8B5E3C] outline-none"
+              className="flex-1 rounded-xl border-none bg-[#F3F2EE] px-4 py-3 outline-none focus:ring-2 focus:ring-[#8B5E3C]"
             />
-            <button
-              onClick={() => void handleCreateCategory()}
-              className="px-6 py-3 bg-[#8B5E3C] text-white rounded-xl font-bold"
-            >
+            <button onClick={() => void handleCreateCategory()} className="rounded-xl bg-[#8B5E3C] px-6 py-3 font-bold text-white">
               생성
             </button>
-            <button
-              onClick={() => setIsAddingCategory(false)}
-              className="p-3 text-[#8B7E74] hover:bg-[#F3F2EE] rounded-xl"
-            >
+            <button onClick={() => setIsAddingCategory(false)} className="rounded-xl p-3 text-[#8B7E74] transition-all hover:bg-[#F3F2EE]">
               <X size={20} />
             </button>
           </motion.div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-1 space-y-4">
-            <h2 className="text-lg font-bold text-[#4A3728] px-2">카테고리</h2>
-            {categories.map((category) => (
-              <div key={category.id} className="space-y-2">
-                <button
-                  onClick={() => toggleCategory(category.id)}
-                  className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all ${
-                    selectedCategoryId === category.id
-                      ? 'bg-[#FFF5E9] border-[#8B5E3C] text-[#8B5E3C]'
-                      : 'bg-white border-[#E5E3DD] text-[#4A3728] hover:border-[#8B5E3C]'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <LayoutGrid size={18} />
-                    <span className="font-bold">{category.name}</span>
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+          <div className="space-y-5 lg:col-span-1">
+            {contentReorderError && (
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                {contentReorderError}
+              </div>
+            )}
+            <section
+              onDragOver={(event) => handleContentAppendDragOver(event, null)}
+              onDrop={(event) => void handleContentAppendDrop(event, null)}
+              className={`rounded-[28px] border p-5 transition-all ${
+                selectedContainerId === UNCATEGORIZED_ID ? 'border-[#8B5E3C] bg-[#FFF5E9]' : 'border-[#E5E3DD] bg-white'
+              }`}
+            >
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <button onClick={() => setSelectedContainerId(UNCATEGORIZED_ID)} className="flex items-center gap-3 text-left">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#F3F2EE] text-[#8B5E3C]">
+                    <FileText size={18} />
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteCategory(category.id);
-                      }}
-                      className="p-2 text-[#A89F94] hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                      title="카테고리 삭제"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                    {expandedCategories.has(category.id) ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                  <div>
+                    <p className="font-bold text-[#4A3728]">분류 없음</p>
+                    <p className="text-xs text-[#8B7E74]">카테고리 밖에 바로 놓이는 콘텐츠</p>
                   </div>
                 </button>
-
-                <AnimatePresence>
-                  {expandedCategories.has(category.id) && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      className="overflow-hidden pl-4 space-y-2"
-                    >
-                      {contents
-                        .filter((content) => content.categoryId === category.id)
-                        .map((content) => (
-                          <button
-                            key={content.id}
-                            onClick={() => handleOpenSavedContent(content)}
-                            className="group w-full flex items-center gap-3 p-3 text-sm text-[#8B7E74] hover:text-[#8B5E3C] hover:bg-[#FFF5E9] rounded-xl transition-all text-left"
-                          >
-                            <FileText size={16} />
-                            <span className="truncate flex-1">{content.title}</span>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteListContent(content.id);
-                              }}
-                              className="p-1.5 opacity-0 group-hover:opacity-100 text-[#A89F94] hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                              title="콘텐츠 삭제"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </button>
-                        ))}
-                      <button
-                        onClick={() => handleStartNewContent(category.id)}
-                        className="w-full flex items-center gap-3 p-3 text-sm text-[#8B5E3C] font-bold hover:bg-[#FFF5E9] rounded-xl transition-all"
-                      >
-                        <Plus size={16} />
-                        새 콘텐츠 추가
-                      </button>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-[#8B7E74]">{uncategorizedContents.length}</span>
               </div>
-            ))}
+              <div className="space-y-0.5">
+                {uncategorizedContents.map((content, index) => renderContentRow(content, null, index))}
+                {renderDropIndicator(null, uncategorizedContents.length)}
+                {renderAppendZone(null, uncategorizedContents.length === 0)}
+              </div>
+            </section>
+
+            <section className="space-y-3">
+              <div className="px-2">
+                <h2 className="text-lg font-bold text-[#4A3728]">카테고리</h2>
+              </div>
+              {categoryReorderError && (
+                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                  {categoryReorderError}
+                </div>
+              )}
+              {displayedCategories.length > 0 ? (
+                displayedCategories.map((category) => renderCategorySection(category))
+              ) : (
+                <div className="rounded-3xl border border-dashed border-[#E5E3DD] bg-white p-8 text-center text-sm text-[#8B7E74]">
+                  카테고리가 아직 없습니다.
+                </div>
+              )}
+            </section>
           </div>
 
           <div className="lg:col-span-2">
@@ -314,23 +894,25 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
               <motion.div
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
-                className="bg-white rounded-[40px] border border-[#E5E3DD] p-10 shadow-sm"
+                className="rounded-[40px] border border-[#E5E3DD] bg-white p-10 shadow-sm"
               >
-                <div className="flex items-center justify-between mb-8">
-                  <h2 className="text-2xl font-serif font-bold text-[#4A3728]">{editorTitle}</h2>
+                <div className="mb-8 flex items-center justify-between">
+                  <h2 className="text-2xl font-bold text-[#4A3728]">{editorTitle}</h2>
                   <div className="flex gap-2">
                     {!isPreviewMode && (
                       <button
                         onClick={handleCancel}
-                        className="px-6 py-2.5 text-[#8B7E74] font-bold hover:bg-[#F3F2EE] rounded-xl transition-all"
+                        disabled={isSavingContent}
+                        className="rounded-xl px-6 py-2.5 font-bold text-[#8B7E74] transition-all hover:bg-[#F3F2EE] disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         취소
                       </button>
                     )}
                     {isExistingContent && (
                       <button
-                        onClick={handleDeleteCurrentContent}
-                        className="flex items-center gap-2 px-6 py-2.5 text-red-500 font-bold hover:bg-red-50 rounded-xl transition-all"
+                        onClick={() => handleContentDelete(editingContent.id!)}
+                        disabled={isSavingContent}
+                        className="flex items-center gap-2 rounded-xl px-6 py-2.5 font-bold text-red-500 transition-all hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         <Trash2 size={18} />
                         삭제
@@ -338,8 +920,11 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                     )}
                     {isPreviewMode ? (
                       <button
-                        onClick={handleEnterEditMode}
-                        className="flex items-center gap-2 px-8 py-2.5 bg-[#8B5E3C] text-white rounded-xl font-bold shadow-lg shadow-[#8B5E3C]/10 hover:bg-[#724D31] transition-all"
+                        onClick={() => {
+                          setContentMode('edit');
+                          setEditorTab('edit');
+                        }}
+                        className="flex items-center gap-2 rounded-xl bg-[#8B5E3C] px-8 py-2.5 font-bold text-white shadow-lg shadow-[#8B5E3C]/10 transition-all hover:bg-[#724D31]"
                       >
                         <Edit3 size={18} />
                         수정
@@ -347,44 +932,52 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                     ) : (
                       <button
                         onClick={() => void handleSaveContent()}
-                        className="flex items-center gap-2 px-8 py-2.5 bg-[#8B5E3C] text-white rounded-xl font-bold shadow-lg shadow-[#8B5E3C]/10 hover:bg-[#724D31] transition-all"
+                        disabled={isSavingContent || !editingContent.title?.trim()}
+                        className="flex items-center gap-2 rounded-xl bg-[#8B5E3C] px-8 py-2.5 font-bold text-white shadow-lg shadow-[#8B5E3C]/10 transition-all hover:bg-[#724D31] disabled:cursor-not-allowed disabled:bg-[#B8AA9A] disabled:shadow-none"
                       >
                         <Save size={18} />
-                        저장
+                        {isSavingContent ? '저장 중...' : '저장'}
                       </button>
                     )}
                   </div>
                 </div>
 
+                {saveError && !isPreviewMode && (
+                  <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                    {saveError}
+                  </div>
+                )}
+
                 <div className="space-y-6">
                   <div>
-                    <label className="block text-xs font-bold text-[#8B5E3C] uppercase tracking-widest mb-2 flex items-center gap-2">
+                    <label className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#8B5E3C]">
                       <Type size={14} /> 제목
                     </label>
                     <input
                       type="text"
                       value={editingContent.title ?? ''}
                       readOnly={isPreviewMode}
-                      onChange={(e) => setEditingContent({ ...editingContent, title: e.target.value })}
+                      onChange={(event) => {
+                        setSaveError(null);
+                        setEditingContent({ ...editingContent, title: event.target.value });
+                      }}
                       placeholder="콘텐츠 제목을 입력하세요"
                       className={`${isPreviewMode ? readOnlyInputClassName : editableInputClassName} text-lg font-bold`}
                     />
                   </div>
 
                   <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="block text-xs font-bold text-[#8B5E3C] uppercase tracking-widest flex items-center gap-2">
+                    <div className="mb-2 flex items-center justify-between">
+                      <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#8B5E3C]">
                         <Code size={14} /> HTML 내용
                       </label>
                       <div className="flex items-center gap-2">
-                        <div className="flex items-center bg-[#F3F2EE] rounded-xl p-1 gap-1">
+                        <div className="flex items-center gap-1 rounded-xl bg-[#F3F2EE] p-1">
                           <button
                             onClick={() => setEditorTab('edit')}
                             disabled={isPreviewMode}
-                            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold transition-all disabled:cursor-not-allowed disabled:opacity-45 ${
-                              editorTab === 'edit'
-                                ? 'bg-white text-[#8B5E3C] shadow-sm'
-                                : 'text-[#8B7E74] hover:text-[#4A3728]'
+                            className={`flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-bold transition-all disabled:cursor-not-allowed disabled:opacity-45 ${
+                              editorTab === 'edit' ? 'bg-white text-[#8B5E3C] shadow-sm' : 'text-[#8B7E74] hover:text-[#4A3728]'
                             }`}
                           >
                             <Code size={13} />
@@ -392,10 +985,8 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                           </button>
                           <button
                             onClick={() => setEditorTab('preview')}
-                            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                              editorTab === 'preview'
-                                ? 'bg-white text-[#8B5E3C] shadow-sm'
-                                : 'text-[#8B7E74] hover:text-[#4A3728]'
+                            className={`flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-bold transition-all ${
+                              editorTab === 'preview' ? 'bg-white text-[#8B5E3C] shadow-sm' : 'text-[#8B7E74] hover:text-[#4A3728]'
                             }`}
                           >
                             <Eye size={13} />
@@ -405,8 +996,6 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                         <button
                           onClick={() => setIsFullscreenPreviewOpen(true)}
                           disabled={!hasPreviewHtml}
-                          title="전체화면 미리보기"
-                          aria-label="전체화면 미리보기"
                           className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#E5E3DD] bg-white text-[#8B5E3C] transition-all hover:border-[#8B5E3C] hover:bg-[#FFF5E9] disabled:cursor-not-allowed disabled:border-[#ECE9E2] disabled:bg-[#F8F6F2] disabled:text-[#C8BEB2]"
                         >
                           <Maximize2 size={15} />
@@ -418,27 +1007,28 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                       <textarea
                         value={editingContent.html ?? ''}
                         readOnly={isPreviewMode}
-                        onChange={(e) => setEditingContent({ ...editingContent, html: e.target.value })}
+                        onChange={(event) => {
+                          setSaveError(null);
+                          setEditingContent({ ...editingContent, html: event.target.value });
+                        }}
                         placeholder="HTML 코드를 입력하세요"
-                        className={`w-full h-[400px] border-none rounded-2xl px-6 py-4 font-mono text-sm outline-none resize-none transition-all ${
-                          isPreviewMode
-                            ? 'bg-[#F8F6F2] text-[#8B7E74] cursor-default'
-                            : 'bg-[#F3F2EE] text-[#4A3728] focus:ring-2 focus:ring-[#8B5E3C]'
+                        className={`h-[400px] w-full resize-none rounded-2xl border-none px-6 py-4 font-mono text-sm outline-none transition-all ${
+                          isPreviewMode ? 'cursor-default bg-[#F8F6F2] text-[#8B7E74]' : 'bg-[#F3F2EE] text-[#4A3728] focus:ring-2 focus:ring-[#8B5E3C]'
                         }`}
                       />
                     ) : (
-                      <div className="w-full h-[400px] bg-white border border-[#E5E3DD] rounded-2xl overflow-hidden">
+                      <div className="h-[400px] w-full overflow-hidden rounded-2xl border border-[#E5E3DD] bg-white">
                         {editingContent.html?.trim() ? (
                           <StudentContentPreviewFrame
                             html={editingContent.html}
                             title={editingContent.title?.trim() || '콘텐츠 미리보기'}
                             autoHeight={false}
-                            className="w-full h-full"
+                            className="h-full w-full"
                           />
                         ) : (
-                          <div className="flex flex-col items-center justify-center h-full text-[#8B7E74]">
+                          <div className="flex h-full flex-col items-center justify-center text-[#8B7E74]">
                             <Eye size={32} className="mb-3 opacity-30" />
-                            <p className="text-sm">HTML을 입력하면 여기에 미리보기가 표시됩니다.</p>
+                            <p className="text-sm">HTML을 입력하면 여기에서 미리보기가 표시됩니다.</p>
                           </div>
                         )}
                       </div>
@@ -447,14 +1037,12 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                 </div>
               </motion.div>
             ) : (
-              <div className="h-full flex flex-col items-center justify-center p-12 bg-white rounded-[40px] border border-dashed border-[#E5E3DD] text-center">
-                <div className="w-20 h-20 bg-[#F3F2EE] rounded-full flex items-center justify-center text-[#8B7E74] mb-6">
+              <div className="flex h-full flex-col items-center justify-center rounded-[40px] border border-dashed border-[#E5E3DD] bg-white p-12 text-center">
+                <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-[#F3F2EE] text-[#8B7E74]">
                   <Edit3 size={32} />
                 </div>
-                <h3 className="text-xl font-bold text-[#4A3728] mb-2">콘텐츠를 선택하거나 새로 만들어보세요</h3>
-                <p className="text-[#8B7E74] max-w-xs">
-                  왼쪽 카테고리에서 콘텐츠를 선택해 확인하거나 새 콘텐츠를 추가해 수업 자료를 준비할 수 있습니다.
-                </p>
+                <h3 className="mb-2 text-xl font-bold text-[#4A3728]">콘텐츠를 선택하거나 새로 만들어보세요</h3>
+                <p className="max-w-xs text-[#8B7E74]">카테고리 안팎의 콘텐츠를 열어서 확인하고, 오른쪽 편집기에서 바로 수정할 수 있습니다.</p>
               </div>
             )}
           </div>
@@ -472,14 +1060,11 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                 <div className="sticky top-0 z-10 mx-auto flex max-w-6xl justify-end pb-4">
                   <button
                     onClick={() => setIsFullscreenPreviewOpen(false)}
-                    title="전체화면 미리보기 닫기"
-                    aria-label="전체화면 미리보기 닫기"
                     className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#E5E3DD] bg-white text-[#8B7E74] shadow-sm transition-all hover:border-[#8B5E3C] hover:text-[#4A3728]"
                   >
                     <X size={20} />
                   </button>
                 </div>
-
                 <motion.div
                   initial={{ opacity: 0, y: 24 }}
                   animate={{ opacity: 1, y: 0 }}

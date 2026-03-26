@@ -45,14 +45,78 @@ type GoogleSheetsSyncErrorState = {
   requests: GoogleSheetsSyncRequest[];
 };
 
+type ContentReorderUpdate = {
+  id: string;
+  categoryId: string | null;
+  order: number;
+};
+
+const UNCATEGORIZED_CATEGORY_ID = null;
+const MISC_CATEGORY_NAME = '기타';
+
+const hasNumericOrder = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value);
+
+const compareCategoryNames = (left: LessonCategory, right: LessonCategory) => {
+  if (left.name === MISC_CATEGORY_NAME) return 1;
+  if (right.name === MISC_CATEGORY_NAME) return -1;
+  return left.name.localeCompare(right.name);
+};
+
+const sortCategories = (items: LessonCategory[]) =>
+  [...items].sort((left, right) => {
+    const leftHasOrder = hasNumericOrder(left.order);
+    const rightHasOrder = hasNumericOrder(right.order);
+
+    if (leftHasOrder && rightHasOrder && left.order !== right.order) {
+      return left.order - right.order;
+    }
+
+    if (leftHasOrder !== rightHasOrder) {
+      return leftHasOrder ? -1 : 1;
+    }
+
+    return compareCategoryNames(left, right);
+  });
+
+const compareCreatedAt = (left: LessonContent, right: LessonContent) =>
+  new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+
+const sortContents = (items: LessonContent[]) =>
+  [...items].sort((left, right) => {
+    const leftHasOrder = hasNumericOrder(left.order);
+    const rightHasOrder = hasNumericOrder(right.order);
+
+    if (left.categoryId !== right.categoryId) {
+      const leftCategory = left.categoryId ?? '';
+      const rightCategory = right.categoryId ?? '';
+      return leftCategory.localeCompare(rightCategory);
+    }
+
+    if (leftHasOrder && rightHasOrder && left.order !== right.order) {
+      return left.order - right.order;
+    }
+
+    if (leftHasOrder !== rightHasOrder) {
+      return leftHasOrder ? -1 : 1;
+    }
+
+    const createdAtDiff = compareCreatedAt(left, right);
+    if (createdAtDiff !== 0) {
+      return createdAtDiff;
+    }
+
+    return left.title.localeCompare(right.title);
+  });
+
 export default function App() {
   const [user, setUser] = useState<any>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [folders, setFolders] = useState<LessonFolder[]>([]);
   const [memos, setMemos] = useState<Memo[]>([]);
   const [lessons, setLessons] = useState<Lesson[]>([]);
-  const [categories, setCategories] = useState<any[]>([]);
-  const [contents, setContents] = useState<any[]>([]);
+  const [categories, setCategories] = useState<LessonCategory[]>([]);
+  const [contents, setContents] = useState<LessonContent[]>([]);
   const [activeTab, setActiveTab] = useState<'home' | 'memo' | 'lesson-detail' | 'folder-management' | 'content-library'>('home');
   const [viewMode, setViewMode] = useState<'admin' | 'student'>('student');
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
@@ -213,14 +277,17 @@ export default function App() {
       collection(db, 'categories')
     );
     const unsubscribeCategories = onSnapshot(categoriesQuery, (snapshot) => {
-      // Sort categories logically before setting state. '기타' at end, others alphabetic
-      const catData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      catData.sort((a: any, b: any) => {
-        if (a.name === '기타') return 1;
-        if (b.name === '기타') return -1;
-        return a.name.localeCompare(b.name);
+      const categoryData = snapshot.docs.map((categoryDoc) => {
+        const data = categoryDoc.data() as Partial<LessonCategory>;
+        return {
+          id: categoryDoc.id,
+          name: data.name ?? '',
+          ownerUid: data.ownerUid ?? '',
+          order: hasNumericOrder(data.order) ? data.order : undefined,
+        } satisfies LessonCategory;
       });
-      setCategories(catData);
+
+      setCategories(sortCategories(categoryData));
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'categories'));
 
     // Contents Listener
@@ -228,7 +295,20 @@ export default function App() {
       collection(db, 'contents')
     );
     const unsubscribeContents = onSnapshot(contentsQuery, (snapshot) => {
-      setContents(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      const contentData = snapshot.docs.map((contentDoc) => {
+        const data = contentDoc.data() as Partial<LessonContent>;
+        return {
+          id: contentDoc.id,
+          categoryId: typeof data.categoryId === 'string' ? data.categoryId : UNCATEGORIZED_CATEGORY_ID,
+          ownerUid: data.ownerUid ?? '',
+          title: data.title ?? '',
+          html: data.html ?? '',
+          createdAt: data.createdAt ?? new Date(0).toISOString(),
+          order: hasNumericOrder(data.order) ? data.order : undefined,
+        } satisfies LessonContent;
+      });
+
+      setContents(sortContents(contentData));
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'contents'));
 
     return () => {
@@ -439,7 +519,11 @@ export default function App() {
       if (category.id) {
         await setDoc(doc(db, 'categories', category.id), { ...category, ownerUid: user.uid }, { merge: true });
       } else {
-        await addDoc(collection(db, 'categories'), { ...category, ownerUid: user.uid });
+        await addDoc(collection(db, 'categories'), {
+          ...category,
+          ownerUid: user.uid,
+          order: category.order ?? categories.length,
+        });
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'categories');
@@ -451,21 +535,27 @@ export default function App() {
       throw new Error('콘텐츠를 저장하려면 로그인이 필요합니다.');
     }
 
-    if (!content.categoryId || !content.title) {
+    if (!content.title?.trim()) {
       throw new Error('콘텐츠 저장에 필요한 정보가 부족합니다.');
     }
 
     const contentRef = content.id
       ? doc(db, 'contents', content.id)
       : doc(collection(db, 'contents'));
+    const categoryId = typeof content.categoryId === 'string' ? content.categoryId : UNCATEGORIZED_CATEGORY_ID;
     const createdAt = content.createdAt ?? new Date().toISOString();
+    const order =
+      content.id
+        ? content.order
+        : content.order ?? contents.filter((item) => (item.categoryId ?? null) === categoryId).length;
     const savedContent: LessonContent = {
       id: contentRef.id,
-      categoryId: content.categoryId,
+      categoryId,
       ownerUid: user.uid,
-      title: content.title,
+      title: content.title.trim(),
       html: content.html ?? '',
       createdAt,
+      order,
     };
 
     try {
@@ -473,6 +563,9 @@ export default function App() {
         contentRef,
         {
           ...content,
+          categoryId,
+          title: content.title.trim(),
+          order,
           ownerUid: user.uid,
           createdAt,
         },
@@ -482,6 +575,48 @@ export default function App() {
       return savedContent;
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'contents');
+      throw error;
+    }
+  };
+
+  const handleReorderCategories = async (nextCategories: LessonCategory[]) => {
+    if (!user) {
+      throw new Error('카테고리 순서를 저장하려면 로그인이 필요합니다.');
+    }
+
+    try {
+      const batch = writeBatch(db);
+      nextCategories.forEach((category, index) => {
+        batch.set(doc(db, 'categories', category.id), { order: index }, { merge: true });
+      });
+      await batch.commit();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'categories/reorder');
+      throw error;
+    }
+  };
+
+  const handleReorderContents = async (updates: ContentReorderUpdate[]) => {
+    if (!user) {
+      throw new Error('콘텐츠 순서를 저장하려면 로그인이 필요합니다.');
+    }
+    if (updates.length === 0) return;
+
+    try {
+      const batch = writeBatch(db);
+      updates.forEach((update) => {
+        batch.set(
+          doc(db, 'contents', update.id),
+          {
+            categoryId: update.categoryId,
+            order: update.order,
+          },
+          { merge: true }
+        );
+      });
+      await batch.commit();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'contents/reorder');
       throw error;
     }
   };
@@ -690,6 +825,8 @@ export default function App() {
               contents={contents}
               onSaveCategory={handleSaveCategory}
               onSaveContent={handleSaveContent}
+              onReorderCategories={handleReorderCategories}
+              onReorderContents={handleReorderContents}
               onDeleteCategory={handleDeleteCategory}
               onDeleteContent={handleDeleteContent}
             />

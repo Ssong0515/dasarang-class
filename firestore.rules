@@ -61,14 +61,16 @@ service cloud.firestore {
     function isValidCategory(data) {
       return data.keys().hasAll(['name', 'ownerUid']) &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             (!('order' in data) || data.order is number) &&
              data.ownerUid == request.auth.uid;
     }
 
     function isValidContent(data) {
       return data.keys().hasAll(['categoryId', 'title', 'ownerUid']) &&
-             data.categoryId is string &&
+             (data.categoryId is string || data.categoryId == null) &&
              data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
              (!('html' in data) || data.html is string) &&
+             (!('order' in data) || data.order is number) &&
              data.ownerUid == request.auth.uid;
     }
 

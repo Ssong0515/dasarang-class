@@ -172,6 +172,19 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
     }
   }, [initialLesson]);
 
+  useEffect(() => {
+    if (categories.length === 0) {
+      if (selectedCategory !== '') {
+        setSelectedCategory('');
+      }
+      return;
+    }
+
+    if (!categories.some((category) => category.id === selectedCategory)) {
+      setSelectedCategory(categories[0].id);
+    }
+  }, [categories, selectedCategory]);
+
   const folderLessons = lessons.filter(l => l.folderId === folder.id);
   const currentLesson = folderLessons.find(l => l.date === selectedDate);
 
@@ -591,7 +604,7 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
 
                       {/* Bubble Tags */}
                       <div className="flex flex-wrap gap-3">
-                        {contents.filter(c => c.categoryId === selectedCategory).map(content => {
+                        {contents.filter(c => c.categoryId !== null && c.categoryId === selectedCategory).map(content => {
                           const isSelected = selectedIds.includes(content.id);
                           return (
                             <button 
@@ -608,7 +621,7 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
                             </button>
                           );
                         })}
-                        {contents.filter(c => c.categoryId === selectedCategory).length === 0 && (
+                        {contents.filter(c => c.categoryId !== null && c.categoryId === selectedCategory).length === 0 && (
                            <p className="text-[#8B7E74] text-sm py-4">이 카테고리에 등록된 콘텐츠가 없습니다.</p>
                         )}
                       </div>

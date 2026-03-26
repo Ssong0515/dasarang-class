@@ -49,6 +49,7 @@ const translations = {
     translating: '번역 중...',
     original: '원문 보기',
     noLessons: '이 반에 등록된 수업이 아직 없습니다.',
+    noVisibleContents: '표시 가능한 콘텐츠가 없습니다.',
     selectClass: '수업 반 선택하기',
     pm: '오후',
     am: '오전'
@@ -68,6 +69,7 @@ const translations = {
     translating: 'Translating...',
     original: 'Show Original',
     noLessons: 'No lessons registered for this class yet.',
+    noVisibleContents: 'No visible content is available.',
     selectClass: 'Select Your Class',
     pm: 'PM',
     am: 'AM'
@@ -87,6 +89,7 @@ const translations = {
     translating: 'Перевод...',
     original: 'Показать оригинал',
     noLessons: 'Уроки для этого класса пока не зарегистрированы.',
+    noVisibleContents: 'Нет доступного содержимого для показа.',
     selectClass: 'Выберите свой класс',
     pm: 'дня',
     am: 'утра'
@@ -106,6 +109,7 @@ const translations = {
     translating: '翻译中...',
     original: '查看原文',
     noLessons: '该班级尚无登记的课程。',
+    noVisibleContents: '当前没有可显示的内容。',
     selectClass: '选择您的班级',
     pm: '下午',
     am: '上午'
@@ -144,11 +148,15 @@ export const StudentPage: React.FC<StudentPageProps> = ({ onBackToAdmin, onLogin
     else if (lesson.contentId) allContentIds.add(lesson.contentId);
   });
 
+  const visibleContents = contents.filter((content) => content.categoryId !== null);
+  const visibleContentIds = new Set(visibleContents.map((content) => content.id));
+  const visibleAssignedContentIds = new Set([...allContentIds].filter((id) => visibleContentIds.has(id)));
+
   // Group contents by category
   const contentsByCategory = categories
     .map(cat => ({
       category: cat,
-      items: contents.filter(c => c.categoryId === cat.id && allContentIds.has(c.id))
+      items: visibleContents.filter(c => c.categoryId === cat.id && visibleAssignedContentIds.has(c.id))
     }))
     .filter(group => group.items.length > 0);
 
@@ -167,6 +175,15 @@ export const StudentPage: React.FC<StudentPageProps> = ({ onBackToAdmin, onLogin
     setTranslateError(null);
     setOpenDropdown(null);
   };
+
+  React.useEffect(() => {
+    if (selectedContent && !visibleAssignedContentIds.has(selectedContent.id)) {
+      setSelectedContent(null);
+      setTranslatedContent(null);
+      setTranslateError(null);
+      setOpenDropdown(null);
+    }
+  }, [selectedContent, visibleAssignedContentIds]);
 
   const extractTextFromHtml = (html: string) => {
     const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -239,7 +256,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({ onBackToAdmin, onLogin
               {activeFolder ? activeFolder.name : t.title}
             </h1>
             <p className="text-xs text-[#8B7E74] font-medium">
-              {activeFolder ? `${allContentIds.size}개의 학습 콘텐츠` : t.subtitle}
+              {activeFolder ? `${visibleAssignedContentIds.size}개의 학습 콘텐츠` : t.subtitle}
             </p>
           </div>
         </div>
@@ -312,15 +329,14 @@ export const StudentPage: React.FC<StudentPageProps> = ({ onBackToAdmin, onLogin
             {folders.map((folder, idx) => {
               const folderLessons = lessons.filter(l => l.folderId === folder.id);
               const folderContentIds = new Set<string>();
-              const existingContentIds = new Set(contents.map(c => c.id));
               
               folderLessons.forEach(l => {
                 if (l.contentIds) {
                   l.contentIds.forEach(id => {
-                    if (existingContentIds.has(id)) folderContentIds.add(id);
+                    if (visibleContentIds.has(id)) folderContentIds.add(id);
                   });
                 } else if (l.contentId) {
-                  if (existingContentIds.has(l.contentId)) folderContentIds.add(l.contentId);
+                  if (visibleContentIds.has(l.contentId)) folderContentIds.add(l.contentId);
                 }
               });
               const folderColor = folder.color || '#8B5E3C';
@@ -474,7 +490,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({ onBackToAdmin, onLogin
               className="mb-12 w-full max-w-none rounded-[40px] border border-[#E5E3DD] bg-white p-12 text-center shadow-sm"
             >
               <BookOpen size={48} className="text-[#E5E3DD] mx-auto mb-4" />
-              <p className="text-lg font-bold text-[#8B7E74]">{t.noLessons}</p>
+              <p className="text-lg font-bold text-[#8B7E74]">{filteredLessons.length > 0 ? t.noVisibleContents : t.noLessons}</p>
             </motion.section>
           )}
         </main>
