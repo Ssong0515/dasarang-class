@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { FileText } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { ChevronDown, FileText } from 'lucide-react';
 import { LessonContent } from '../types';
 
 const iframeResponsiveStyleTag = `
@@ -169,6 +169,12 @@ export const StudentContentCard: React.FC<StudentContentCardProps> = ({
   details,
 }) => {
   const hasDescription = Boolean(content.description?.trim());
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
+  const descriptionPanelId = `content-description-${content.id}`;
+
+  useEffect(() => {
+    setIsDescriptionExpanded(false);
+  }, [content.id]);
 
   return (
     <section className={`w-full max-w-none overflow-hidden rounded-[32px] border border-[#E5E3DD] bg-white shadow-sm ${className}`.trim()}>
@@ -187,9 +193,38 @@ export const StudentContentCard: React.FC<StudentContentCardProps> = ({
       </div>
 
       {hasDescription ? (
-        <div className="border-b border-[#F3F2EE] bg-[#FFFDF9] px-5 py-5 sm:px-8">
-          <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-[#A89F94]">수업 설명</p>
-          <p className="whitespace-pre-wrap text-sm leading-7 text-[#4A3728]">{content.description}</p>
+        <div className="border-b border-[#F3F2EE] bg-[#FFFDF9]">
+          <button
+            type="button"
+            aria-expanded={isDescriptionExpanded}
+            aria-controls={descriptionPanelId}
+            onClick={() => setIsDescriptionExpanded((current) => !current)}
+            className="flex w-full items-center justify-between gap-4 px-5 py-5 text-left transition-all hover:bg-[#FFF8EF] sm:px-8"
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-[#8B5E3C] shadow-sm">
+                <FileText size={15} />
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#A89F94]">수업 설명</p>
+                <p className="text-sm font-medium text-[#4A3728]">
+                  {isDescriptionExpanded ? '설명을 접기' : '설명 보기'}
+                </p>
+              </div>
+            </div>
+            <ChevronDown
+              size={18}
+              className={`shrink-0 text-[#8B5E3C] transition-transform ${
+                isDescriptionExpanded ? 'rotate-180' : 'rotate-0'
+              }`}
+            />
+          </button>
+
+          {isDescriptionExpanded ? (
+            <div id={descriptionPanelId} className="border-t border-[#F3F2EE] px-5 py-5 sm:px-8">
+              <p className="whitespace-pre-wrap text-sm leading-7 text-[#4A3728]">{content.description}</p>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
