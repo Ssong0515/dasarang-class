@@ -59,6 +59,7 @@ interface StudentPageProps {
   onBackToAdmin?: () => void;
   onLogin?: () => void;
   isAdmin?: boolean;
+  embeddedInAdminShell?: boolean;
   lessons?: Lesson[];
   folders?: LessonFolder[];
   categories?: LessonCategory[];
@@ -255,6 +256,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   onBackToAdmin,
   onLogin,
   isAdmin,
+  embeddedInAdminShell = false,
   lessons = [],
   folders = [],
   categories = [],
@@ -291,18 +293,20 @@ export const StudentPage: React.FC<StudentPageProps> = ({
     }
   });
 
-  const visibleContents = contents.filter((content) => content.categoryId !== null);
-  const visibleContentIds = new Set(visibleContents.map((content) => content.id));
+  const categorizedContents = contents.filter((content) => content.categoryId !== null);
+  const categorizedContentIds = new Set(categorizedContents.map((content) => content.id));
   const visibleAssignedContentIds = new Set(
-    [...allContentIds].filter((id) => visibleContentIds.has(id))
+    [...allContentIds].filter((id) => categorizedContentIds.has(id))
   );
+  const visibleContents = isAdmin
+    ? categorizedContents
+    : categorizedContents.filter((content) => visibleAssignedContentIds.has(content.id));
+  const visibleContentIds = new Set(visibleContents.map((content) => content.id));
 
   const contentsByCategory = categories
     .map((category) => ({
       category,
-      items: visibleContents.filter(
-        (content) => content.categoryId === category.id && visibleAssignedContentIds.has(content.id)
-      ),
+      items: visibleContents.filter((content) => content.categoryId === category.id),
     }))
     .filter((group) => group.items.length > 0);
 
@@ -474,7 +478,11 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   }, [activeFolderId, folders, lang]);
 
   return (
-    <div className="min-h-screen bg-[#FBFBFA] font-sans text-[#4A3728]">
+    <div
+      className={`bg-[#FBFBFA] font-sans text-[#4A3728] ${
+        embeddedInAdminShell ? 'flex min-h-0 flex-1 flex-col overflow-y-auto' : 'min-h-screen'
+      }`}
+    >
       <header className="sticky top-0 z-50 flex items-center justify-between border-b border-[#E5E3DD] bg-white px-8 py-6">
         <div className="flex items-center gap-4">
           {activeFolderId && (
@@ -569,11 +577,11 @@ export const StudentPage: React.FC<StudentPageProps> = ({
               folderLessons.forEach((lesson) => {
                 if (lesson.contentIds) {
                   lesson.contentIds.forEach((id) => {
-                    if (visibleContentIds.has(id)) {
+                    if (categorizedContentIds.has(id)) {
                       folderContentIds.add(id);
                     }
                   });
-                } else if (lesson.contentId && visibleContentIds.has(lesson.contentId)) {
+                } else if (lesson.contentId && categorizedContentIds.has(lesson.contentId)) {
                   folderContentIds.add(lesson.contentId);
                 }
               });
@@ -694,7 +702,10 @@ export const StudentPage: React.FC<StudentPageProps> = ({
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                 >
-                  <StudentContentCard content={selectedContent} />
+                  <StudentContentCard
+                    content={selectedContent}
+                    showDescriptionToggle={Boolean(isAdmin)}
+                  />
                 </motion.div>
               ) : (
                 <motion.div

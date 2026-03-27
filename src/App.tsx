@@ -154,8 +154,11 @@ export default function App() {
   };
 
   const handleTabChange = (nextTab: AdminTab) => {
-    if (nextTab === activeTab) return;
-    runWithContentLibraryNavigationGuard(() => setActiveTab(nextTab));
+    if (viewMode !== 'student' && nextTab === activeTab) return;
+    runWithContentLibraryNavigationGuard(() => {
+      setViewMode('admin');
+      setActiveTab(nextTab);
+    });
   };
 
   const handleSwitchToStudent = () => {
@@ -724,6 +727,7 @@ export default function App() {
     const targetFolder = folders.find(f => f.id === lesson.folderId);
     if (targetFolder) {
       runWithContentLibraryNavigationGuard(() => {
+        setViewMode('admin');
         setActiveFolder(targetFolder);
         setSelectedLesson(lesson);
         setActiveTab('folder-management');
@@ -733,6 +737,7 @@ export default function App() {
 
   const handleManageFolder = (folder: LessonFolder) => {
     runWithContentLibraryNavigationGuard(() => {
+      setViewMode('admin');
       setActiveFolder(folder);
       setSelectedLesson(null);
       setActiveTab('folder-management');
@@ -748,7 +753,7 @@ export default function App() {
       );
     }
 
-    if (!user || viewMode === 'student') {
+    if (!user || !isAdmin) {
       return (
         <StudentPage 
           isAdmin={isAdmin} 
@@ -793,6 +798,7 @@ export default function App() {
           folders={folders} 
           activeFolderId={activeFolder?.id}
           activeTab={activeTab} 
+          isStudentView={viewMode === 'student'}
           onTabChange={handleTabChange} 
           onManageFolder={handleManageFolder}
           onLogout={handleLogout}
@@ -809,8 +815,20 @@ export default function App() {
           }}
         />
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Header user={user} />
-          {googleSheetsSyncError && (
+          {viewMode === 'student' ? (
+            <StudentPage
+              embeddedInAdminShell
+              isAdmin={isAdmin}
+              onBackToAdmin={() => setViewMode('admin')}
+              lessons={lessons}
+              folders={folders}
+              categories={categories}
+              contents={contents}
+            />
+          ) : (
+            <>
+              <Header user={user} />
+              {googleSheetsSyncError && (
             <div className="mx-6 mt-4 flex items-center justify-between gap-4 rounded-[24px] border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900 shadow-sm">
               <div>
                 <p className="font-bold">Google Sheets 동기화에 실패했습니다.</p>
@@ -877,12 +895,14 @@ export default function App() {
             />
           )}
           {activeTab === 'lesson-detail' && (
-            <LessonDetail 
-              lesson={selectedLesson!} 
-              folders={folders}
-              contents={contents}
-              onSave={handleSaveLesson}
-            />
+              <LessonDetail 
+                lesson={selectedLesson!} 
+                folders={folders}
+                contents={contents}
+                onSave={handleSaveLesson}
+              />
+              )}
+            </>
           )}
         </div>
       </div>

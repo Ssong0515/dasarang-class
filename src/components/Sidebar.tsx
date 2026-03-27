@@ -79,6 +79,7 @@ interface SidebarProps {
   onSwitchToStudent: () => void;
   onReorderFolders?: (folders: LessonFolder[]) => void;
   onCreateFolder?: () => void;
+  isStudentView?: boolean;
 }
 
 type SidebarNavButtonProps = {
@@ -148,6 +149,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSwitchToStudent,
   onReorderFolders,
   onCreateFolder,
+  isStudentView = false,
 }) => {
   const [localFolders, setLocalFolders] = React.useState(folders);
   const [viewportMode, setViewportMode] = React.useState<ViewportMode>(getViewportMode);
@@ -290,6 +292,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             icon={<Users size={20} />}
             label="학생 페이지"
             isCollapsed={isCollapsed}
+            isActive={isStudentView}
             extraClassName="mt-2"
             onClick={onSwitchToStudent}
           />

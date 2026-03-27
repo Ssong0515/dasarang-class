@@ -160,6 +160,7 @@ interface StudentContentCardProps {
   className?: string;
   headerControls?: React.ReactNode;
   details?: React.ReactNode;
+  showDescriptionToggle?: boolean;
 }
 
 export const StudentContentCard: React.FC<StudentContentCardProps> = ({
@@ -167,6 +168,7 @@ export const StudentContentCard: React.FC<StudentContentCardProps> = ({
   className = '',
   headerControls,
   details,
+  showDescriptionToggle = true,
 }) => {
   const hasDescription = Boolean(content.description?.trim());
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
@@ -192,7 +194,7 @@ export const StudentContentCard: React.FC<StudentContentCardProps> = ({
         ) : null}
       </div>
 
-      {hasDescription ? (
+      {showDescriptionToggle && hasDescription ? (
         <div className="border-b border-[#F3F2EE] bg-[#FFFDF9]">
           <button
             type="button"
