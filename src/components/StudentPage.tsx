@@ -391,11 +391,11 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   }, []);
 
   useEffect(() => {
-    if (selectedContent && !visibleAssignedContentIds.has(selectedContent.id)) {
+    if (selectedContent && !visibleContentIds.has(selectedContent.id)) {
       setSelectedContent(null);
       setOpenDropdown(null);
     }
-  }, [selectedContent, visibleAssignedContentIds]);
+  }, [selectedContent, visibleContentIds]);
 
   useEffect(() => {
     if (lang === 'KO') {
