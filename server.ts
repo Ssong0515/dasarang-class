@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import express from 'express';
+import { createServer as createNetServer } from 'net';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
@@ -39,12 +40,46 @@ const withBasePath = (basePath: string, routePath: string) => {
   return normalizedRoute === '/' ? basePath : `${basePath}${normalizedRoute}`;
 };
 
+const findAvailablePort = async (preferredPort: number, host: string) => {
+  let candidatePort = preferredPort;
+
+  while (candidatePort < preferredPort + 20) {
+    const isAvailable = await new Promise<boolean>((resolve) => {
+      const tester = createNetServer();
+
+      tester.once('error', () => {
+        tester.close();
+        resolve(false);
+      });
+
+      tester.once('listening', () => {
+        tester.close(() => resolve(true));
+      });
+
+      tester.listen(candidatePort, host);
+    });
+
+    if (isAvailable) {
+      return candidatePort;
+    }
+
+    candidatePort += 1;
+  }
+
+  throw new Error(`Could not find an available port starting from ${preferredPort}.`);
+};
+
 async function startServer() {
   const app = express();
   const parsedPort = Number.parseInt(process.env.PORT || '3000', 10);
-  const PORT = Number.isNaN(parsedPort) ? 3000 : parsedPort;
+  const requestedPort = Number.isNaN(parsedPort) ? 3000 : parsedPort;
+  const isProduction = process.env.NODE_ENV === 'production';
   const HOST = process.env.HOST || '0.0.0.0';
   const APP_BASE_PATH = normalizeBasePath(process.env.APP_BASE_PATH);
+  const parsedHmrPort = Number.parseInt(process.env.HMR_PORT || '', 10);
+  const PORT = isProduction ? requestedPort : await findAvailablePort(requestedPort, HOST);
+  const requestedHmrPort = Number.isNaN(parsedHmrPort) ? PORT + 1 : parsedHmrPort;
+  const HMR_PORT = isProduction ? requestedHmrPort : await findAvailablePort(requestedHmrPort, HOST);
 
   app.use(express.json({ limit: '1mb' }));
 
@@ -116,9 +151,15 @@ async function startServer() {
     }
   });
 
-  if (process.env.NODE_ENV !== 'production') {
+  if (!isProduction) {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: {
+          port: HMR_PORT,
+          clientPort: HMR_PORT,
+        },
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -147,6 +188,11 @@ async function startServer() {
 
   app.listen(PORT, HOST, () => {
     console.log(`Server running on http://${HOST}:${PORT}${APP_BASE_PATH}`);
+    if (!isProduction && (PORT !== requestedPort || HMR_PORT !== requestedHmrPort)) {
+      console.log(
+        `Dev port override: app ${requestedPort} -> ${PORT}, hmr ${requestedHmrPort} -> ${HMR_PORT}`
+      );
+    }
   });
 }
 

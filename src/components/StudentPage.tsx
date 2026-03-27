@@ -1,12 +1,44 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { BookOpen, Calendar, Star, ArrowRight, Languages, ChevronDown, Sparkles, Loader2, FileText, ArrowLeft, GraduationCap, Code, Music, Brush, Globe, Cpu, Heart, Zap, Rocket, Lightbulb } from 'lucide-react';
+import {
+  BookOpen,
+  ArrowRight,
+  Languages,
+  ChevronDown,
+  FileText,
+  ArrowLeft,
+  GraduationCap,
+  Code,
+  Music,
+  Brush,
+  Globe,
+  Cpu,
+  Heart,
+  Zap,
+  Rocket,
+  Star,
+  Lightbulb,
+} from 'lucide-react';
 import { LessonFolder, Lesson, LessonCategory, LessonContent } from '../types';
 import { resolveAppPath } from '../utils/appPaths';
 import { StudentContentCard } from './StudentContentPreview';
 
-const studentIconMap: Record<string, React.FC<{ size?: number; className?: string; style?: React.CSSProperties }>> = {
-  BookOpen, GraduationCap, Code, Music, Brush, Globe, Cpu, Heart, Zap, Rocket, Star, Lightbulb
+const studentIconMap: Record<
+  string,
+  React.FC<{ size?: number; className?: string; style?: React.CSSProperties }>
+> = {
+  BookOpen,
+  GraduationCap,
+  Code,
+  Music,
+  Brush,
+  Globe,
+  Cpu,
+  Heart,
+  Zap,
+  Rocket,
+  Star,
+  Lightbulb,
 };
 
 const FOLDER_COLORS: Record<string, string> = {
@@ -19,6 +51,9 @@ const FOLDER_COLORS: Record<string, string> = {
   '#14B8A6': '#F0FDFA',
   '#EF4444': '#FEF2F2',
 };
+
+const STUDENT_HOME_HISTORY_VIEW = 'student-home';
+const STUDENT_FOLDER_HISTORY_VIEW = 'student-folder';
 
 interface StudentPageProps {
   onBackToAdmin?: () => void;
@@ -33,13 +68,19 @@ interface StudentPageProps {
 type Language = 'KO' | 'EN' | 'RU' | 'ZH';
 type TranslationLanguage = Exclude<Language, 'KO'>;
 
+type StudentHistoryState = {
+  studentPageView?: typeof STUDENT_HOME_HISTORY_VIEW | typeof STUDENT_FOLDER_HISTORY_VIEW;
+  studentFolderId?: string | null;
+};
+
 const translations = {
   KO: {
     title: '다사랑 학생 센터',
     subtitle: '오늘의 배움을 확인해보세요',
     backToAdmin: '관리자 페이지로 돌아가기',
     welcome: '환영합니다!',
-    welcomeDesc: '선생님이 준비하신 소중한 수업 자료와 공지사항을 여기서 확인할 수 있습니다. 본인의 반을 선택하여 수업을 확인해보세요.',
+    welcomeDesc:
+      '선생님이 준비하신 소중한 수업 자료와 공지사항을 여기서 확인할 수 있습니다. 본인의 반을 선택하여 수업을 확인해보세요.',
     schedule: '수업 일정',
     resources: '학습 자료실',
     teacherNote: '선생님의 한마디',
@@ -52,17 +93,18 @@ const translations = {
     noVisibleContents: '표시 가능한 콘텐츠가 없습니다.',
     selectClass: '수업 반 선택하기',
     pm: '오후',
-    am: '오전'
+    am: '오전',
   },
   EN: {
     title: 'Dasarang Student Center',
-    subtitle: 'Check out today\'s learning',
+    subtitle: "Check out today's learning",
     backToAdmin: 'Back to Admin Page',
     welcome: 'Welcome!',
-    welcomeDesc: 'You can find valuable lesson materials and announcements prepared by your teacher here. Select your class to check the lessons.',
+    welcomeDesc:
+      'You can find valuable lesson materials and announcements prepared by your teacher here. Select your class to check the lessons.',
     schedule: 'Lesson Schedule',
     resources: 'Learning Resources',
-    teacherNote: 'Teacher\'s Note',
+    teacherNote: "Teacher's Note",
     adminLogin: 'Admin Login',
     rights: 'All rights reserved.',
     translateBtn: 'AI Smart Translate',
@@ -72,14 +114,15 @@ const translations = {
     noVisibleContents: 'No visible content is available.',
     selectClass: 'Select Your Class',
     pm: 'PM',
-    am: 'AM'
+    am: 'AM',
   },
   RU: {
     title: 'Студенческий центр Дасаран',
     subtitle: 'Посмотрите, что нового сегодня',
     backToAdmin: 'Вернуться в админ-панель',
     welcome: 'Добро пожаловать!',
-    welcomeDesc: 'Здесь вы найдете ценные учебные материалы и объявления, подготовленные вашим учителем. Выберите свой класс, чтобы проверить уроки.',
+    welcomeDesc:
+      'Здесь вы найдете ценные учебные материалы и объявления, подготовленные вашим учителем. Выберите свой класс, чтобы проверить уроки.',
     schedule: 'Расписание уроков',
     resources: 'Учебные ресурсы',
     teacherNote: 'Заметка учителя',
@@ -92,7 +135,7 @@ const translations = {
     noVisibleContents: 'Нет доступного содержимого для показа.',
     selectClass: 'Выберите свой класс',
     pm: 'дня',
-    am: 'утра'
+    am: 'утра',
   },
   ZH: {
     title: '多爱学生中心',
@@ -112,290 +155,509 @@ const translations = {
     noVisibleContents: '当前没有可显示的内容。',
     selectClass: '选择您的班级',
     pm: '下午',
-    am: '上午'
-  }
+    am: '上午',
+  },
 };
 
 const languageNames = {
   KO: '한국어',
   EN: 'English',
   RU: 'Русский',
-  ZH: '中文'
+  ZH: '中文',
 };
 
-export const StudentPage: React.FC<StudentPageProps> = ({ onBackToAdmin, onLogin, isAdmin, lessons = [], folders = [], categories = [], contents = [] }) => {
+const getStudentHistoryState = (value: unknown): StudentHistoryState => {
+  if (!value || typeof value !== 'object') {
+    return {};
+  }
+
+  const state = value as Record<string, unknown>;
+  const studentPageView =
+    state.studentPageView === STUDENT_HOME_HISTORY_VIEW ||
+    state.studentPageView === STUDENT_FOLDER_HISTORY_VIEW
+      ? state.studentPageView
+      : undefined;
+
+  return {
+    studentPageView,
+    studentFolderId: typeof state.studentFolderId === 'string' ? state.studentFolderId : null,
+  };
+};
+
+const getMergedStudentHistoryState = (
+  nextView: StudentHistoryState['studentPageView'],
+  nextFolderId: string | null = null
+) => {
+  if (typeof window === 'undefined') {
+    return {
+      studentPageView: nextView,
+      studentFolderId: nextFolderId,
+    };
+  }
+
+  const baseState =
+    window.history.state && typeof window.history.state === 'object'
+      ? (window.history.state as Record<string, unknown>)
+      : {};
+
+  return {
+    ...baseState,
+    studentPageView: nextView,
+    studentFolderId: nextFolderId,
+  };
+};
+
+const getInitialActiveFolderId = () => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const historyState = getStudentHistoryState(window.history.state);
+  if (historyState.studentPageView === STUDENT_FOLDER_HISTORY_VIEW && historyState.studentFolderId) {
+    return historyState.studentFolderId;
+  }
+
+  return null;
+};
+
+const getFolderTranslationCacheKey = (
+  folderId: string,
+  folderName: string,
+  language: TranslationLanguage
+) => `${folderId}::${folderName}::${language}`;
+
+const translateText = async (
+  text: string,
+  targetLanguage: TranslationLanguage,
+  signal: AbortSignal
+) => {
+  const response = await fetch(resolveAppPath('api/translate'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      text,
+      targetLanguage,
+    }),
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error('Translation failed');
+  }
+
+  const payload = (await response.json()) as { translatedText?: string };
+  return payload.translatedText?.trim() || null;
+};
+
+export const StudentPage: React.FC<StudentPageProps> = ({
+  onBackToAdmin,
+  onLogin,
+  isAdmin,
+  lessons = [],
+  folders = [],
+  categories = [],
+  contents = [],
+}) => {
   const [lang, setLang] = useState<Language>('KO');
   const [isLangOpen, setIsLangOpen] = useState(false);
-  const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
-  const [translatedContent, setTranslatedContent] = useState<string | null>(null);
-  const [isTranslating, setIsTranslating] = useState(false);
-  const [translateError, setTranslateError] = useState<string | null>(null);
+  const [activeFolderId, setActiveFolderId] = useState<string | null>(getInitialActiveFolderId);
   const [selectedContent, setSelectedContent] = useState<LessonContent | null>(null);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [translatedFolderNames, setTranslatedFolderNames] = useState<Record<string, string>>({});
 
-  const t = translations[lang];
-  const activeFolder = folders.find(f => f.id === activeFolderId);
+  const homeTranslationCacheRef = useRef<Record<string, string>>({});
+  const homeTranslationRequestIdRef = useRef(0);
+  const hasManagedHistoryEntryRef = useRef(false);
 
-  // Lessons for active folder
+  const homeT = translations[lang];
+  const detailT = translations.KO;
+  const currentT = activeFolderId ? detailT : homeT;
+  const activeFolder = folders.find((folder) => folder.id === activeFolderId);
+
   const filteredLessons = activeFolderId
-    ? lessons.filter(l => l.folderId === activeFolderId).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    ? lessons
+        .filter((lesson) => lesson.folderId === activeFolderId)
+        .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime())
     : [];
 
-  // Collect all unique content IDs assigned to this folder
   const allContentIds = new Set<string>();
-  filteredLessons.forEach(lesson => {
-    if (lesson.contentIds) lesson.contentIds.forEach(id => allContentIds.add(id));
-    else if (lesson.contentId) allContentIds.add(lesson.contentId);
+  filteredLessons.forEach((lesson) => {
+    if (lesson.contentIds) {
+      lesson.contentIds.forEach((id) => allContentIds.add(id));
+    } else if (lesson.contentId) {
+      allContentIds.add(lesson.contentId);
+    }
   });
 
   const visibleContents = contents.filter((content) => content.categoryId !== null);
   const visibleContentIds = new Set(visibleContents.map((content) => content.id));
-  const visibleAssignedContentIds = new Set([...allContentIds].filter((id) => visibleContentIds.has(id)));
+  const visibleAssignedContentIds = new Set(
+    [...allContentIds].filter((id) => visibleContentIds.has(id))
+  );
 
-  // Group contents by category
   const contentsByCategory = categories
-    .map(cat => ({
-      category: cat,
-      items: visibleContents.filter(c => c.categoryId === cat.id && visibleAssignedContentIds.has(c.id))
+    .map((category) => ({
+      category,
+      items: visibleContents.filter(
+        (content) => content.categoryId === category.id && visibleAssignedContentIds.has(content.id)
+      ),
     }))
-    .filter(group => group.items.length > 0);
+    .filter((group) => group.items.length > 0);
 
-  const handleOpenFolder = (folderId: string) => {
+  const applyHomeViewState = () => {
+    setActiveFolderId(null);
+    setSelectedContent(null);
+    setOpenDropdown(null);
+    setIsLangOpen(false);
+  };
+
+  const applyFolderViewState = (folderId: string) => {
     setActiveFolderId(folderId);
     setSelectedContent(null);
-    setTranslatedContent(null);
-    setTranslateError(null);
     setOpenDropdown(null);
+    setIsLangOpen(false);
+  };
+
+  const handleOpenFolder = (folderId: string) => {
+    if (typeof window !== 'undefined') {
+      window.history.pushState(
+        getMergedStudentHistoryState(STUDENT_FOLDER_HISTORY_VIEW, folderId),
+        ''
+      );
+      hasManagedHistoryEntryRef.current = true;
+    }
+
+    applyFolderViewState(folderId);
   };
 
   const handleGoHome = () => {
-    setActiveFolderId(null);
-    setSelectedContent(null);
-    setTranslatedContent(null);
-    setTranslateError(null);
-    setOpenDropdown(null);
+    if (typeof window !== 'undefined') {
+      const historyState = getStudentHistoryState(window.history.state);
+      if (
+        historyState.studentPageView === STUDENT_FOLDER_HISTORY_VIEW &&
+        hasManagedHistoryEntryRef.current
+      ) {
+        window.history.back();
+        return;
+      }
+
+      window.history.replaceState(getMergedStudentHistoryState(STUDENT_HOME_HISTORY_VIEW), '');
+    }
+
+    applyHomeViewState();
   };
 
-  React.useEffect(() => {
+  const getFolderDisplayName = (folder: LessonFolder) => {
+    if (lang === 'KO') {
+      return folder.name;
+    }
+
+    return translatedFolderNames[folder.id] || folder.name;
+  };
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const historyState = getStudentHistoryState(window.history.state);
+    if (historyState.studentPageView === STUDENT_FOLDER_HISTORY_VIEW && historyState.studentFolderId) {
+      hasManagedHistoryEntryRef.current = true;
+      applyFolderViewState(historyState.studentFolderId);
+    } else {
+      window.history.replaceState(getMergedStudentHistoryState(STUDENT_HOME_HISTORY_VIEW), '');
+      hasManagedHistoryEntryRef.current = true;
+    }
+
+    const handlePopState = (event: PopStateEvent) => {
+      hasManagedHistoryEntryRef.current = true;
+      const nextState = getStudentHistoryState(event.state);
+      if (nextState.studentPageView === STUDENT_FOLDER_HISTORY_VIEW && nextState.studentFolderId) {
+        applyFolderViewState(nextState.studentFolderId);
+        return;
+      }
+
+      applyHomeViewState();
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  useEffect(() => {
     if (selectedContent && !visibleAssignedContentIds.has(selectedContent.id)) {
       setSelectedContent(null);
-      setTranslatedContent(null);
-      setTranslateError(null);
       setOpenDropdown(null);
     }
   }, [selectedContent, visibleAssignedContentIds]);
 
-  const extractTextFromHtml = (html: string) => {
-    const doc = new DOMParser().parseFromString(html, 'text/html');
-    return (doc.body.textContent || '')
-      .replace(/\r/g, '')
-      .replace(/\n{3,}/g, '\n\n')
-      .replace(/[ \t]+\n/g, '\n')
-      .trim();
-  };
-
-  const handleSmartTranslate = async () => {
-    if (lang === 'KO' || !selectedContent) {
-      setTranslatedContent(null);
-      setTranslateError(null);
+  useEffect(() => {
+    if (lang === 'KO') {
+      setTranslatedFolderNames({});
       return;
     }
 
-    const sourceText = extractTextFromHtml(selectedContent.html);
-    if (!sourceText) {
-      setTranslatedContent(null);
-      setTranslateError('번역할 텍스트가 없습니다.');
+    if (activeFolderId) {
       return;
     }
 
-    setIsTranslating(true);
-    setTranslateError(null);
-    try {
-      const response = await fetch(resolveAppPath('api/translate'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          text: sourceText,
-          targetLanguage: lang as TranslationLanguage,
-        }),
-      });
+    const targetLanguage = lang as TranslationLanguage;
+    const requestId = ++homeTranslationRequestIdRef.current;
+    const controller = new AbortController();
 
-      if (!response.ok) {
-        const errorPayload = await response.json().catch(() => null);
-        throw new Error(errorPayload?.error || 'Translation failed');
+    const cachedTranslations = folders.reduce<Record<string, string>>((accumulator, folder) => {
+      const cacheKey = getFolderTranslationCacheKey(folder.id, folder.name, targetLanguage);
+      const cachedValue = homeTranslationCacheRef.current[cacheKey];
+      if (cachedValue) {
+        accumulator[folder.id] = cachedValue;
+      }
+      return accumulator;
+    }, {});
+
+    setTranslatedFolderNames(cachedTranslations);
+
+    const pendingFolders = folders.filter((folder) => {
+      const cacheKey = getFolderTranslationCacheKey(folder.id, folder.name, targetLanguage);
+      return Boolean(folder.name.trim()) && !homeTranslationCacheRef.current[cacheKey];
+    });
+
+    if (pendingFolders.length === 0) {
+      return () => controller.abort();
+    }
+
+    void (async () => {
+      const results = await Promise.allSettled(
+        pendingFolders.map(async (folder) => ({
+          folderId: folder.id,
+          cacheKey: getFolderTranslationCacheKey(folder.id, folder.name, targetLanguage),
+          translatedName: await translateText(folder.name, targetLanguage, controller.signal),
+        }))
+      );
+
+      if (controller.signal.aborted || requestId !== homeTranslationRequestIdRef.current) {
+        return;
       }
 
-      const payload = await response.json() as { translatedText?: string };
-      setTranslatedContent(payload.translatedText || null);
-    } catch (error) {
-      console.error("Translation failed", error);
-      setTranslateError(error instanceof Error ? error.message : '번역에 실패했습니다.');
-      setTranslatedContent(null);
-    } finally {
-      setIsTranslating(false);
-    }
-  };
+      const nextTranslations: Record<string, string> = {};
+      results.forEach((result) => {
+        if (result.status !== 'fulfilled') {
+          const reason = result.reason;
+          if (!(reason instanceof DOMException && reason.name === 'AbortError')) {
+            console.error('Folder translation failed', reason);
+          }
+          return;
+        }
+
+        if (!result.value.translatedName) {
+          return;
+        }
+
+        homeTranslationCacheRef.current[result.value.cacheKey] = result.value.translatedName;
+        nextTranslations[result.value.folderId] = result.value.translatedName;
+      });
+
+      if (Object.keys(nextTranslations).length > 0) {
+        setTranslatedFolderNames((current) => ({
+          ...current,
+          ...nextTranslations,
+        }));
+      }
+    })().catch((error) => {
+      if (!(error instanceof DOMException && error.name === 'AbortError')) {
+        console.error('Folder translation batch failed', error);
+      }
+    });
+
+    return () => controller.abort();
+  }, [activeFolderId, folders, lang]);
 
   return (
     <div className="min-h-screen bg-[#FBFBFA] font-sans text-[#4A3728]">
-      {/* Header */}
-      <header className="bg-white border-b border-[#E5E3DD] px-8 py-6 flex justify-between items-center sticky top-0 z-50">
+      <header className="sticky top-0 z-50 flex items-center justify-between border-b border-[#E5E3DD] bg-white px-8 py-6">
         <div className="flex items-center gap-4">
           {activeFolderId && (
             <button
               onClick={handleGoHome}
-              className="p-2 hover:bg-[#F3F2EE] rounded-xl transition-all text-[#8B7E74] hover:text-[#4A3728]"
+              className="rounded-xl p-2 text-[#8B7E74] transition-all hover:bg-[#F3F2EE] hover:text-[#4A3728]"
             >
               <ArrowLeft size={20} />
             </button>
           )}
           <div className="flex flex-col">
-            <h1 className="font-serif font-bold text-2xl text-[#141414]">
-              {activeFolder ? activeFolder.name : t.title}
+            <h1 className="font-serif text-2xl font-bold text-[#141414]">
+              {activeFolder ? activeFolder.name : currentT.title}
             </h1>
-            <p className="text-xs text-[#8B7E74] font-medium">
-              {activeFolder ? `${visibleAssignedContentIds.size}개의 학습 콘텐츠` : t.subtitle}
+            <p className="text-xs font-medium text-[#8B7E74]">
+              {activeFolder ? `${visibleAssignedContentIds.size}개의 학습 콘텐츠` : currentT.subtitle}
             </p>
           </div>
         </div>
-        
+
         <div className="flex items-center gap-4">
-          {/* Language Selector */}
-          <div className="relative">
-            <button 
-              onClick={() => setIsLangOpen(!isLangOpen)}
-              className="flex items-center gap-2 px-4 py-2 bg-[#F3F2EE] rounded-xl text-sm font-bold text-[#4A3728] hover:bg-[#EAE8E2] transition-all"
-            >
-              <Languages size={18} className="text-[#8B5E3C]" />
-              <span>{languageNames[lang]}</span>
-              <ChevronDown size={14} className={`transition-transform ${isLangOpen ? 'rotate-180' : ''}`} />
-            </button>
-            
-            {isLangOpen && (
-              <div className="absolute right-0 mt-2 w-40 bg-white border border-[#E5E3DD] rounded-2xl shadow-xl overflow-hidden z-50">
-                {(Object.keys(languageNames) as Language[]).map((l) => (
-                  <button
-                    key={l}
-                    onClick={() => {
-                      setLang(l);
-                      setIsLangOpen(false);
-                      setTranslatedContent(null);
-                      setTranslateError(null);
-                    }}
-                    className={`w-full text-left px-4 py-3 text-sm font-medium transition-colors hover:bg-[#FBFBFA] ${lang === l ? 'text-[#8B5E3C] bg-[#FFF5E9]' : 'text-[#4A3728]'}`}
-                  >
-                    {languageNames[l]}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          {!activeFolderId && (
+            <div className="relative">
+              <button
+                onClick={() => setIsLangOpen((current) => !current)}
+                className="flex items-center gap-2 rounded-xl bg-[#F3F2EE] px-4 py-2 text-sm font-bold text-[#4A3728] transition-all hover:bg-[#EAE8E2]"
+              >
+                <Languages size={18} className="text-[#8B5E3C]" />
+                <span>{languageNames[lang]}</span>
+                <ChevronDown
+                  size={14}
+                  className={`transition-transform ${isLangOpen ? 'rotate-180' : ''}`}
+                />
+              </button>
+
+              {isLangOpen && (
+                <div className="absolute right-0 z-50 mt-2 w-40 overflow-hidden rounded-2xl border border-[#E5E3DD] bg-white shadow-xl">
+                  {(Object.keys(languageNames) as Language[]).map((language) => (
+                    <button
+                      key={language}
+                      onClick={() => {
+                        setLang(language);
+                        setIsLangOpen(false);
+                      }}
+                      className={`w-full px-4 py-3 text-left text-sm font-medium transition-colors hover:bg-[#FBFBFA] ${
+                        lang === language
+                          ? 'bg-[#FFF5E9] text-[#8B5E3C]'
+                          : 'text-[#4A3728]'
+                      }`}
+                    >
+                      {languageNames[language]}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {isAdmin && onBackToAdmin && (
-            <button 
+            <button
               onClick={onBackToAdmin}
-              className="px-4 py-2 bg-[#8B5E3C] text-white rounded-xl text-sm font-bold hover:bg-[#724D31] transition-all whitespace-nowrap"
+              className="whitespace-nowrap rounded-xl bg-[#8B5E3C] px-4 py-2 text-sm font-bold text-white transition-all hover:bg-[#724D31]"
             >
-              {t.backToAdmin}
+              {currentT.backToAdmin}
             </button>
           )}
         </div>
       </header>
 
       {!activeFolderId ? (
-        /* =================== HOME VIEW =================== */
-        <main className="max-w-5xl mx-auto p-8">
-          <motion.section 
+        <main className="mx-auto max-w-5xl p-8">
+          <motion.section
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-[#FFF5E9] rounded-[40px] p-12 mb-12 text-center"
+            className="mb-12 rounded-[40px] bg-[#FFF5E9] p-12 text-center"
           >
-            <h2 className="text-4xl font-serif font-bold text-[#4A3728] mb-4">{t.welcome}</h2>
-            <p className="text-lg text-[#8B7E74] max-w-2xl mx-auto mb-8">
-              {t.welcomeDesc}
-            </p>
+            <h2 className="mb-4 font-serif text-4xl font-bold text-[#4A3728]">{homeT.welcome}</h2>
+            <p className="mx-auto mb-8 max-w-2xl text-lg text-[#8B7E74]">{homeT.welcomeDesc}</p>
 
             <div className="mb-6">
-              <span className="text-xs font-bold text-[#8B5E3C] uppercase tracking-widest bg-[#EBD9C1]/30 px-3 py-1 rounded-full">
-                {t.selectClass}
+              <span className="rounded-full bg-[#EBD9C1]/30 px-3 py-1 text-xs font-bold uppercase tracking-widest text-[#8B5E3C]">
+                {homeT.selectClass}
               </span>
             </div>
           </motion.section>
 
-          {/* Folder Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {folders.map((folder, idx) => {
-              const folderLessons = lessons.filter(l => l.folderId === folder.id);
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {folders.map((folder, index) => {
+              const folderLessons = lessons.filter((lesson) => lesson.folderId === folder.id);
               const folderContentIds = new Set<string>();
-              
-              folderLessons.forEach(l => {
-                if (l.contentIds) {
-                  l.contentIds.forEach(id => {
-                    if (visibleContentIds.has(id)) folderContentIds.add(id);
+
+              folderLessons.forEach((lesson) => {
+                if (lesson.contentIds) {
+                  lesson.contentIds.forEach((id) => {
+                    if (visibleContentIds.has(id)) {
+                      folderContentIds.add(id);
+                    }
                   });
-                } else if (l.contentId) {
-                  if (visibleContentIds.has(l.contentId)) folderContentIds.add(l.contentId);
+                } else if (lesson.contentId && visibleContentIds.has(lesson.contentId)) {
+                  folderContentIds.add(lesson.contentId);
                 }
               });
+
               const folderColor = folder.color || '#8B5E3C';
               const folderBg = FOLDER_COLORS[folderColor] || '#FFF5E9';
               const IconComp = studentIconMap[folder.icon || 'BookOpen'] || BookOpen;
+
               return (
                 <motion.button
                   key={folder.id}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.1 }}
+                  transition={{ delay: index * 0.1 }}
                   onClick={() => handleOpenFolder(folder.id)}
-                  className="text-left bg-white p-8 rounded-[32px] border border-[#E5E3DD] shadow-sm hover:shadow-lg transition-all group"
-                  style={{ ['--folder-color' as any]: folderColor }}
+                  className="group rounded-[32px] border border-[#E5E3DD] bg-white p-8 text-left shadow-sm transition-all hover:shadow-lg"
                 >
-                  <div className="flex items-center justify-between mb-4">
-                    <div 
-                      className="w-12 h-12 rounded-2xl flex items-center justify-center transition-all"
+                  <div className="mb-4 flex items-center justify-between">
+                    <div
+                      className="flex h-12 w-12 items-center justify-center rounded-2xl transition-all"
                       style={{ backgroundColor: folderBg, color: folderColor }}
                     >
                       <IconComp size={24} />
                     </div>
-                    <ArrowRight size={20} className="text-[#E5E3DD] group-hover:translate-x-1 transition-all" style={{ color: undefined }} />
+                    <ArrowRight
+                      size={20}
+                      className="text-[#E5E3DD] transition-all group-hover:translate-x-1"
+                    />
                   </div>
-                  <h3 className="text-xl font-bold mb-1" style={{ color: folderColor }}>{folder.name}</h3>
-                  <p className="text-sm text-[#A89F94]">{folderContentIds.size}개 콘텐츠 · {folder.students?.length || 0}명 학생</p>
+                  <h3 className="mb-1 text-xl font-bold" style={{ color: folderColor }}>
+                    {getFolderDisplayName(folder)}
+                  </h3>
+                  <p className="text-sm text-[#A89F94]">
+                    {folderContentIds.size}개 콘텐츠 · {folder.students?.length || 0}명 학생
+                  </p>
                 </motion.button>
               );
             })}
           </div>
         </main>
       ) : (
-        /* =================== FOLDER DETAIL VIEW =================== */
         <main className="w-full px-4 py-8 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
-          {/* Category Dropdown Nav Bar */}
           {contentsByCategory.length > 0 ? (
             <>
               <div className="relative mb-8 flex w-full max-w-none flex-wrap gap-1 rounded-2xl border border-[#E5E3DD] bg-white p-2 shadow-sm">
                 {contentsByCategory.map((group) => (
                   <div key={group.category.id} className="relative max-w-full">
                     <button
-                      onClick={() => setOpenDropdown(openDropdown === group.category.id ? null : group.category.id)}
-                      className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${
-                        openDropdown === group.category.id || (selectedContent && group.items.some(i => i.id === selectedContent.id))
+                      onClick={() =>
+                        setOpenDropdown(
+                          openDropdown === group.category.id ? null : group.category.id
+                        )
+                      }
+                      className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold transition-all ${
+                        openDropdown === group.category.id ||
+                        (selectedContent && group.items.some((item) => item.id === selectedContent.id))
                           ? 'bg-[#8B5E3C] text-white shadow-md'
                           : 'text-[#8B7E74] hover:bg-[#F3F2EE] hover:text-[#4A3728]'
                       }`}
                     >
                       {group.category.name}
-                      <span className={`text-xs ${openDropdown === group.category.id || (selectedContent && group.items.some(i => i.id === selectedContent.id)) ? 'text-white/60' : 'text-[#A89F94]'}`}>({group.items.length})</span>
-                      <ChevronDown size={14} className={`transition-transform duration-200 ${openDropdown === group.category.id ? 'rotate-180' : ''}`} />
+                      <span
+                        className={`text-xs ${
+                          openDropdown === group.category.id ||
+                          (selectedContent && group.items.some((item) => item.id === selectedContent.id))
+                            ? 'text-white/60'
+                            : 'text-[#A89F94]'
+                        }`}
+                      >
+                        ({group.items.length})
+                      </span>
+                      <ChevronDown
+                        size={14}
+                        className={`transition-transform duration-200 ${
+                          openDropdown === group.category.id ? 'rotate-180' : ''
+                        }`}
+                      />
                     </button>
 
-                    {/* Dropdown */}
                     {openDropdown === group.category.id && (
                       <motion.div
                         initial={{ opacity: 0, y: -4 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="absolute top-full left-0 mt-2 w-72 bg-white border border-[#E5E3DD] rounded-2xl shadow-xl overflow-hidden z-50"
+                        className="absolute left-0 top-full z-50 mt-2 w-72 overflow-hidden rounded-2xl border border-[#E5E3DD] bg-white shadow-xl"
                       >
                         {group.items.map((content) => {
                           const isActive = selectedContent?.id === content.id;
@@ -404,18 +666,19 @@ export const StudentPage: React.FC<StudentPageProps> = ({ onBackToAdmin, onLogin
                               key={content.id}
                               onClick={() => {
                                 setSelectedContent(content);
-                                setTranslatedContent(null);
-                                setTranslateError(null);
                                 setOpenDropdown(null);
                               }}
-                              className={`w-full text-left px-5 py-3.5 flex items-center gap-3 transition-all ${
+                              className={`flex w-full items-center gap-3 px-5 py-3.5 text-left transition-all ${
                                 isActive
                                   ? 'bg-[#FFF5E9] text-[#8B5E3C]'
                                   : 'text-[#4A3728] hover:bg-[#FBFBFA]'
                               }`}
                             >
-                              <FileText size={16} className={isActive ? 'text-[#8B5E3C]' : 'text-[#A89F94]'} />
-                              <span className="font-medium text-sm truncate">{content.title}</span>
+                              <FileText
+                                size={16}
+                                className={isActive ? 'text-[#8B5E3C]' : 'text-[#A89F94]'}
+                              />
+                              <span className="truncate text-sm font-medium">{content.title}</span>
                             </button>
                           );
                         })}
@@ -425,51 +688,13 @@ export const StudentPage: React.FC<StudentPageProps> = ({ onBackToAdmin, onLogin
                 ))}
               </div>
 
-              {/* Content Viewer */}
               {selectedContent ? (
                 <motion.div
                   key={selectedContent.id}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                 >
-                  <StudentContentCard
-                    content={selectedContent}
-                    headerControls={lang !== 'KO' ? (
-                      <>
-                        <button
-                          onClick={() => void handleSmartTranslate()}
-                          disabled={isTranslating}
-                          className="inline-flex items-center gap-2 rounded-xl bg-[#8B5E3C] px-4 py-2 text-sm font-bold text-white transition-all hover:bg-[#724D31] disabled:cursor-wait disabled:opacity-70"
-                        >
-                          {isTranslating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-                          <span>{isTranslating ? t.translating : t.translateBtn}</span>
-                        </button>
-                        {translatedContent && (
-                          <button
-                            onClick={() => {
-                              setTranslatedContent(null);
-                              setTranslateError(null);
-                            }}
-                            className="rounded-xl border border-[#E5E3DD] px-4 py-2 text-sm font-bold text-[#8B7E74] transition-all hover:bg-[#FBFBFA] hover:text-[#4A3728]"
-                          >
-                            {t.original}
-                          </button>
-                        )}
-                      </>
-                    ) : undefined}
-                    details={(translatedContent || translateError) ? (
-                      <div className="border-b border-[#F3F2EE] bg-[#FBFBFA] px-5 py-6 sm:px-8">
-                        <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-[#A89F94]">
-                          {languageNames[lang]}
-                        </p>
-                        {translatedContent ? (
-                          <p className="whitespace-pre-wrap text-sm leading-7 text-[#4A3728]">{translatedContent}</p>
-                        ) : (
-                          <p className="text-sm font-medium text-[#C84B31]">{translateError}</p>
-                        )}
-                      </div>
-                    ) : undefined}
-                  />
+                  <StudentContentCard content={selectedContent} />
                 </motion.div>
               ) : (
                 <motion.div
@@ -477,8 +702,10 @@ export const StudentPage: React.FC<StudentPageProps> = ({ onBackToAdmin, onLogin
                   animate={{ opacity: 1 }}
                   className="w-full max-w-none rounded-[32px] border border-[#E5E3DD] bg-white p-10 text-center sm:p-16"
                 >
-                  <FileText size={48} className="text-[#E5E3DD] mx-auto mb-4" />
-                  <p className="text-lg font-bold text-[#8B7E74] mb-2">위의 카테고리를 클릭하여 콘텐츠를 선택하세요</p>
+                  <FileText size={48} className="mx-auto mb-4 text-[#E5E3DD]" />
+                  <p className="mb-2 text-lg font-bold text-[#8B7E74]">
+                    위의 카테고리를 클릭하여 콘텐츠를 선택하세요
+                  </p>
                   <p className="text-sm text-[#A89F94]">학습 자료가 여기에 표시됩니다</p>
                 </motion.div>
               )}
@@ -489,21 +716,23 @@ export const StudentPage: React.FC<StudentPageProps> = ({ onBackToAdmin, onLogin
               animate={{ opacity: 1, y: 0 }}
               className="mb-12 w-full max-w-none rounded-[40px] border border-[#E5E3DD] bg-white p-12 text-center shadow-sm"
             >
-              <BookOpen size={48} className="text-[#E5E3DD] mx-auto mb-4" />
-              <p className="text-lg font-bold text-[#8B7E74]">{filteredLessons.length > 0 ? t.noVisibleContents : t.noLessons}</p>
+              <BookOpen size={48} className="mx-auto mb-4 text-[#E5E3DD]" />
+              <p className="text-lg font-bold text-[#8B7E74]">
+                {filteredLessons.length > 0 ? detailT.noVisibleContents : detailT.noLessons}
+              </p>
             </motion.section>
           )}
         </main>
       )}
 
-      <footer className="mt-20 py-12 border-t border-[#E5E3DD] text-center">
-        <p className="text-sm text-[#8B7E74] mb-4">© 2024 다사랑 교실. {t.rights}</p>
+      <footer className="mt-20 border-t border-[#E5E3DD] py-12 text-center">
+        <p className="mb-4 text-sm text-[#8B7E74]">© 2024 다사랑 교실. {currentT.rights}</p>
         {!isAdmin && onLogin && (
-          <button 
+          <button
             onClick={onLogin}
-            className="text-[#E5E3DD] hover:text-[#8B7E74] text-[10px] uppercase tracking-widest transition-colors"
+            className="text-[10px] uppercase tracking-widest text-[#E5E3DD] transition-colors hover:text-[#8B7E74]"
           >
-            {t.adminLogin}
+            {currentT.adminLogin}
           </button>
         )}
       </footer>
