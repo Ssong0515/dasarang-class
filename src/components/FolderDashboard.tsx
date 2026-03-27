@@ -36,6 +36,10 @@ import {
   Lightbulb
 } from 'lucide-react';
 import { LessonFolder, Student, Lesson, LessonCategory, LessonContent, AttendanceRecord } from '../types';
+import {
+  getAssignedContentIdsForFolder,
+  orderAssignedContentIds,
+} from '../utils/folderContentAssignments';
 
 interface FolderDashboardProps {
   folder: LessonFolder;
@@ -49,6 +53,7 @@ interface FolderDashboardProps {
   onSelectLesson: (lesson: Lesson) => void;
   onCreateLesson: (folderId: string, date?: string) => void;
   onSaveLesson: (lesson: Lesson) => void;
+  onSaveFolderContents: (folderId: string, contentIds: string[]) => Promise<void>;
   onGoToLibrary: () => void;
   onUpdateFolder?: (folderId: string, data: Partial<LessonFolder>) => void;
   onDeleteFolder?: (folderId: string) => void;
@@ -98,6 +103,7 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
   onSelectLesson,
   onCreateLesson,
   onSaveLesson,
+  onSaveFolderContents,
   onGoToLibrary,
   onUpdateFolder,
   onDeleteFolder
@@ -187,6 +193,10 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
 
   const folderLessons = lessons.filter(l => l.folderId === folder.id);
   const currentLesson = folderLessons.find(l => l.date === selectedDate);
+  const assignedContentIds = getAssignedContentIdsForFolder(folder, lessons);
+  const assignedContentIdSet = new Set(assignedContentIds);
+  const selectedContentsList = contents.filter((content) => assignedContentIdSet.has(content.id));
+  const savedAssignedContentIds = selectedContentsList.map((content) => content.id);
 
   const handleQuickCreate = (contentId: string) => {
     if (!contentId) return;
@@ -266,7 +276,7 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
     onSaveLesson({ ...lesson, memo: localMemo });
   };
   
-  const handleToggleContent = (content: LessonContent) => {
+  const handleToggleContentLegacy = (content: LessonContent) => {
     const lesson = getOrCreateLesson();
     const currentIds = lesson.contentIds || (lesson.contentId ? [lesson.contentId] : []);
     
@@ -288,6 +298,18 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
       contentId: newIds[0] || '', // keep first ID for backward compatibility
       contentIds: newIds
     });
+  };
+
+  const handleToggleContent = (content: LessonContent) => {
+    const nextIds = savedAssignedContentIds.includes(content.id)
+      ? savedAssignedContentIds.filter((contentId) => contentId !== content.id)
+      : [...savedAssignedContentIds, content.id];
+
+    void onSaveFolderContents(folder.id, orderAssignedContentIds(nextIds, contents)).catch(
+      (error) => {
+        console.error('Failed to save folder content assignments', error);
+      }
+    );
   };
 
   const getStudentInitials = (name: string) =>
@@ -505,6 +527,9 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
           <p className="text-[#8B7E74] max-w-md">
             날짜를 선택하여 클래스를 등록하고, 학생들의 출석과 수업 메모를 관리하세요.
           </p>
+          <p className="mt-3 text-sm text-[#8B7E74] max-w-2xl">
+            콘텐츠는 반 단위로 공통 배정되고, 출석과 메모는 날짜별로 따로 기록됩니다.
+          </p>
         </div>
 
         {/* Tabs */}
@@ -545,8 +570,8 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
               {/* Left Column (span 2) */}
               <div className="lg:col-span-2 space-y-8">
                 {(() => {
-                  const selectedIds = currentLesson?.contentIds || (currentLesson?.contentId ? [currentLesson.contentId] : []);
-                  const selectedContentsList = selectedIds.map(id => contents.find(c => c.id === id)).filter(Boolean) as LessonContent[];
+                  const selectedIds = assignedContentIds;
+                  const missingAssignedContentCount = Math.max(selectedIds.length - selectedContentsList.length, 0);
                   
                   return (
                     <div className="bg-white rounded-[40px] border border-[#E5E3DD] shadow-sm p-10">
@@ -556,9 +581,12 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
                           콘텐츠
                         </h2>
                       </div>
+                      <p className="mb-8 text-sm text-[#8B7E74]">
+                        이 반 학생 페이지에 보일 콘텐츠를 배정합니다. 날짜를 바꿔도 이 목록은 유지됩니다.
+                      </p>
                       {/* Warning for missing content */}
-                      {selectedIds.length > 0 && selectedContentsList.length === 0 && (
-                        <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-100 rounded-2xl mb-8 text-red-600 animate-pulse">
+                      {missingAssignedContentCount > 0 && (
+                        <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-100 rounded-2xl mb-8 text-red-600">
                           <AlertCircle size={20} />
                           <div className="text-sm">
                             <p className="font-bold">연결된 콘텐츠를 찾을 수 없습니다.</p>
@@ -637,6 +665,9 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
                       출석 체크 ({getAttendanceStats(currentLesson).present}명 출석)
                     </h2>
                   </div>
+                  <p className="mb-6 text-sm text-[#8B7E74]">
+                    아래 기록은 선택한 날짜에만 저장됩니다.
+                  </p>
                   <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                     {((currentLesson ? currentLesson.attendance : null) || folder.students?.map(s => ({ studentId: s.id, studentName: s.name, initials: s.initials, status: 'Present' })) || []).map(record => (
                       <div key={record.studentId} className="flex items-center justify-between p-3 bg-[#FBFBFA] rounded-xl border border-[#F3F2EE]">
@@ -694,6 +725,9 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
                     </div>
                   </div>
 
+                  <p className="mb-4 text-xs font-medium text-[#8B7E74]">
+                    날짜를 선택해서 출석과 메모를 따로 기록하세요.
+                  </p>
                   <div className="grid grid-cols-7 gap-1 mb-2">
                     {weekDays.map(day => (
                       <div key={day} className="text-center text-[10px] font-bold text-[#A89F94] py-1">
@@ -709,11 +743,7 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
                       const dateStr = getLocalDateString(date);
                       const isSelected = dateStr === selectedDate;
                       const isToday = dateStr === getLocalDateString(new Date());
-                      const hasLesson = folderLessons.some(l => l.date === dateStr && (
-                        (l.contentIds && l.contentIds.length > 0) ||
-                        l.contentId ||
-                        (l.memo && l.memo.trim().length > 0)
-                      ));
+                      const hasLesson = folderLessons.some((lesson) => lesson.date === dateStr);
 
                       return (
                         <button
@@ -745,6 +775,9 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
                       오늘의 수업 메모
                     </h2>
                   </div>
+                  <p className="mb-4 text-sm text-[#8B7E74]">
+                    메모도 선택한 날짜에만 저장됩니다.
+                  </p>
                   <textarea
                     value={localMemo}
                     onChange={(e) => setLocalMemo(e.target.value)}

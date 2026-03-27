@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { Dashboard } from './components/Dashboard';
@@ -32,6 +32,10 @@ import {
 import { FolderDashboard } from './components/FolderDashboard';
 import { ContentLibrary, CONTENT_EDIT_DISCARD_WARNING } from './components/ContentLibrary';
 import { resolveAppPath } from './utils/appPaths';
+import {
+  getLegacyAssignedContentIdsForFolder,
+  normalizeAssignedContentIds,
+} from './utils/folderContentAssignments';
 
 type GoogleSheetsSyncRequest = {
   folderId: string;
@@ -123,9 +127,11 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'admin' | 'student'>('student');
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
   const [activeFolder, setActiveFolder] = useState<LessonFolder | null>(null);
+  const [areLessonsReady, setAreLessonsReady] = useState(false);
   const [isContentLibraryDirty, setIsContentLibraryDirty] = useState(false);
   const [googleSheetsSyncError, setGoogleSheetsSyncError] = useState<GoogleSheetsSyncErrorState | null>(null);
   const [isRetryingGoogleSheetsSync, setIsRetryingGoogleSheetsSync] = useState(false);
+  const migratingFolderIdsRef = useRef<Set<string>>(new Set());
 
   // Login Modal State
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -243,6 +249,11 @@ export default function App() {
     }
   }, [user]);
 
+  useEffect(() => {
+    setAreLessonsReady(false);
+    migratingFolderIdsRef.current.clear();
+  }, [user]);
+
   // Auto-hide Google Sheets sync error alert after 5 seconds
   useEffect(() => {
     if (googleSheetsSyncError) {
@@ -258,11 +269,17 @@ export default function App() {
     // Folders Listener
     const foldersQuery = query(collection(db, 'folders'));
     const unsubscribeFolders = onSnapshot(foldersQuery, (snapshot) => {
-      const foldersData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        lessons: []
-      })) as any[];
+      const foldersData = snapshot.docs.map((folderDoc) => {
+        const data = folderDoc.data() as Partial<LessonFolder>;
+        return {
+          id: folderDoc.id,
+          ...data,
+          assignedContentIds: Array.isArray(data.assignedContentIds)
+            ? normalizeAssignedContentIds(data.assignedContentIds)
+            : undefined,
+          lessons: [],
+        };
+      }) as LessonFolder[];
       foldersData.sort((a, b) => (a.order || 0) - (b.order || 0));
       setFolders(foldersData);
       
@@ -302,6 +319,7 @@ export default function App() {
         ...doc.data()
       })) as Lesson[];
       setLessons(lessonsData);
+      setAreLessonsReady(true);
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'lessons'));
 
     // Categories Listener
@@ -352,6 +370,49 @@ export default function App() {
       unsubscribeContents();
     };
   }, [user, activeFolder?.id]);
+
+  useEffect(() => {
+    if (!user || !isAdmin || !areLessonsReady || folders.length === 0) {
+      return;
+    }
+
+    const foldersToMigrate = folders.filter(
+      (folder) =>
+        !Array.isArray(folder.assignedContentIds) &&
+        !migratingFolderIdsRef.current.has(folder.id)
+    );
+
+    if (foldersToMigrate.length === 0) {
+      return;
+    }
+
+    foldersToMigrate.forEach((folder) => {
+      migratingFolderIdsRef.current.add(folder.id);
+    });
+
+    void Promise.allSettled(
+      foldersToMigrate.map(async (folder) => {
+        const legacyAssignedContentIds = getLegacyAssignedContentIdsForFolder(folder.id, lessons);
+        await setDoc(
+          doc(db, 'folders', folder.id),
+          { assignedContentIds: legacyAssignedContentIds },
+          { merge: true }
+        );
+      })
+    ).then((results) => {
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          return;
+        }
+
+        const folderId = foldersToMigrate[index]?.id;
+        if (folderId) {
+          migratingFolderIdsRef.current.delete(folderId);
+        }
+        console.error('Failed to migrate folder content assignments', result.reason);
+      });
+    });
+  }, [areLessonsReady, folders, isAdmin, lessons, user]);
 
   const handleLogin = () => {
     setShowLoginModal(true);
@@ -509,6 +570,21 @@ export default function App() {
     }
   };
 
+  const handleSaveFolderContents = async (folderId: string, contentIds: string[]) => {
+    if (!user) return;
+
+    try {
+      await setDoc(
+        doc(db, 'folders', folderId),
+        { assignedContentIds: normalizeAssignedContentIds(contentIds) },
+        { merge: true }
+      );
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `folders/${folderId}/assignedContentIds`);
+      throw error;
+    }
+  };
+
   const handleCreateFolder = async () => {
     if (!user) return;
     try {
@@ -517,6 +593,7 @@ export default function App() {
         name: '새로운 클래스',
         ownerUid: user.uid,
         students: [],
+        assignedContentIds: [],
         order: newOrder,
         createdAt: new Date().toISOString()
       });
@@ -876,6 +953,7 @@ export default function App() {
               onSelectLesson={handleSelectLesson}
               onCreateLesson={handleCreateLesson}
               onSaveLesson={handleSaveLesson}
+              onSaveFolderContents={handleSaveFolderContents}
               onGoToLibrary={() => handleTabChange('content-library')}
               onUpdateFolder={handleUpdateFolder}
               onDeleteFolder={handleDeleteFolder}

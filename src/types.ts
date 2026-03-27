@@ -66,6 +66,7 @@ export interface LessonFolder {
   name: string;
   ownerUid: string;
   students?: Student[];
+  assignedContentIds?: string[];
   lessons?: Lesson[];
   isOpen?: boolean;
   order?: number;

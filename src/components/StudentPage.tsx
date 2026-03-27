@@ -22,6 +22,7 @@ import {
 import { LessonFolder, Lesson, LessonCategory, LessonContent } from '../types';
 import { resolveAppPath } from '../utils/appPaths';
 import { StudentContentCard } from './StudentContentPreview';
+import { getAssignedContentIdsForFolder } from '../utils/folderContentAssignments';
 
 const studentIconMap: Record<
   string,
@@ -278,29 +279,17 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   const currentT = activeFolderId ? detailT : homeT;
   const activeFolder = folders.find((folder) => folder.id === activeFolderId);
 
-  const filteredLessons = activeFolderId
-    ? lessons
-        .filter((lesson) => lesson.folderId === activeFolderId)
-        .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime())
-    : [];
-
-  const allContentIds = new Set<string>();
-  filteredLessons.forEach((lesson) => {
-    if (lesson.contentIds) {
-      lesson.contentIds.forEach((id) => allContentIds.add(id));
-    } else if (lesson.contentId) {
-      allContentIds.add(lesson.contentId);
-    }
-  });
-
   const categorizedContents = contents.filter((content) => content.categoryId !== null);
   const categorizedContentIds = new Set(categorizedContents.map((content) => content.id));
+  const assignedContentIds = activeFolder
+    ? getAssignedContentIdsForFolder(activeFolder, lessons)
+    : [];
   const visibleAssignedContentIds = new Set(
-    [...allContentIds].filter((id) => categorizedContentIds.has(id))
+    assignedContentIds.filter((id) => categorizedContentIds.has(id))
   );
-  const visibleContents = isAdmin
-    ? categorizedContents
-    : categorizedContents.filter((content) => visibleAssignedContentIds.has(content.id));
+  const visibleContents = categorizedContents.filter((content) =>
+    visibleAssignedContentIds.has(content.id)
+  );
   const visibleContentIds = new Set(visibleContents.map((content) => content.id));
 
   const contentsByCategory = categories
@@ -571,20 +560,11 @@ export const StudentPage: React.FC<StudentPageProps> = ({
 
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
             {folders.map((folder, index) => {
-              const folderLessons = lessons.filter((lesson) => lesson.folderId === folder.id);
-              const folderContentIds = new Set<string>();
-
-              folderLessons.forEach((lesson) => {
-                if (lesson.contentIds) {
-                  lesson.contentIds.forEach((id) => {
-                    if (categorizedContentIds.has(id)) {
-                      folderContentIds.add(id);
-                    }
-                  });
-                } else if (lesson.contentId && categorizedContentIds.has(lesson.contentId)) {
-                  folderContentIds.add(lesson.contentId);
-                }
-              });
+              const folderContentIds = new Set(
+                getAssignedContentIdsForFolder(folder, lessons).filter((id) =>
+                  categorizedContentIds.has(id)
+                )
+              );
 
               const folderColor = folder.color || '#8B5E3C';
               const folderBg = FOLDER_COLORS[folderColor] || '#FFF5E9';
@@ -729,7 +709,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
             >
               <BookOpen size={48} className="mx-auto mb-4 text-[#E5E3DD]" />
               <p className="text-lg font-bold text-[#8B7E74]">
-                {filteredLessons.length > 0 ? detailT.noVisibleContents : detailT.noLessons}
+                {detailT.noVisibleContents}
               </p>
             </motion.section>
           )}
