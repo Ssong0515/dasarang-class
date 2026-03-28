@@ -1,21 +1,24 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Users, 
-  Paperclip, 
-  Plus, 
-  Download, 
-  ExternalLink, 
+import React, { useEffect, useState } from 'react';
+import {
+  Users,
+  Paperclip,
+  Plus,
+  Download,
+  ExternalLink,
   FileEdit,
-  CheckCircle2,
   Save,
   Trash2,
   Type,
   Hash,
   FolderOpen,
-  FileText
+  FileText,
 } from 'lucide-react';
-import { motion } from 'motion/react';
 import { Lesson, LessonFolder, AttendanceRecord, LessonResource, LessonContent } from '../types';
+import { getAssignedContentIdsForFolder } from '../utils/folderContentAssignments';
+import {
+  buildLessonRecordContent,
+  normalizeLessonContentIds,
+} from '../utils/lessonRecordContent';
 
 interface LessonDetailProps {
   lesson: Lesson;
@@ -30,101 +33,165 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({ lesson, folders, con
   const [newResourceUrl, setNewResourceUrl] = useState('');
   const [newResourceType, setNewResourceType] = useState<'pdf' | 'link'>('link');
 
-  // Initialize attendance if empty, based on folder students
   useEffect(() => {
-    const currentFolder = folders.find(f => f.id === localLesson.folderId);
-    if (currentFolder && (!localLesson.attendance || localLesson.attendance.length === 0)) {
-      const initialAttendance: AttendanceRecord[] = (currentFolder.students || []).map(s => ({
-        studentId: s.id,
-        studentName: s.name,
-        initials: s.initials,
-        status: 'Present'
-      }));
-      setLocalLesson(prev => ({ ...prev, attendance: initialAttendance }));
-    }
-  }, [localLesson.folderId, folders]);
+    setLocalLesson(lesson);
+  }, [lesson]);
 
-  const handleAttendanceChange = (studentId: string, status: 'Present' | 'Absent' | 'Late') => {
-    const newAttendance = (localLesson.attendance || []).map(a => 
-      a.studentId === studentId ? { ...a, status } : a
+  const currentFolder = folders.find((folder) => folder.id === localLesson.folderId);
+  const assignedContentIds = currentFolder ? getAssignedContentIdsForFolder(currentFolder) : [];
+  const assignedContentIdSet = new Set(assignedContentIds);
+  const availableContents = contents.filter((content) => assignedContentIdSet.has(content.id));
+  const availableContentsById = new Map<string, LessonContent>(
+    availableContents.map((content) => [content.id, content])
+  );
+  const rawSelectedContentIds = normalizeLessonContentIds(localLesson);
+  const selectedContentIds = rawSelectedContentIds.filter((contentId) =>
+    availableContentsById.has(contentId)
+  );
+  const selectedContentIdSet = new Set(selectedContentIds);
+  const missingSelectedContentCount = Math.max(
+    rawSelectedContentIds.length - selectedContentIds.length,
+    0
+  );
+
+  useEffect(() => {
+    if (!currentFolder || (localLesson.attendance && localLesson.attendance.length > 0)) {
+      return;
+    }
+
+    const initialAttendance: AttendanceRecord[] = (currentFolder.students || []).map((student) => ({
+      studentId: student.id,
+      studentName: student.name,
+      initials: student.initials,
+      status: 'Present',
+    }));
+
+    setLocalLesson((previousLesson) => ({
+      ...previousLesson,
+      attendance: initialAttendance,
+    }));
+  }, [currentFolder, localLesson.attendance]);
+
+  const handleFolderChange = (folderId: string) => {
+    const nextFolder = folders.find((folder) => folder.id === folderId);
+    const nextAssignedContentIds = nextFolder ? getAssignedContentIdsForFolder(nextFolder) : [];
+    const nextAssignedContentIdSet = new Set(nextAssignedContentIds);
+    const nextAvailableContents = contents.filter((content) => nextAssignedContentIdSet.has(content.id));
+    const nextAvailableContentsById = new Map<string, LessonContent>(
+      nextAvailableContents.map((content) => [content.id, content])
     );
-    setLocalLesson({ ...localLesson, attendance: newAttendance });
+    const preservedContentIds = normalizeLessonContentIds(localLesson).filter((contentId) =>
+      nextAvailableContentsById.has(contentId)
+    );
+    const nextLessonContent = buildLessonRecordContent(
+      preservedContentIds,
+      nextAvailableContentsById
+    );
+
+    setLocalLesson((previousLesson) => ({
+      ...previousLesson,
+      folderId,
+      folderName: nextFolder?.name || previousLesson.folderName,
+      ...nextLessonContent,
+    }));
   };
 
-  const handleContentSelect = (contentId: string) => {
-    const selectedContent = contents.find(c => c.id === contentId);
-    if (selectedContent) {
-      setLocalLesson({
-        ...localLesson,
-        contentId: selectedContent.id,
-        content: selectedContent.html,
-        title: selectedContent.title
-      });
-    }
+  const handleAttendanceChange = (studentId: string, status: 'Present' | 'Absent' | 'Late') => {
+    const nextAttendance = (localLesson.attendance || []).map((record) =>
+      record.studentId === studentId ? { ...record, status } : record
+    );
+    setLocalLesson((previousLesson) => ({ ...previousLesson, attendance: nextAttendance }));
+  };
+
+  const handleContentToggle = (content: LessonContent) => {
+    const nextIds = selectedContentIdSet.has(content.id)
+      ? selectedContentIds.filter((contentId) => contentId !== content.id)
+      : [...selectedContentIds, content.id];
+    const nextLessonContent = buildLessonRecordContent(nextIds, availableContentsById);
+
+    setLocalLesson((previousLesson) => ({
+      ...previousLesson,
+      ...nextLessonContent,
+    }));
   };
 
   const handleAddResource = () => {
-    if (!newResourceName || !newResourceUrl) return;
-    const newRes: LessonResource = {
+    if (!newResourceName || !newResourceUrl) {
+      return;
+    }
+
+    const newResource: LessonResource = {
       name: newResourceName,
       type: newResourceType,
-      info: newResourceType === 'pdf' ? 'PDF Document' : 'External Link'
+      info: newResourceType === 'pdf' ? 'PDF Document' : 'External Link',
     };
-    setLocalLesson({
-      ...localLesson,
-      resources: [...(localLesson.resources || []), newRes]
-    });
+
+    setLocalLesson((previousLesson) => ({
+      ...previousLesson,
+      resources: [...(previousLesson.resources || []), newResource],
+    }));
     setNewResourceName('');
     setNewResourceUrl('');
   };
 
-  const handleRemoveResource = (idx: number) => {
-    const newResources = [...(localLesson.resources || [])];
-    newResources.splice(idx, 1);
-    setLocalLesson({ ...localLesson, resources: newResources });
+  const handleRemoveResource = (index: number) => {
+    const nextResources = [...(localLesson.resources || [])];
+    nextResources.splice(index, 1);
+    setLocalLesson((previousLesson) => ({ ...previousLesson, resources: nextResources }));
   };
 
   return (
     <div className="flex-1 overflow-y-auto bg-[#FBFBFA] p-8 pb-20">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-12">
+      <div className="mb-12 flex items-center justify-between">
         <div className="flex-1 max-w-2xl">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="flex items-center gap-2 px-3 py-1 bg-[#FFF5E9] text-[#8B5E3C] text-[10px] font-bold uppercase tracking-widest rounded-full">
+          <div className="mb-4 flex items-center gap-4">
+            <div className="flex items-center gap-2 rounded-full bg-[#FFF5E9] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#8B5E3C]">
               <FolderOpen size={12} />
-              <select 
+              <select
                 value={localLesson.folderId}
-                onChange={(e) => setLocalLesson({ ...localLesson, folderId: e.target.value })}
-                className="bg-transparent outline-none cursor-pointer"
+                onChange={(event) => handleFolderChange(event.target.value)}
+                className="cursor-pointer bg-transparent outline-none"
               >
-                {folders.map(f => (
-                  <option key={f.id} value={f.id}>{f.name}</option>
+                {folders.map((folder) => (
+                  <option key={folder.id} value={folder.id}>
+                    {folder.name}
+                  </option>
                 ))}
               </select>
             </div>
-            <div className="flex items-center gap-2 px-3 py-1 bg-[#F3F2EE] text-[#8B7E74] text-[10px] font-bold uppercase tracking-widest rounded-full">
+            <div className="flex items-center gap-2 rounded-full bg-[#F3F2EE] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#8B7E74]">
               <Hash size={12} />
-              <input 
-                type="number" 
+              <input
+                type="number"
                 value={localLesson.order || ''}
-                onChange={(e) => setLocalLesson({ ...localLesson, order: parseInt(e.target.value) })}
+                onChange={(event) =>
+                  setLocalLesson((previousLesson) => ({
+                    ...previousLesson,
+                    order: parseInt(event.target.value, 10),
+                  }))
+                }
                 placeholder="순서"
                 className="w-8 bg-transparent outline-none"
               />
             </div>
           </div>
-          <input 
-            type="text" 
+          <input
+            type="text"
             value={localLesson.title}
-            onChange={(e) => setLocalLesson({ ...localLesson, title: e.target.value })}
+            onChange={(event) =>
+              setLocalLesson((previousLesson) => ({
+                ...previousLesson,
+                title: event.target.value,
+              }))
+            }
             placeholder="수업 제목을 입력하세요"
-            className="text-4xl font-serif font-bold text-[#4A3728] bg-transparent border-b border-transparent hover:border-[#E5E3DD] focus:border-[#8B5E3C] outline-none w-full transition-all"
+            className="w-full border-b border-transparent bg-transparent text-4xl font-serif font-bold text-[#4A3728] outline-none transition-all hover:border-[#E5E3DD] focus:border-[#8B5E3C]"
           />
         </div>
         <div className="flex items-center gap-4">
-          <button 
+          <button
             onClick={() => onSave(localLesson)}
-            className="px-6 py-3 bg-[#8B5E3C] text-white rounded-2xl font-bold hover:bg-[#724D31] transition-all shadow-lg shadow-[#8B5E3C]/20 flex items-center gap-2"
+            className="flex items-center gap-2 rounded-2xl bg-[#8B5E3C] px-6 py-3 font-bold text-white shadow-lg shadow-[#8B5E3C]/20 transition-all hover:bg-[#724D31]"
           >
             <Save size={20} />
             <span>수업 저장하기</span>
@@ -132,69 +199,122 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({ lesson, folders, con
         </div>
       </div>
 
-      {/* Content Selection */}
-      <div className="bg-white p-8 rounded-[32px] border border-[#E5E3DD] shadow-sm mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <label className="text-xs font-bold text-[#8B5E3C] uppercase tracking-widest flex items-center gap-2">
-            <FileText size={14} /> 콘텐츠 라이브러리에서 가져오기
+      <div className="mb-8 rounded-[32px] border border-[#E5E3DD] bg-white p-8 shadow-sm">
+        <div className="mb-4 flex items-center justify-between">
+          <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#8B5E3C]">
+            <FileText size={14} /> 날짜별 수업 기록
           </label>
           <span className="text-[10px] text-[#8B7E74]">
-            * 콘텐츠를 선택하면 제목과 HTML 내용이 자동으로 채워집니다.
+            학생 페이지 노출과 별개로, 이 반에 배정된 콘텐츠 안에서만 기록합니다.
           </span>
         </div>
-        <select 
-          value={localLesson.contentId || ''}
-          onChange={(e) => handleContentSelect(e.target.value)}
-          className="w-full bg-[#F3F2EE] border-none rounded-xl px-4 py-3 text-[#4A3728] font-bold focus:ring-2 focus:ring-[#8B5E3C] outline-none"
-        >
-          <option value="">콘텐츠 선택...</option>
-          {contents.map(c => (
-            <option key={c.id} value={c.id}>{c.title}</option>
-          ))}
-        </select>
+
+        {missingSelectedContentCount > 0 && (
+          <div className="mb-6 rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            현재 기록된 수업 중 일부를 찾을 수 없습니다. 삭제되었거나 이 반 배정에서 빠진
+            콘텐츠일 수 있습니다.
+          </div>
+        )}
+
+        {selectedContentIds.length > 0 ? (
+          <div className="mb-6 flex flex-wrap gap-2">
+            {selectedContentIds.map((contentId) => {
+              const selectedContent = availableContentsById.get(contentId);
+              if (!selectedContent) {
+                return null;
+              }
+
+              return (
+                <button
+                  key={contentId}
+                  type="button"
+                  onClick={() => handleContentToggle(selectedContent)}
+                  className="rounded-full bg-[#4A3728] px-4 py-2 text-sm font-bold text-white shadow-sm"
+                >
+                  {selectedContent.title}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {availableContents.length > 0 ? (
+          <div className="flex flex-wrap gap-3">
+            {availableContents.map((content) => {
+              const isSelected = selectedContentIdSet.has(content.id);
+              return (
+                <button
+                  key={content.id}
+                  type="button"
+                  onClick={() => handleContentToggle(content)}
+                  className={`rounded-full px-5 py-3 text-left text-sm font-bold transition-all ${
+                    isSelected
+                      ? 'bg-[#4A3728] text-white shadow-md'
+                      : 'bg-[#F3F2EE] text-[#4A3728] hover:bg-[#E5E3DD]'
+                  }`}
+                >
+                  {content.title}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-5 py-6 text-sm text-[#8B7E74]">
+            이 반에 배정된 콘텐츠가 없습니다. 먼저 반 관리 화면에서 학생 페이지용 콘텐츠를
+            배정해 주세요.
+          </div>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Column: Content & Attendance */}
-        <section className="lg:col-span-2 space-y-8">
-          {/* HTML Content Editor */}
-          <div className="bg-white rounded-[32px] border border-[#E5E3DD] p-8 shadow-sm">
-            <div className="flex items-center gap-3 mb-6">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+        <section className="space-y-8 lg:col-span-2">
+          <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-8 shadow-sm">
+            <div className="mb-6 flex items-center gap-3">
               <Type className="text-[#8B5E3C]" size={24} />
               <h2 className="text-xl font-bold text-[#4A3728]">수업 내용 (HTML)</h2>
             </div>
-            <textarea 
+            <textarea
               value={localLesson.content}
-              onChange={(e) => setLocalLesson({ ...localLesson, content: e.target.value })}
-              placeholder="HTML 코드를 입력하세요..."
-              className="w-full h-[400px] p-6 bg-[#FBFBFA] border border-[#F3F2EE] rounded-2xl font-mono text-sm outline-none focus:border-[#8B5E3C] transition-all resize-none"
+              onChange={(event) =>
+                setLocalLesson((previousLesson) => ({
+                  ...previousLesson,
+                  content: event.target.value,
+                }))
+              }
+              placeholder="HTML 코드를 입력하세요."
+              className="h-[400px] w-full resize-none rounded-2xl border border-[#F3F2EE] bg-[#FBFBFA] p-6 font-mono text-sm outline-none transition-all focus:border-[#8B5E3C]"
             />
-            <div className="mt-4 p-4 bg-[#FFF5E9] rounded-xl border border-[#EBD9C1]">
-              <p className="text-[11px] text-[#8B5E3C] leading-relaxed">
-                💡 HTML 태그를 사용하여 수업 내용을 구성할 수 있습니다. 학생 페이지에서 렌더링되어 보여집니다.
+            <div className="mt-4 rounded-xl border border-[#EBD9C1] bg-[#FFF5E9] p-4">
+              <p className="text-[11px] leading-relaxed text-[#8B5E3C]">
+                날짜별 수업 기록에 맞춰 내용을 정리할 수 있습니다. 학생 페이지에 보이는 반 배정
+                콘텐츠와는 별개의 관리용 기록입니다.
               </p>
             </div>
           </div>
 
-          {/* Attendance Check */}
-          <div className="bg-white rounded-[32px] border border-[#E5E3DD] overflow-hidden shadow-sm">
-            <div className="p-8 border-b border-[#F3F2EE] flex items-center justify-between">
+          <div className="overflow-hidden rounded-[32px] border border-[#E5E3DD] bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b border-[#F3F2EE] p-8">
               <div className="flex items-center gap-3">
                 <Users className="text-[#8B5E3C]" size={24} />
                 <h2 className="text-xl font-bold text-[#4A3728]">출석 체크 ({localLesson.date})</h2>
               </div>
-              <input 
-                type="date" 
+              <input
+                type="date"
                 value={localLesson.date}
-                onChange={(e) => setLocalLesson({ ...localLesson, date: e.target.value })}
-                className="text-sm font-bold text-[#8B5E3C] bg-[#FFF5E9] px-3 py-1 rounded-full outline-none"
+                onChange={(event) =>
+                  setLocalLesson((previousLesson) => ({
+                    ...previousLesson,
+                    date: event.target.value,
+                  }))
+                }
+                className="rounded-full bg-[#FFF5E9] px-3 py-1 text-sm font-bold text-[#8B5E3C] outline-none"
               />
             </div>
-            
+
             <div className="p-8">
               <table className="w-full">
                 <thead>
-                  <tr className="text-left text-[11px] font-bold text-[#A89F94] uppercase tracking-widest border-b border-[#F3F2EE]">
+                  <tr className="border-b border-[#F3F2EE] text-left text-[11px] font-bold uppercase tracking-widest text-[#A89F94]">
                     <th className="pb-4">학생 이름</th>
                     <th className="pb-4 text-right">상태</th>
                   </tr>
@@ -204,7 +324,7 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({ lesson, folders, con
                     <tr key={record.studentId} className="group">
                       <td className="py-4">
                         <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 rounded-full bg-[#EBD9C1] flex items-center justify-center text-[#8B5E3C] font-bold text-xs">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#EBD9C1] text-xs font-bold text-[#8B5E3C]">
                             {record.initials}
                           </div>
                           <span className="font-bold text-[#4A3728]">{record.studentName}</span>
@@ -213,16 +333,24 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({ lesson, folders, con
                       <td className="py-4">
                         <div className="flex items-center justify-end gap-2">
                           {(['Present', 'Absent', 'Late'] as const).map((status) => (
-                            <button 
+                            <button
                               key={status}
                               onClick={() => handleAttendanceChange(record.studentId, status)}
-                              className={`px-4 py-2 rounded-xl text-[11px] font-bold transition-all ${
-                                record.status === status 
-                                  ? status === 'Present' ? 'bg-[#D1F3E0] text-[#2D7A4D]' : status === 'Absent' ? 'bg-[#F3D1D1] text-[#7A2D2D]' : 'bg-[#F3EBD1] text-[#7A6A2D]'
+                              className={`rounded-xl px-4 py-2 text-[11px] font-bold transition-all ${
+                                record.status === status
+                                  ? status === 'Present'
+                                    ? 'bg-[#D1F3E0] text-[#2D7A4D]'
+                                    : status === 'Absent'
+                                      ? 'bg-[#F3D1D1] text-[#7A2D2D]'
+                                      : 'bg-[#F3EBD1] text-[#7A6A2D]'
                                   : 'bg-[#F3F2EE] text-[#8B7E74] hover:bg-[#EAE8E2]'
                               }`}
                             >
-                              {status === 'Present' ? '출석' : status === 'Absent' ? '결석' : '지각'}
+                              {status === 'Present'
+                                ? '출석'
+                                : status === 'Absent'
+                                  ? '결석'
+                                  : '지각'}
                             </button>
                           ))}
                         </div>
@@ -232,8 +360,9 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({ lesson, folders, con
                   {(!localLesson.attendance || localLesson.attendance.length === 0) && (
                     <tr>
                       <td colSpan={2} className="py-12 text-center text-[#8B7E74]">
-                        이 클래스에 등록된 학생이 없습니다. <br/>
-                        사이드바의 '인원 관리'에서 학생을 먼저 추가해주세요.
+                        이 반에 등록된 학생이 없습니다.
+                        <br />
+                        사이드바의 '인원 관리'에서 학생을 먼저 추가해 주세요.
                       </td>
                     </tr>
                   )}
@@ -243,45 +372,43 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({ lesson, folders, con
           </div>
         </section>
 
-        {/* Right Column: Resources & Memo */}
         <section className="space-y-8">
-          {/* Resources */}
-          <div className="bg-white rounded-[32px] border border-[#E5E3DD] p-8 shadow-sm">
-            <div className="flex items-center justify-between mb-6">
+          <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-8 shadow-sm">
+            <div className="mb-6 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Paperclip className="text-[#8B5E3C]" size={20} />
                 <h2 className="text-lg font-bold text-[#4A3728]">수업 자료</h2>
               </div>
             </div>
 
-            <div className="space-y-4 mb-6">
+            <div className="mb-6 space-y-4">
               <div className="flex flex-col gap-2">
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   placeholder="자료 이름"
                   value={newResourceName}
-                  onChange={(e) => setNewResourceName(e.target.value)}
-                  className="w-full px-4 py-2 bg-[#FBFBFA] border border-[#F3F2EE] rounded-xl text-sm outline-none"
+                  onChange={(event) => setNewResourceName(event.target.value)}
+                  className="w-full rounded-xl border border-[#F3F2EE] bg-[#FBFBFA] px-4 py-2 text-sm outline-none"
                 />
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   placeholder="URL 또는 정보"
                   value={newResourceUrl}
-                  onChange={(e) => setNewResourceUrl(e.target.value)}
-                  className="w-full px-4 py-2 bg-[#FBFBFA] border border-[#F3F2EE] rounded-xl text-sm outline-none"
+                  onChange={(event) => setNewResourceUrl(event.target.value)}
+                  className="w-full rounded-xl border border-[#F3F2EE] bg-[#FBFBFA] px-4 py-2 text-sm outline-none"
                 />
                 <div className="flex gap-2">
-                  <select 
+                  <select
                     value={newResourceType}
-                    onChange={(e) => setNewResourceType(e.target.value as 'pdf' | 'link')}
-                    className="px-4 py-2 bg-[#FBFBFA] border border-[#F3F2EE] rounded-xl text-sm outline-none"
+                    onChange={(event) => setNewResourceType(event.target.value as 'pdf' | 'link')}
+                    className="rounded-xl border border-[#F3F2EE] bg-[#FBFBFA] px-4 py-2 text-sm outline-none"
                   >
                     <option value="link">링크</option>
                     <option value="pdf">PDF</option>
                   </select>
-                  <button 
+                  <button
                     onClick={handleAddResource}
-                    className="flex-1 py-2 bg-[#8B5E3C] text-white rounded-xl font-bold text-sm hover:bg-[#724D31]"
+                    className="flex-1 rounded-xl bg-[#8B5E3C] py-2 text-sm font-bold text-white hover:bg-[#724D31]"
                   >
                     자료 추가
                   </button>
@@ -290,17 +417,26 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({ lesson, folders, con
             </div>
 
             <div className="space-y-3">
-              {(localLesson.resources || []).map((res, idx) => (
-                <div key={idx} className="flex items-center gap-3 p-3 bg-[#FBFBFA] rounded-xl border border-[#F3F2EE] group">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${res.type === 'pdf' ? 'bg-[#F3D1D1] text-[#7A2D2D]' : 'bg-[#D1E4F3] text-[#4A86B0]'}`}>
-                    {res.type === 'pdf' ? <Download size={14} /> : <ExternalLink size={14} />}
+              {(localLesson.resources || []).map((resource, index) => (
+                <div
+                  key={index}
+                  className="group flex items-center gap-3 rounded-xl border border-[#F3F2EE] bg-[#FBFBFA] p-3"
+                >
+                  <div
+                    className={`flex h-8 w-8 items-center justify-center rounded-lg ${
+                      resource.type === 'pdf'
+                        ? 'bg-[#F3D1D1] text-[#7A2D2D]'
+                        : 'bg-[#D1E4F3] text-[#4A86B0]'
+                    }`}
+                  >
+                    {resource.type === 'pdf' ? <Download size={14} /> : <ExternalLink size={14} />}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-xs font-bold text-[#4A3728] truncate">{res.name}</h4>
+                  <div className="min-w-0 flex-1">
+                    <h4 className="truncate text-xs font-bold text-[#4A3728]">{resource.name}</h4>
                   </div>
-                  <button 
-                    onClick={() => handleRemoveResource(idx)}
-                    className="p-1 text-[#A89F94] hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                  <button
+                    onClick={() => handleRemoveResource(index)}
+                    className="p-1 text-[#A89F94] opacity-0 transition-all hover:text-red-500 group-hover:opacity-100"
                   >
                     <Trash2 size={14} />
                   </button>
@@ -309,17 +445,21 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({ lesson, folders, con
             </div>
           </div>
 
-          {/* Today's Memo */}
-          <div className="bg-white rounded-[32px] border border-[#E5E3DD] p-8 shadow-sm">
-            <div className="flex items-center gap-3 mb-6">
+          <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-8 shadow-sm">
+            <div className="mb-6 flex items-center gap-3">
               <FileEdit className="text-[#8B5E3C]" size={20} />
               <h2 className="text-lg font-bold text-[#4A3728]">오늘의 수업 메모</h2>
             </div>
-            <textarea 
-              className="w-full bg-[#FBFBFA] border border-[#F3F2EE] rounded-2xl p-6 text-sm text-[#4A3728] leading-relaxed min-h-[200px] outline-none focus:border-[#8B5E3C] transition-all resize-none"
+            <textarea
+              className="min-h-[200px] w-full resize-none rounded-2xl border border-[#F3F2EE] bg-[#FBFBFA] p-6 text-sm leading-relaxed text-[#4A3728] outline-none transition-all focus:border-[#8B5E3C]"
               value={localLesson.memo}
-              onChange={(e) => setLocalLesson({ ...localLesson, memo: e.target.value })}
-              placeholder="선생님만 볼 수 있는 메모입니다..."
+              onChange={(event) =>
+                setLocalLesson((previousLesson) => ({
+                  ...previousLesson,
+                  memo: event.target.value,
+                }))
+              }
+              placeholder="선생님만 보는 메모입니다."
             />
           </div>
         </section>

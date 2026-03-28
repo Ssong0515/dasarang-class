@@ -282,7 +282,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   const categorizedContents = contents.filter((content) => content.categoryId !== null);
   const categorizedContentIds = new Set(categorizedContents.map((content) => content.id));
   const assignedContentIds = activeFolder
-    ? getAssignedContentIdsForFolder(activeFolder, lessons)
+    ? getAssignedContentIdsForFolder(activeFolder)
     : [];
   const visibleAssignedContentIds = new Set(
     assignedContentIds.filter((id) => categorizedContentIds.has(id))
@@ -561,7 +561,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
             {folders.map((folder, index) => {
               const folderContentIds = new Set(
-                getAssignedContentIdsForFolder(folder, lessons).filter((id) =>
+                getAssignedContentIdsForFolder(folder).filter((id) =>
                   categorizedContentIds.has(id)
                 )
               );

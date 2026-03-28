@@ -40,6 +40,10 @@ import {
   getAssignedContentIdsForFolder,
   orderAssignedContentIds,
 } from '../utils/folderContentAssignments';
+import {
+  buildLessonRecordContent,
+  normalizeLessonContentIds,
+} from '../utils/lessonRecordContent';
 
 interface FolderDashboardProps {
   folder: LessonFolder;
@@ -193,10 +197,23 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
 
   const folderLessons = lessons.filter(l => l.folderId === folder.id);
   const currentLesson = folderLessons.find(l => l.date === selectedDate);
-  const assignedContentIds = getAssignedContentIdsForFolder(folder, lessons);
+  const assignedContentIds = getAssignedContentIdsForFolder(folder);
   const assignedContentIdSet = new Set(assignedContentIds);
-  const selectedContentsList = contents.filter((content) => assignedContentIdSet.has(content.id));
-  const savedAssignedContentIds = selectedContentsList.map((content) => content.id);
+  const assignedContents = contents.filter((content) => assignedContentIdSet.has(content.id));
+  const assignedContentsById = new Map<string, LessonContent>(
+    assignedContents.map((content) => [content.id, content])
+  );
+  const savedAssignedContentIds = assignedContents.map((content) => content.id);
+  const currentLessonContentIds = currentLesson ? normalizeLessonContentIds(currentLesson) : [];
+  const currentLessonRecordedContents = currentLessonContentIds
+    .map((contentId) => assignedContentsById.get(contentId))
+    .filter((content): content is LessonContent => Boolean(content));
+  const currentLessonRecordedContentIds = currentLessonRecordedContents.map((content) => content.id);
+  const currentLessonRecordedContentIdSet = new Set(currentLessonRecordedContentIds);
+  const missingCurrentLessonContentCount = Math.max(
+    currentLessonContentIds.length - currentLessonRecordedContents.length,
+    0
+  );
 
   const handleQuickCreate = (contentId: string) => {
     if (!contentId) return;
@@ -310,6 +327,23 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
         console.error('Failed to save folder content assignments', error);
       }
     );
+  };
+
+  const handleToggleLessonContent = (content: LessonContent) => {
+    const lesson = getOrCreateLesson();
+    const currentIds = normalizeLessonContentIds(lesson).filter((contentId) =>
+      assignedContentsById.has(contentId)
+    );
+    const nextIds = currentIds.includes(content.id)
+      ? currentIds.filter((contentId) => contentId !== content.id)
+      : [...currentIds, content.id];
+    const orderedNextIds = orderAssignedContentIds(nextIds, assignedContents);
+    const nextLessonContent = buildLessonRecordContent(orderedNextIds, assignedContentsById);
+
+    onSaveLesson({
+      ...lesson,
+      ...nextLessonContent,
+    });
   };
 
   const getStudentInitials = (name: string) =>
@@ -571,7 +605,7 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
               <div className="lg:col-span-2 space-y-8">
                 {(() => {
                   const selectedIds = assignedContentIds;
-                  const missingAssignedContentCount = Math.max(selectedIds.length - selectedContentsList.length, 0);
+                  const missingAssignedContentCount = Math.max(selectedIds.length - assignedContents.length, 0);
                   
                   return (
                     <div className="bg-white rounded-[40px] border border-[#E5E3DD] shadow-sm p-10">
@@ -596,9 +630,9 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
                       )}
 
                       {/* Selected Content Bubbles (Multiple) */}
-                      {selectedContentsList.length > 0 && (
+                      {assignedContents.length > 0 && (
                         <div className="flex flex-wrap gap-2 items-center mb-8 pb-8 border-b border-[#E5E3DD]">
-                          {selectedContentsList.map(c => (
+                          {assignedContents.map(c => (
                             <div key={c.id} className="relative group inline-flex">
                               <button className="px-5 py-3 bg-[#8B5E3C] text-white rounded-full font-bold text-sm shadow-md pr-10 text-left transition-all cursor-default">
                                 {c.title}
@@ -656,6 +690,79 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
                     </div>
                   );
                 })()}
+
+                <div className="bg-white rounded-[40px] border border-[#E5E3DD] shadow-sm p-10">
+                  <div className="mb-8 flex items-center justify-between gap-4">
+                    <h2 className="text-xl font-bold text-[#4A3728] flex items-center gap-2">
+                      <Clock className="text-[#8B5E3C]" size={20} />
+                      날짜별 수업 기록
+                    </h2>
+                    <span className="rounded-full bg-[#FFF5E9] px-4 py-2 text-xs font-bold text-[#8B5E3C]">
+                      {selectedDate}
+                    </span>
+                  </div>
+                  <p className="mb-8 text-sm text-[#8B7E74]">
+                    이 날짜에 실제로 진행한 수업을 기록합니다. 학생 페이지에 보이는 목록과는 별개이며, 이 반에 배정된 콘텐츠 안에서만 선택할 수 있습니다.
+                  </p>
+
+                  {missingCurrentLessonContentCount > 0 && (
+                    <div className="mb-8 flex items-center gap-3 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-amber-800">
+                      <AlertCircle size={20} />
+                      <div className="text-sm">
+                        <p className="font-bold">현재 기록된 수업 중 일부를 찾을 수 없습니다.</p>
+                        <p className="opacity-80">삭제되었거나 지금은 이 반에 배정되지 않은 콘텐츠입니다. 아래에서 다시 선택해 주세요.</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {currentLessonRecordedContents.length > 0 ? (
+                    <div className="mb-8 flex flex-wrap items-center gap-2 border-b border-[#E5E3DD] pb-8">
+                      {currentLessonRecordedContents.map((content) => (
+                        <div key={content.id} className="relative inline-flex">
+                          <button className="cursor-default rounded-full bg-[#4A3728] px-5 py-3 pr-10 text-left text-sm font-bold text-white shadow-md">
+                            {content.title}
+                          </button>
+                          <button
+                            onClick={() => handleToggleLessonContent(content)}
+                            className="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-white/20 text-white/80 transition-all hover:bg-[#D9534F] hover:text-white"
+                            title="수업 기록에서 제거"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="mb-8 rounded-[28px] border border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-6 py-8 text-sm text-[#8B7E74]">
+                      선택된 날짜에 기록된 수업이 아직 없습니다. 아래에서 실제로 진행한 콘텐츠를 선택해 주세요.
+                    </div>
+                  )}
+
+                  {assignedContents.length > 0 ? (
+                    <div className="flex flex-wrap gap-3">
+                      {assignedContents.map((content) => {
+                        const isRecorded = currentLessonRecordedContentIdSet.has(content.id);
+                        return (
+                          <button
+                            key={content.id}
+                            onClick={() => handleToggleLessonContent(content)}
+                            className={`px-5 py-3 rounded-full font-bold text-sm transition-all text-left ${
+                              isRecorded
+                                ? 'bg-[#4A3728] text-white shadow-md'
+                                : 'bg-[#F3F2EE] text-[#4A3728] border border-transparent hover:bg-[#E5E3DD]'
+                            }`}
+                          >
+                            {content.title}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="rounded-[28px] border border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-6 py-8 text-sm text-[#8B7E74]">
+                      먼저 위에서 이 반 학생 페이지에 보여줄 콘텐츠를 배정해 주세요.
+                    </div>
+                  )}
+                </div>
 
                 {/* Always-visible Attendance List */}
                 <div className="bg-white rounded-[32px] border border-[#E5E3DD] p-8 shadow-sm text-left">

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Plus, Trash2, Calendar, StickyNote, Users, BookOpen } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Memo, LessonFolder, Lesson } from '../types';
+import { normalizeLessonContentIds } from '../utils/lessonRecordContent';
 
 interface MemoSectionProps {
   memos: Memo[];
@@ -147,23 +148,30 @@ export const MemoSection: React.FC<MemoSectionProps> = ({ memos, folders = [], l
                 exit={{ opacity: 0, y: -10 }}
                 className="grid grid-cols-1 md:grid-cols-2 gap-6"
               >
-                {lessons.filter(l => l.memo?.trim()).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((lesson) => (
-                  <div key={lesson.id} className="bg-white p-6 rounded-[24px] border border-[#E5E3DD] shadow-sm relative">
-                    <div className="flex items-start justify-between mb-4">
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="px-2 py-0.5 bg-[#FFF5E9] text-[#8B5E3C] text-[10px] font-bold rounded-full">{lesson.folderName}</span>
-                          <span className="text-[11px] font-bold text-[#A89F94] flex items-center gap-1"><Calendar size={12}/> {lesson.date}</span>
+                {lessons.filter(l => l.memo?.trim()).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((lesson) => {
+                  const recordedContentIds = normalizeLessonContentIds(lesson);
+                  const lessonTitle = recordedContentIds.length > 0
+                    ? lesson.title?.trim() || `${recordedContentIds.length}개 수업 콘텐츠`
+                    : '진행 콘텐츠 미선택';
+
+                  return (
+                    <div key={lesson.id} className="bg-white p-6 rounded-[24px] border border-[#E5E3DD] shadow-sm relative">
+                      <div className="flex items-start justify-between mb-4">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="px-2 py-0.5 bg-[#FFF5E9] text-[#8B5E3C] text-[10px] font-bold rounded-full">{lesson.folderName}</span>
+                            <span className="text-[11px] font-bold text-[#A89F94] flex items-center gap-1"><Calendar size={12}/> {lesson.date}</span>
+                          </div>
+                          <h4 className="font-bold text-[#4A3728] text-sm">{lessonTitle}</h4>
                         </div>
-                        <h4 className="font-bold text-[#4A3728] text-sm">{lesson.title}</h4>
+                      </div>
+                      <div className="flex gap-4">
+                        <div className="mt-1 text-[#EBD9C1]"><BookOpen size={20} /></div>
+                        <p className="text-[#4A3728] leading-relaxed whitespace-pre-wrap text-sm">{lesson.memo}</p>
                       </div>
                     </div>
-                    <div className="flex gap-4">
-                      <div className="mt-1 text-[#EBD9C1]"><BookOpen size={20} /></div>
-                      <p className="text-[#4A3728] leading-relaxed whitespace-pre-wrap text-sm">{lesson.memo}</p>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {lessons.filter(l => l.memo?.trim()).length === 0 && (
                   <div className="col-span-full py-20 flex flex-col items-center justify-center text-[#A89F94] bg-[#F3F2EE]/50 rounded-[32px] border-2 border-dashed border-[#E5E3DD]">
                     <BookOpen size={48} className="mb-4 opacity-20" />

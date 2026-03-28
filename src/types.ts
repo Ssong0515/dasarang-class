@@ -46,8 +46,8 @@ export interface Lesson {
   date: string;
   title: string;
   folderName: string;
-  contentId?: string; // Reference to LessonContent
-  contentIds?: string[]; // Multiple contents
+  contentId?: string; // First lesson content ID mirror for compatibility
+  contentIds?: string[]; // Dated lesson record content IDs
   content?: string; // Cached or direct HTML content
   order?: number;
   attendance?: AttendanceRecord[];
