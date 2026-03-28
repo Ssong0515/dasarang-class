@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Users,
@@ -12,8 +12,10 @@ import {
   CheckCircle2,
   AlertCircle,
   Edit3,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   X,
   Settings,
   Palette,
@@ -195,6 +197,12 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
     () => folderDateRecords.find((record) => record.date === selectedDate),
     [folderDateRecords, selectedDate]
   );
+  const isCurrentDateActive = Boolean(currentDateRecord);
+  const [isAssignmentCardCollapsed, setIsAssignmentCardCollapsed] = useState(isCurrentDateActive);
+  const previousDateSelectionRef = useRef<{
+    selectedDate: string;
+    isActive: boolean;
+  } | null>(null);
   const activeDateSet = useMemo(
     () => new Set(folderDateRecords.map((record) => record.date)),
     [folderDateRecords]
@@ -224,7 +232,6 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
   );
   const calendarDays = getDaysInMonth(viewMonth);
   const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
-  const isCurrentDateActive = Boolean(currentDateRecord);
   const previewIconColor = settingsDraft.color;
   const previewIconBg =
     FOLDER_COLORS.find((color) => color.value === settingsDraft.color)?.bg || '#FFF5E9';
@@ -279,6 +286,21 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
     setLocalMemo(currentDateRecord?.memo || '');
   }, [currentDateRecord?.id, currentDateRecord?.updatedAt, selectedDate]);
 
+  useEffect(() => {
+    const previousSelection = previousDateSelectionRef.current;
+
+    if (!isCurrentDateActive) {
+      setIsAssignmentCardCollapsed(false);
+    } else if (!previousSelection || !previousSelection.isActive) {
+      setIsAssignmentCardCollapsed(true);
+    }
+
+    previousDateSelectionRef.current = {
+      selectedDate,
+      isActive: isCurrentDateActive,
+    };
+  }, [selectedDate, isCurrentDateActive]);
+
   const createInitialAttendance = (): AttendanceRecord[] =>
     (folder.students || []).map((student) => ({
       studentId: student.id,
@@ -325,6 +347,10 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
     }
 
     onDeleteDateRecord(currentDateRecord.id);
+  };
+
+  const toggleAssignmentCard = () => {
+    setIsAssignmentCardCollapsed((current) => !current);
   };
 
   const handleToggleContent = (content: LessonContent) => {
@@ -572,18 +598,60 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
     >
       <div className="space-y-8 lg:col-span-2">
         <div className="rounded-[40px] border border-[#E5E3DD] bg-white p-10 shadow-sm">
-          <div className="mb-8 flex items-center justify-between">
-            <h2 className="flex items-center gap-2 text-xl font-bold text-[#4A3728]">
+          <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
+            <div className="space-y-2">
+              <h2 className="flex items-center gap-2 text-xl font-bold text-[#4A3728]">
               <FileText className="text-[#8B5E3C]" size={20} />
               반별 콘텐츠 배정
-            </h2>
-            <button
+              </h2>
+              <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-[#8B7E74]">
+                <span className="rounded-full bg-[#F3F2EE] px-3 py-1.5 text-[#8B5E3C]">
+                  {assignedContents.length}개 배정
+                </span>
+                {isCurrentDateActive && (
+                  <span className="rounded-full bg-[#FFF5E9] px-3 py-1.5 text-[#8B5E3C]">
+                    활성 날짜에서는 자동으로 접힙니다
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button
+                onClick={toggleAssignmentCard}
+                className="inline-flex items-center gap-2 rounded-xl border border-[#E5E3DD] px-4 py-2 text-sm font-bold text-[#4A3728] transition-all hover:bg-[#F3F2EE]"
+              >
+                {isAssignmentCardCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+                {isAssignmentCardCollapsed ? '펼치기' : '접기'}
+              </button>
+              <button
               onClick={onGoToLibrary}
               className="rounded-xl border border-[#E5E3DD] px-4 py-2 text-sm font-bold text-[#8B5E3C] transition-all hover:bg-[#FFF5E9]"
             >
               라이브러리 열기
             </button>
           </div>
+          </div>
+          <AnimatePresence initial={false} mode="wait">
+            {isAssignmentCardCollapsed ? (
+              <motion.div
+                key="assignment-card-collapsed"
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                className="rounded-[28px] border border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-6 py-6 text-sm text-[#8B7E74]"
+              >
+                {isCurrentDateActive
+                  ? '현재 날짜가 활성화되어 있어 콘텐츠 배정 카드를 접어두었습니다. 필요하면 펼쳐서 반 배정을 바로 수정할 수 있습니다.'
+                  : '콘텐츠 배정 카드를 접어두었습니다. 필요하면 다시 펼쳐서 반별 학생 노출 콘텐츠를 수정할 수 있습니다.'}
+              </motion.div>
+            ) : (
+              <motion.div
+                key="assignment-card-expanded"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
           <p className="mb-8 text-sm text-[#8B7E74]">
             학생 페이지에는 여기에서 배정한 콘텐츠만 보입니다. 날짜를 바꿔도 이 목록은 달라지지 않습니다.
           </p>
@@ -658,6 +726,9 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
               먼저 콘텐츠 라이브러리에서 카테고리와 콘텐츠를 만들어주세요.
             </div>
           )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         <div className="rounded-[40px] border border-[#E5E3DD] bg-white p-10 shadow-sm">
