@@ -39,26 +39,17 @@ export interface LessonContent {
   order?: number;
 }
 
-export interface Lesson {
+export interface FolderDateRecord {
   id: string;
   folderId: string;
   ownerUid: string;
   date: string;
-  title: string;
   folderName: string;
-  contentId?: string; // First lesson content ID mirror for compatibility
-  contentIds?: string[]; // Dated lesson record content IDs
-  content?: string; // Cached or direct HTML content
-  order?: number;
-  attendance?: AttendanceRecord[];
-  resources?: LessonResource[];
-  memo?: string;
-  summary?: {
-    text: string;
-    attendanceRate: string;
-    engagement: string;
-    resourceCount: string;
-  };
+  contentIds: string[];
+  attendance: AttendanceRecord[];
+  memo: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface LessonFolder {
@@ -67,7 +58,6 @@ export interface LessonFolder {
   ownerUid: string;
   students?: Student[];
   assignedContentIds?: string[];
-  lessons?: Lesson[];
   isOpen?: boolean;
   order?: number;
   icon?: string;

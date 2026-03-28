@@ -72,8 +72,8 @@ const getDefaultDesktopCollapsed = (viewportMode: ViewportMode) => {
 interface SidebarProps {
   folders: LessonFolder[];
   activeFolderId?: string;
-  activeTab: 'home' | 'memo' | 'lesson-detail' | 'folder-management' | 'content-library';
-  onTabChange: (tab: 'home' | 'memo' | 'lesson-detail' | 'folder-management' | 'content-library') => void;
+  activeTab: 'home' | 'memo' | 'folder-management' | 'content-library';
+  onTabChange: (tab: 'home' | 'memo' | 'folder-management' | 'content-library') => void;
   onManageFolder: (folder: LessonFolder) => void;
   onLogout: () => void;
   onSwitchToStudent: () => void;

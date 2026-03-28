@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "clear-legacy-lesson-content-links": "node scripts/clearLegacyLessonContentLinks.mjs"
+    "clear-legacy-lesson-content-links": "node scripts/clearLegacyLessonContentLinks.mjs",
+    "delete-legacy-lessons": "node scripts/deleteLegacyLessons.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

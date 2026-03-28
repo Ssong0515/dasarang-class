@@ -19,7 +19,7 @@ import {
   Star,
   Lightbulb,
 } from 'lucide-react';
-import { LessonFolder, Lesson, LessonCategory, LessonContent } from '../types';
+import { LessonFolder, LessonCategory, LessonContent } from '../types';
 import { resolveAppPath } from '../utils/appPaths';
 import { StudentContentCard } from './StudentContentPreview';
 import { getAssignedContentIdsForFolder } from '../utils/folderContentAssignments';
@@ -61,7 +61,6 @@ interface StudentPageProps {
   onLogin?: () => void;
   isAdmin?: boolean;
   embeddedInAdminShell?: boolean;
-  lessons?: Lesson[];
   folders?: LessonFolder[];
   categories?: LessonCategory[];
   contents?: LessonContent[];
@@ -103,8 +102,8 @@ const translations = {
     backToAdmin: 'Back to Admin Page',
     welcome: 'Welcome!',
     welcomeDesc:
-      'You can find valuable lesson materials and announcements prepared by your teacher here. Select your class to check the lessons.',
-    schedule: 'Lesson Schedule',
+      'You can find the learning content assigned to your class here. Select your class to check the available content.',
+    schedule: 'Assigned Content',
     resources: 'Learning Resources',
     teacherNote: "Teacher's Note",
     adminLogin: 'Admin Login',
@@ -112,7 +111,7 @@ const translations = {
     translateBtn: 'AI Smart Translate',
     translating: 'Translating...',
     original: 'Show Original',
-    noLessons: 'No lessons registered for this class yet.',
+    noLessons: 'No content has been assigned to this class yet.',
     noVisibleContents: 'No visible content is available.',
     selectClass: 'Select Your Class',
     pm: 'PM',
@@ -258,7 +257,6 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   onLogin,
   isAdmin,
   embeddedInAdminShell = false,
-  lessons = [],
   folders = [],
   categories = [],
   contents = [],

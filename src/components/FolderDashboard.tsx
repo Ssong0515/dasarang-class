@@ -1,24 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Users, 
-  Plus, 
-  Trash2, 
-  Save, 
-  UserPlus, 
-  Calendar, 
-  FileText, 
-  ClipboardList, 
+import {
+  Users,
+  Save,
+  UserPlus,
+  Calendar,
+  FileText,
+  ClipboardList,
   MessageSquare,
-  ChevronRight,
   Clock,
   CheckCircle2,
-  XCircle,
   AlertCircle,
   Edit3,
-  Library,
   ChevronLeft,
-  Search,
+  ChevronRight,
   X,
   Settings,
   Palette,
@@ -33,30 +28,33 @@ import {
   Zap,
   Rocket,
   Star,
-  Lightbulb
+  Lightbulb,
+  Power,
 } from 'lucide-react';
-import { LessonFolder, Student, Lesson, LessonCategory, LessonContent, AttendanceRecord } from '../types';
+import {
+  AttendanceRecord,
+  FolderDateRecord,
+  LessonCategory,
+  LessonContent,
+  LessonFolder,
+  Student,
+} from '../types';
 import {
   getAssignedContentIdsForFolder,
   orderAssignedContentIds,
 } from '../utils/folderContentAssignments';
-import {
-  buildLessonRecordContent,
-  normalizeLessonContentIds,
-} from '../utils/lessonRecordContent';
+import { normalizeFolderDateRecordContentIds } from '../utils/folderDateRecordContent';
 
 interface FolderDashboardProps {
   folder: LessonFolder;
   folders: LessonFolder[];
-  lessons: Lesson[];
+  dateRecords: FolderDateRecord[];
   categories: LessonCategory[];
   contents: LessonContent[];
-  initialLesson?: Lesson | null;
   onSaveStudents: (folderId: string, students: Student[]) => Promise<void>;
   onMoveStudent: (sourceFolderId: string, targetFolderId: string, studentId: string) => Promise<void>;
-  onSelectLesson: (lesson: Lesson) => void;
-  onCreateLesson: (folderId: string, date?: string) => void;
-  onSaveLesson: (lesson: Lesson) => void;
+  onSaveDateRecord: (record: FolderDateRecord) => void;
+  onDeleteDateRecord: (recordId: string) => void;
   onSaveFolderContents: (folderId: string, contentIds: string[]) => Promise<void>;
   onGoToLibrary: () => void;
   onUpdateFolder?: (folderId: string, data: Partial<LessonFolder>) => void;
@@ -70,58 +68,104 @@ const FOLDER_COLORS = [
   { name: '파랑', value: '#3B82F6', bg: '#EFF6FF' },
   { name: '초록', value: '#22C55E', bg: '#F0FDF4' },
   { name: '보라', value: '#8B5CF6', bg: '#F5F3FF' },
-  { name: '분홍', value: '#EC4899', bg: '#FDF2F8' },
+  { name: '핑크', value: '#EC4899', bg: '#FDF2F8' },
   { name: '주황', value: '#F97316', bg: '#FFF7ED' },
-  { name: '쫑빛', value: '#14B8A6', bg: '#F0FDFA' },
+  { name: '민트', value: '#14B8A6', bg: '#F0FDFA' },
   { name: '레드', value: '#EF4444', bg: '#FEF2F2' },
 ];
 
 const FOLDER_ICONS = [
   { name: '책', icon: 'BookOpen' },
-  { name: '학모', icon: 'GraduationCap' },
+  { name: '학습', icon: 'GraduationCap' },
   { name: '코드', icon: 'Code' },
   { name: '음악', icon: 'Music' },
   { name: '미술', icon: 'Brush' },
   { name: '지구', icon: 'Globe' },
-  { name: 'CPU', icon: 'Cpu' },
+  { name: '컴퓨터', icon: 'Cpu' },
   { name: '하트', icon: 'Heart' },
   { name: '번개', icon: 'Zap' },
   { name: '로켓', icon: 'Rocket' },
   { name: '별', icon: 'Star' },
-  { name: '전구', icon: 'Lightbulb' },
+  { name: '아이디어', icon: 'Lightbulb' },
 ];
 
-const iconMap: Record<string, React.FC<{ size?: number; className?: string }>> = {
-  BookOpen, GraduationCap, Code, Music, Brush, Globe, Cpu, Heart, Zap, Rocket, Star, Lightbulb
+const iconMap: Record<string, React.FC<{ size?: number; className?: string; style?: React.CSSProperties }>> = {
+  BookOpen,
+  GraduationCap,
+  Code,
+  Music,
+  Brush,
+  Globe,
+  Cpu,
+  Heart,
+  Zap,
+  Rocket,
+  Star,
+  Lightbulb,
 };
 
-export const FolderDashboard: React.FC<FolderDashboardProps> = ({ 
-  folder, 
+const getLocalDateString = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getDaysInMonth = (date: Date) => {
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const days: Array<Date | null> = [];
+  for (let index = 0; index < firstDay; index += 1) {
+    days.push(null);
+  }
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    days.push(new Date(year, month, day));
+  }
+  return days;
+};
+
+const getStudentInitials = (name: string) =>
+  name
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2) || '??';
+
+const getAttendanceStats = (record?: FolderDateRecord) => {
+  if (!record) {
+    return { present: 0, absent: 0, late: 0, total: 0 };
+  }
+
+  const total = record.attendance.length;
+  const present = record.attendance.filter((attendance) => attendance.status === 'Present').length;
+  const absent = record.attendance.filter((attendance) => attendance.status === 'Absent').length;
+  const late = record.attendance.filter((attendance) => attendance.status === 'Late').length;
+  return { present, absent, late, total };
+};
+
+export const FolderDashboard: React.FC<FolderDashboardProps> = ({
+  folder,
   folders,
-  lessons, 
+  dateRecords,
   categories,
   contents,
-  initialLesson,
   onSaveStudents,
   onMoveStudent,
-  onSelectLesson,
-  onCreateLesson,
-  onSaveLesson,
+  onSaveDateRecord,
+  onDeleteDateRecord,
   onSaveFolderContents,
   onGoToLibrary,
   onUpdateFolder,
-  onDeleteFolder
+  onDeleteFolder,
 }) => {
-  const getLocalDateString = (date: Date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [selectedCategory, setSelectedCategory] = useState<string>(categories[0]?.id || '');
-  const [selectedDate, setSelectedDate] = useState(initialLesson?.date || getLocalDateString(new Date()));
+  const [selectedDate, setSelectedDate] = useState(getLocalDateString(new Date()));
   const [students, setStudents] = useState<Student[]>(folder.students || []);
   const [newStudentName, setNewStudentName] = useState('');
   const [newStudentAge, setNewStudentAge] = useState('');
@@ -132,23 +176,66 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
   const [studentSaveError, setStudentSaveError] = useState<string | null>(null);
   const [studentAction, setStudentAction] = useState<'add' | 'edit' | 'delete' | 'move' | null>(null);
   const [studentMoveTargets, setStudentMoveTargets] = useState<Record<string, string>>({});
+  const [localMemo, setLocalMemo] = useState('');
+  const [viewMonth, setViewMonth] = useState(new Date());
   const [settingsDraft, setSettingsDraft] = useState({
     name: folder.name,
     color: folder.color || '#8B5E3C',
-    icon: folder.icon || 'BookOpen'
+    icon: folder.icon || 'BookOpen',
   });
-  const isSavingStudentAction = studentAction !== null;
-  const availableMoveFolders = folders.filter(candidate => candidate.id !== folder.id);
-  const defaultMoveTargetId = availableMoveFolders[0]?.id || '';
 
-  // Sync draft when folder changes
+  const isSavingStudentAction = studentAction !== null;
+  const availableMoveFolders = folders.filter((candidate) => candidate.id !== folder.id);
+  const defaultMoveTargetId = availableMoveFolders[0]?.id || '';
+  const folderDateRecords = useMemo(
+    () => dateRecords.filter((record) => record.folderId === folder.id),
+    [dateRecords, folder.id]
+  );
+  const currentDateRecord = useMemo(
+    () => folderDateRecords.find((record) => record.date === selectedDate),
+    [folderDateRecords, selectedDate]
+  );
+  const activeDateSet = useMemo(
+    () => new Set(folderDateRecords.map((record) => record.date)),
+    [folderDateRecords]
+  );
+  const assignedContentIds = getAssignedContentIdsForFolder(folder);
+  const assignedContentIdSet = useMemo(() => new Set(assignedContentIds), [assignedContentIds]);
+  const assignedContents = useMemo(
+    () => contents.filter((content) => assignedContentIdSet.has(content.id)),
+    [contents, assignedContentIdSet]
+  );
+  const assignedContentsById = useMemo(
+    () => new Map(assignedContents.map((content) => [content.id, content])),
+    [assignedContents]
+  );
+  const currentDateRecordContentIds = currentDateRecord
+    ? normalizeFolderDateRecordContentIds(currentDateRecord)
+    : [];
+  const currentDateRecordedContents = currentDateRecordContentIds
+    .map((contentId) => assignedContentsById.get(contentId))
+    .filter((content): content is LessonContent => Boolean(content));
+  const currentDateRecordedContentIdSet = new Set(
+    currentDateRecordedContents.map((content) => content.id)
+  );
+  const missingCurrentDateContentCount = Math.max(
+    currentDateRecordContentIds.length - currentDateRecordedContents.length,
+    0
+  );
+  const calendarDays = getDaysInMonth(viewMonth);
+  const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
+  const isCurrentDateActive = Boolean(currentDateRecord);
+  const previewIconColor = settingsDraft.color;
+  const previewIconBg =
+    FOLDER_COLORS.find((color) => color.value === settingsDraft.color)?.bg || '#FFF5E9';
+
   useEffect(() => {
     setSettingsDraft({
       name: folder.name,
       color: folder.color || '#8B5E3C',
-      icon: folder.icon || 'BookOpen'
+      icon: folder.icon || 'BookOpen',
     });
-  }, [folder]);
+  }, [folder.color, folder.icon, folder.name]);
 
   useEffect(() => {
     setStudents(folder.students || []);
@@ -163,7 +250,7 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
         if (
           previousTarget &&
           previousTarget !== folder.id &&
-          folders.some(candidate => candidate.id === previousTarget && candidate.id !== folder.id)
+          folders.some((candidate) => candidate.id === previousTarget && candidate.id !== folder.id)
         ) {
           nextTargets[student.id] = previousTarget;
         } else {
@@ -174,13 +261,6 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
       return nextTargets;
     });
   }, [students, folders, folder.id, defaultMoveTargetId]);
-
-  // Sync with initialLesson date if it changes
-  useEffect(() => {
-    if (initialLesson) {
-      setSelectedDate(initialLesson.date);
-    }
-  }, [initialLesson]);
 
   useEffect(() => {
     if (categories.length === 0) {
@@ -195,165 +275,115 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
     }
   }, [categories, selectedCategory]);
 
-  const folderLessons = lessons.filter(l => l.folderId === folder.id);
-  const currentLesson = folderLessons.find(l => l.date === selectedDate);
-  const assignedContentIds = getAssignedContentIdsForFolder(folder);
-  const assignedContentIdSet = new Set(assignedContentIds);
-  const assignedContents = contents.filter((content) => assignedContentIdSet.has(content.id));
-  const assignedContentsById = new Map<string, LessonContent>(
-    assignedContents.map((content) => [content.id, content])
-  );
-  const savedAssignedContentIds = assignedContents.map((content) => content.id);
-  const currentLessonContentIds = currentLesson ? normalizeLessonContentIds(currentLesson) : [];
-  const currentLessonRecordedContents = currentLessonContentIds
-    .map((contentId) => assignedContentsById.get(contentId))
-    .filter((content): content is LessonContent => Boolean(content));
-  const currentLessonRecordedContentIds = currentLessonRecordedContents.map((content) => content.id);
-  const currentLessonRecordedContentIdSet = new Set(currentLessonRecordedContentIds);
-  const missingCurrentLessonContentCount = Math.max(
-    currentLessonContentIds.length - currentLessonRecordedContents.length,
-    0
-  );
-
-  const handleQuickCreate = (contentId: string) => {
-    if (!contentId) return;
-    const content = contents.find(c => c.id === contentId);
-    if (!content) return;
-    
-    const newLesson: Lesson = {
-      id: 'new-' + Date.now(),
-      folderId: folder.id,
-      folderName: folder.name,
-      ownerUid: '', // Will be set on save
-      date: selectedDate,
-      title: content.title,
-      content: content.html,
-      order: (folderLessons.length + 1),
-      attendance: (folder.students || []).map(s => ({
-        studentId: s.id,
-        studentName: s.name,
-        initials: s.initials,
-        status: 'Present'
-      })),
-      resources: [],
-      memo: '',
-      contentId: content.id,
-      summary: {
-        text: '수업 요약이 쓰여지지 않았습니다.',
-        attendanceRate: '0%',
-        engagement: 'N/A',
-        resourceCount: '0'
-      }
-    };
-    onSaveLesson(newLesson);
-  };
-
-  const [localMemo, setLocalMemo] = useState('');
   useEffect(() => {
-    setLocalMemo(currentLesson?.memo || '');
-  }, [currentLesson?.id, currentLesson?.date, selectedDate]);
+    setLocalMemo(currentDateRecord?.memo || '');
+  }, [currentDateRecord?.id, currentDateRecord?.updatedAt, selectedDate]);
 
-  const getOrCreateLesson = (): Lesson => {
-    if (currentLesson) return currentLesson;
+  const createInitialAttendance = (): AttendanceRecord[] =>
+    (folder.students || []).map((student) => ({
+      studentId: student.id,
+      studentName: student.name,
+      initials: student.initials,
+      status: 'Present',
+    }));
+
+  const createDateRecord = (): FolderDateRecord => {
+    const timestamp = new Date().toISOString();
     return {
-      id: '', // Let App.tsx generate a new ID
+      id: `${folder.id}_${selectedDate}`,
       folderId: folder.id,
       folderName: folder.name,
       ownerUid: '',
       date: selectedDate,
-      title: '새로운 수업',
-      content: '',
-      contentId: '',
       contentIds: [],
-      order: folderLessons.length + 1,
-      attendance: (folder.students || []).map(s => ({
-        studentId: s.id,
-        studentName: s.name,
-        initials: s.initials,
-        status: 'Present'
-      })),
-      resources: [],
+      attendance: createInitialAttendance(),
       memo: '',
-      summary: { text: '', attendanceRate: '0%', engagement: 'N/A', resourceCount: '0' }
+      createdAt: timestamp,
+      updatedAt: timestamp,
     };
   };
 
-  const updateAttendance = (studentId: string, status: 'Present' | 'Absent' | 'Late') => {
-    const lesson = getOrCreateLesson();
-    const newAttendance = (lesson.attendance || []).map(a => 
-      a.studentId === studentId ? { ...a, status } : a
-    );
-    onSaveLesson({ ...lesson, attendance: newAttendance });
-  };
-  
-  const handleSaveMemo = () => {
-    if (!currentLesson && !localMemo.trim()) return;
-    const lesson = getOrCreateLesson();
-    if (lesson.memo === localMemo && currentLesson) return;
-    onSaveLesson({ ...lesson, memo: localMemo });
-  };
-  
-  const handleToggleContentLegacy = (content: LessonContent) => {
-    const lesson = getOrCreateLesson();
-    const currentIds = lesson.contentIds || (lesson.contentId ? [lesson.contentId] : []);
-    
-    let newIds;
-    if (currentIds.includes(content.id)) {
-      newIds = currentIds.filter(id => id !== content.id); // Remove
-    } else {
-      newIds = [...currentIds, content.id]; // Add
+  const handleActivateDate = () => {
+    if (currentDateRecord) {
+      return;
     }
 
-    const selectedList = newIds.map(id => contents.find(c => c.id === id)).filter(Boolean) as LessonContent[];
-    const newTitle = selectedList.length > 0 ? selectedList.map(c => c.title).join(', ') : '새로운 수업';
-    const newHtml = selectedList.map(c => c.html).join('\n<hr style="margin: 40px 0; border-color: #E5E3DD;" />\n');
+    onSaveDateRecord(createDateRecord());
+  };
 
-    onSaveLesson({
-      ...lesson,
-      title: newTitle,
-      content: newHtml,
-      contentId: newIds[0] || '', // keep first ID for backward compatibility
-      contentIds: newIds
-    });
+  const handleDeactivateDate = () => {
+    if (!currentDateRecord) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `${selectedDate} 날짜를 비활성화하면 수업기록, 수업메모, 출석체크가 모두 삭제됩니다. 계속할까요?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    onDeleteDateRecord(currentDateRecord.id);
   };
 
   const handleToggleContent = (content: LessonContent) => {
-    const nextIds = savedAssignedContentIds.includes(content.id)
-      ? savedAssignedContentIds.filter((contentId) => contentId !== content.id)
-      : [...savedAssignedContentIds, content.id];
+    const nextIds = assignedContentIds.includes(content.id)
+      ? assignedContentIds.filter((contentId) => contentId !== content.id)
+      : [...assignedContentIds, content.id];
 
-    void onSaveFolderContents(folder.id, orderAssignedContentIds(nextIds, contents)).catch(
-      (error) => {
-        console.error('Failed to save folder content assignments', error);
-      }
-    );
+    void onSaveFolderContents(folder.id, orderAssignedContentIds(nextIds, contents)).catch((error) => {
+      console.error('Failed to save folder content assignments', error);
+    });
   };
 
-  const handleToggleLessonContent = (content: LessonContent) => {
-    const lesson = getOrCreateLesson();
-    const currentIds = normalizeLessonContentIds(lesson).filter((contentId) =>
+  const handleToggleDateRecordContent = (content: LessonContent) => {
+    if (!currentDateRecord) {
+      return;
+    }
+
+    const currentIds = normalizeFolderDateRecordContentIds(currentDateRecord).filter((contentId) =>
       assignedContentsById.has(contentId)
     );
     const nextIds = currentIds.includes(content.id)
       ? currentIds.filter((contentId) => contentId !== content.id)
       : [...currentIds, content.id];
-    const orderedNextIds = orderAssignedContentIds(nextIds, assignedContents);
-    const nextLessonContent = buildLessonRecordContent(orderedNextIds, assignedContentsById);
 
-    onSaveLesson({
-      ...lesson,
-      ...nextLessonContent,
+    onSaveDateRecord({
+      ...currentDateRecord,
+      contentIds: orderAssignedContentIds(nextIds, assignedContents),
     });
   };
 
-  const getStudentInitials = (name: string) =>
-    name
-      .split(' ')
-      .filter(Boolean)
-      .map(part => part[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
+  const handleSaveMemo = () => {
+    if (!currentDateRecord) {
+      return;
+    }
+
+    if (currentDateRecord.memo === localMemo) {
+      return;
+    }
+
+    onSaveDateRecord({
+      ...currentDateRecord,
+      memo: localMemo,
+    });
+  };
+
+  const updateAttendance = (studentId: string, status: 'Present' | 'Absent' | 'Late') => {
+    if (!currentDateRecord) {
+      return;
+    }
+
+    const nextAttendance = currentDateRecord.attendance.map((attendance) =>
+      attendance.studentId === studentId ? { ...attendance, status } : attendance
+    );
+
+    onSaveDateRecord({
+      ...currentDateRecord,
+      attendance: nextAttendance,
+    });
+  };
 
   const normalizeStudent = (student: Student): Student => {
     const name = student.name.trim();
@@ -361,7 +391,7 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
     return {
       ...student,
       name,
-      initials: getStudentInitials(name) || '??',
+      initials: getStudentInitials(name),
       updatedAt: new Date().toISOString(),
       age: student.age?.trim() || undefined,
       contact: student.contact?.trim() || undefined,
@@ -370,7 +400,7 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
   };
 
   const persistStudents = async (
-    updatedStudents: Student[],
+    nextStudents: Student[],
     action: 'add' | 'edit' | 'delete',
     errorMessage: string
   ) => {
@@ -378,8 +408,8 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
     setStudentAction(action);
 
     try {
-      await onSaveStudents(folder.id, updatedStudents);
-      setStudents(updatedStudents);
+      await onSaveStudents(folder.id, nextStudents);
+      setStudents(nextStudents);
       return true;
     } catch {
       setStudentSaveError(errorMessage);
@@ -392,15 +422,17 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
   const handleAddStudent = async () => {
     const name = newStudentName.trim();
 
-    if (isSavingStudentAction) return;
+    if (isSavingStudentAction) {
+      return;
+    }
 
     if (!name) {
       setStudentSaveError('학생 이름은 필수입니다.');
       return;
     }
 
-    const newStudent = normalizeStudent({
-      id: 'std-' + Date.now(),
+    const nextStudent = normalizeStudent({
+      id: `std-${Date.now()}`,
       name,
       initials: '',
       updatedAt: new Date().toISOString(),
@@ -408,14 +440,16 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
       contact: newStudentContact,
       memo: newStudentMemo,
     });
-    const updated = [...students, newStudent];
+
     const saved = await persistStudents(
-      updated,
+      [...students, nextStudent],
       'add',
-      '학생 추가를 저장하지 못했습니다. 잠시 후 다시 시도해주세요.'
+      '학생을 추가하지 못했습니다. 잠시 후 다시 시도해주세요.'
     );
 
-    if (!saved) return;
+    if (!saved) {
+      return;
+    }
 
     setNewStudentName('');
     setNewStudentAge('');
@@ -424,83 +458,94 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
   };
 
   const handleRemoveStudent = async (student: Student) => {
-    if (isSavingStudentAction) return;
+    if (isSavingStudentAction) {
+      return;
+    }
 
-    const shouldDelete = window.confirm(`'${student.name}' 학생을 삭제하시겠습니까?`);
-    if (!shouldDelete) return;
+    if (!window.confirm(`'${student.name}' 학생을 삭제할까요?`)) {
+      return;
+    }
 
-    const updated = students.filter(s => s.id !== student.id);
     const saved = await persistStudents(
-      updated,
+      students.filter((currentStudent) => currentStudent.id !== student.id),
       'delete',
-      '학생 삭제를 저장하지 못했습니다. 잠시 후 다시 시도해주세요.'
+      '학생을 삭제하지 못했습니다. 잠시 후 다시 시도해주세요.'
     );
 
-    if (!saved) return;
+    if (!saved) {
+      return;
+    }
 
-    if (expandedStudent === student.id) setExpandedStudent(null);
-    if (editingStudent?.id === student.id) setEditingStudent(null);
+    if (expandedStudent === student.id) {
+      setExpandedStudent(null);
+    }
+    if (editingStudent?.id === student.id) {
+      setEditingStudent(null);
+    }
   };
 
   const handleSaveStudentEdit = async (student: Student) => {
-    if (isSavingStudentAction) return;
+    if (isSavingStudentAction) {
+      return;
+    }
 
     const normalizedStudent = normalizeStudent(student);
-
     if (!normalizedStudent.name) {
       setStudentSaveError('학생 이름은 필수입니다.');
       return;
     }
 
-    const updated = students.map(s => s.id === normalizedStudent.id ? normalizedStudent : s);
     const saved = await persistStudents(
-      updated,
+      students.map((currentStudent) =>
+        currentStudent.id === normalizedStudent.id ? normalizedStudent : currentStudent
+      ),
       'edit',
       '학생 정보를 저장하지 못했습니다. 잠시 후 다시 시도해주세요.'
     );
 
-    if (!saved) return;
-
-    setEditingStudent(null);
+    if (saved) {
+      setEditingStudent(null);
+    }
   };
 
-  const handleMoveStudent = async (student: Student) => {
-    if (isSavingStudentAction) return;
-
-    const targetFolderId = studentMoveTargets[student.id] || defaultMoveTargetId;
-
-    if (!targetFolderId) {
-      setStudentSaveError('이동할 반을 선택해 주세요.');
+  const handleMoveStudentToFolder = async (student: Student) => {
+    if (isSavingStudentAction) {
       return;
     }
 
+    const targetFolderId = studentMoveTargets[student.id] || defaultMoveTargetId;
+    if (!targetFolderId) {
+      setStudentSaveError('이동할 반을 선택해주세요.');
+      return;
+    }
     if (targetFolderId === folder.id) {
       setStudentSaveError('같은 반으로는 이동할 수 없습니다.');
       return;
     }
 
-    const targetFolder = availableMoveFolders.find(candidate => candidate.id === targetFolderId);
+    const targetFolder = availableMoveFolders.find((candidate) => candidate.id === targetFolderId);
     if (!targetFolder) {
       setStudentSaveError('이동할 반 정보를 찾을 수 없습니다.');
       return;
     }
 
-    if ((targetFolder.students || []).some(existingStudent => existingStudent.id === student.id)) {
-      setStudentSaveError('대상 반에 같은 학생이 이미 있습니다.');
+    if (!window.confirm(`'${student.name}' 학생을 '${targetFolder.name}' 반으로 이동할까요?`)) {
       return;
     }
 
-    const shouldMove = window.confirm(`'${student.name}' 학생을 '${targetFolder.name}' 반으로 이동하시겠습니까?`);
-    if (!shouldMove) return;
-
     setStudentSaveError(null);
     setStudentAction('move');
-
     try {
       await onMoveStudent(folder.id, targetFolderId, student.id);
-      setStudents(currentStudents => currentStudents.filter(currentStudent => currentStudent.id !== student.id));
-      setExpandedStudent(currentExpandedStudent => currentExpandedStudent === student.id ? null : currentExpandedStudent);
-      setEditingStudent(currentEditingStudent => currentEditingStudent?.id === student.id ? null : currentEditingStudent);
+      setStudents((currentStudents) =>
+        currentStudents.filter((currentStudent) => currentStudent.id !== student.id)
+      );
+      setExpandedStudent((currentExpandedStudent) =>
+        currentExpandedStudent === student.id ? null : currentExpandedStudent
+      );
+      setEditingStudent((currentEditingStudent) =>
+        currentEditingStudent?.id === student.id ? null : currentEditingStudent
+      );
       setStudentMoveTargets((currentTargets) => {
         const nextTargets = { ...currentTargets };
         delete nextTargets[student.id];
@@ -510,82 +555,833 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
       if (error instanceof Error && error.message && !error.message.startsWith('{')) {
         setStudentSaveError(error.message);
       } else {
-        setStudentSaveError('학생을 다른 반으로 이동하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+        setStudentSaveError('학생 이동에 실패했습니다. 잠시 후 다시 시도해주세요.');
       }
     } finally {
       setStudentAction(null);
     }
   };
 
-  const getAttendanceStats = (lesson?: Lesson) => {
-    if (!lesson || !lesson.attendance) return { present: 0, absent: 0, late: 0, total: 0 };
-    const total = lesson.attendance.length;
-    const present = lesson.attendance.filter(a => a.status === 'Present').length;
-    const absent = lesson.attendance.filter(a => a.status === 'Absent').length;
-    const late = lesson.attendance.filter(a => a.status === 'Late').length;
-    return { present, absent, late, total };
+  const renderDashboardTab = () => (
+    <motion.div
+      key="dashboard"
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      className="grid grid-cols-1 gap-8 lg:grid-cols-3"
+    >
+      <div className="space-y-8 lg:col-span-2">
+        <div className="rounded-[40px] border border-[#E5E3DD] bg-white p-10 shadow-sm">
+          <div className="mb-8 flex items-center justify-between">
+            <h2 className="flex items-center gap-2 text-xl font-bold text-[#4A3728]">
+              <FileText className="text-[#8B5E3C]" size={20} />
+              반별 콘텐츠 배정
+            </h2>
+            <button
+              onClick={onGoToLibrary}
+              className="rounded-xl border border-[#E5E3DD] px-4 py-2 text-sm font-bold text-[#8B5E3C] transition-all hover:bg-[#FFF5E9]"
+            >
+              라이브러리 열기
+            </button>
+          </div>
+          <p className="mb-8 text-sm text-[#8B7E74]">
+            학생 페이지에는 여기에서 배정한 콘텐츠만 보입니다. 날짜를 바꿔도 이 목록은 달라지지 않습니다.
+          </p>
+
+          {assignedContents.length > 0 && (
+            <div className="mb-8 flex flex-wrap items-center gap-2 border-b border-[#E5E3DD] pb-8">
+              {assignedContents.map((content) => (
+                <div key={content.id} className="group relative inline-flex">
+                  <button className="cursor-default rounded-full bg-[#8B5E3C] px-5 py-3 pr-10 text-left text-sm font-bold text-white shadow-md">
+                    {content.title}
+                  </button>
+                  <button
+                    onClick={() => handleToggleContent(content)}
+                    className="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-white/20 text-white/80 opacity-0 transition-all hover:bg-[#D9534F] hover:text-white group-hover:opacity-100"
+                    title="콘텐츠 배정 해제"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {categories.length > 0 ? (
+            <>
+              <div className="mb-6 flex flex-wrap gap-2 border-b border-[#E5E3DD] pb-4">
+                {categories.map((category) => (
+                  <button
+                    key={category.id}
+                    onClick={() => setSelectedCategory(category.id)}
+                    className={`rounded-xl px-4 py-2 text-sm font-bold transition-all ${
+                      selectedCategory === category.id
+                        ? 'bg-[#8B5E3C] text-white shadow-md'
+                        : 'bg-[#F3F2EE] text-[#8B7E74] hover:bg-[#EBD9C1] hover:text-[#8B5E3C]'
+                    }`}
+                  >
+                    {category.name}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                {contents
+                  .filter((content) => content.categoryId !== null && content.categoryId === selectedCategory)
+                  .map((content) => {
+                    const isSelected = assignedContentIds.includes(content.id);
+                    return (
+                      <button
+                        key={content.id}
+                        onClick={() => handleToggleContent(content)}
+                        disabled={isSelected}
+                        className={`rounded-full px-5 py-3 text-left text-sm font-bold transition-all ${
+                          isSelected
+                            ? 'cursor-default border border-transparent bg-[#F3F2EE] text-[#D0C9C0] shadow-inner opacity-80'
+                            : 'border border-[#EBD9C1] bg-[#FFF5E9] text-[#8B5E3C] hover:-translate-y-0.5 hover:bg-[#EBD9C1] hover:shadow-md'
+                        }`}
+                      >
+                        {content.title}
+                      </button>
+                    );
+                  })}
+
+                {contents.filter(
+                  (content) => content.categoryId !== null && content.categoryId === selectedCategory
+                ).length === 0 && (
+                  <p className="py-4 text-sm text-[#8B7E74]">이 카테고리에 등록된 콘텐츠가 없습니다.</p>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="rounded-[28px] border border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-6 py-8 text-sm text-[#8B7E74]">
+              먼저 콘텐츠 라이브러리에서 카테고리와 콘텐츠를 만들어주세요.
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-[40px] border border-[#E5E3DD] bg-white p-10 shadow-sm">
+          <div className="mb-6 flex items-center justify-between gap-4">
+            <div>
+              <h2 className="flex items-center gap-2 text-xl font-bold text-[#4A3728]">
+                <Clock className="text-[#8B5E3C]" size={20} />
+                날짜 상태
+              </h2>
+              <p className="mt-2 text-sm text-[#8B7E74]">
+                날짜를 활성화해야 수업기록, 수업메모, 출석체크를 남길 수 있습니다.
+              </p>
+            </div>
+            <span className="rounded-full bg-[#FFF5E9] px-4 py-2 text-xs font-bold text-[#8B5E3C]">
+              {selectedDate}
+            </span>
+          </div>
+
+          <div className="flex flex-col gap-4 rounded-[28px] border border-[#E5E3DD] bg-[#FBFBFA] p-6 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-bold text-[#4A3728]">
+                {isCurrentDateActive ? '활성 날짜입니다.' : '비활성 날짜입니다.'}
+              </p>
+              <p className="mt-2 text-sm text-[#8B7E74]">
+                {isCurrentDateActive
+                  ? '아래에서 실제 진행한 콘텐츠와 메모, 출석 상태를 기록할 수 있습니다.'
+                  : '활성화하면 해당 날짜에만 수업기록, 수업메모, 출석체크 영역이 열립니다.'}
+              </p>
+            </div>
+            <button
+              onClick={isCurrentDateActive ? handleDeactivateDate : handleActivateDate}
+              className={`inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-3 text-sm font-bold transition-all ${
+                isCurrentDateActive
+                  ? 'bg-[#FDECEC] text-[#B42318] hover:bg-[#FAD4D1]'
+                  : 'bg-[#8B5E3C] text-white hover:bg-[#724D31]'
+              }`}
+            >
+              <Power size={16} />
+              {isCurrentDateActive ? '비활성화' : '활성화'}
+            </button>
+          </div>
+        </div>
+
+        {isCurrentDateActive && (
+          <div className="rounded-[40px] border border-[#E5E3DD] bg-white p-10 shadow-sm">
+            <div className="mb-8 flex items-center justify-between gap-4">
+              <h2 className="flex items-center gap-2 text-xl font-bold text-[#4A3728]">
+                <Clock className="text-[#8B5E3C]" size={20} />
+                날짜별 수업기록
+              </h2>
+              <span className="rounded-full bg-[#FFF5E9] px-4 py-2 text-xs font-bold text-[#8B5E3C]">
+                {selectedDate}
+              </span>
+            </div>
+            <p className="mb-8 text-sm text-[#8B7E74]">
+              학생 페이지 노출과는 별개로, 이 날짜에 실제 진행한 콘텐츠만 기록합니다.
+            </p>
+
+            {missingCurrentDateContentCount > 0 && (
+              <div className="mb-8 flex items-center gap-3 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-amber-800">
+                <AlertCircle size={20} />
+                <div className="text-sm">
+                  <p className="font-bold">현재 기록에 포함된 콘텐츠 중 일부를 찾을 수 없습니다.</p>
+                  <p className="opacity-80">
+                    이미 배정에서 빠졌거나 삭제된 콘텐츠일 수 있습니다. 아래 목록에서는 현재 배정된 콘텐츠만 다시 선택할 수 있습니다.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {currentDateRecordedContents.length > 0 ? (
+              <div className="mb-8 flex flex-wrap items-center gap-2 border-b border-[#E5E3DD] pb-8">
+                {currentDateRecordedContents.map((content) => (
+                  <div key={content.id} className="relative inline-flex">
+                    <button className="cursor-default rounded-full bg-[#4A3728] px-5 py-3 pr-10 text-left text-sm font-bold text-white shadow-md">
+                      {content.title}
+                    </button>
+                    <button
+                      onClick={() => handleToggleDateRecordContent(content)}
+                      className="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-white/20 text-white/80 transition-all hover:bg-[#D9534F] hover:text-white"
+                      title="기록에서 제거"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="mb-8 rounded-[28px] border border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-6 py-8 text-sm text-[#8B7E74]">
+                아직 이 날짜에 기록된 수업 콘텐츠가 없습니다. 아래에서 실제 진행한 콘텐츠를 선택해주세요.
+              </div>
+            )}
+
+            {assignedContents.length > 0 ? (
+              <div className="flex flex-wrap gap-3">
+                {assignedContents.map((content) => {
+                  const isRecorded = currentDateRecordedContentIdSet.has(content.id);
+                  return (
+                    <button
+                      key={content.id}
+                      onClick={() => handleToggleDateRecordContent(content)}
+                      className={`rounded-full px-5 py-3 text-left text-sm font-bold transition-all ${
+                        isRecorded
+                          ? 'bg-[#4A3728] text-white shadow-md'
+                          : 'border border-transparent bg-[#F3F2EE] text-[#4A3728] hover:bg-[#E5E3DD]'
+                      }`}
+                    >
+                      {content.title}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="rounded-[28px] border border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-6 py-8 text-sm text-[#8B7E74]">
+                먼저 반에 학생 페이지용 콘텐츠를 배정해주세요.
+              </div>
+            )}
+          </div>
+        )}
+
+        {isCurrentDateActive && (
+          <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-8 text-left shadow-sm">
+            <div className="mb-6 flex items-center justify-between">
+              <h2 className="flex items-center gap-2 text-xl font-bold text-[#4A3728]">
+                <CheckCircle2 className="text-[#8B5E3C]" size={20} />
+                출석 체크 ({getAttendanceStats(currentDateRecord).present}명 출석)
+              </h2>
+            </div>
+            <p className="mb-6 text-sm text-[#8B7E74]">
+              활성화된 날짜에만 출석 상태를 저장합니다.
+            </p>
+            <div className="custom-scrollbar max-h-[400px] space-y-2 overflow-y-auto pr-2">
+              {currentDateRecord?.attendance.map((record) => (
+                <div
+                  key={record.studentId}
+                  className="flex items-center justify-between rounded-xl border border-[#F3F2EE] bg-[#FBFBFA] p-3"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#EBD9C1] text-xs font-bold text-[#8B5E3C]">
+                      {record.initials}
+                    </div>
+                    <span className="text-sm font-bold text-[#4A3728]">{record.studentName}</span>
+                  </div>
+                  <div className="flex gap-1">
+                    {(['Present', 'Absent', 'Late'] as const).map((status) => (
+                      <button
+                        key={status}
+                        onClick={() => updateAttendance(record.studentId, status)}
+                        className={`rounded-lg px-3 py-1.5 text-[10px] font-bold transition-all ${
+                          record.status === status
+                            ? status === 'Present'
+                              ? 'bg-[#D1F3E0] text-[#2D7A4D]'
+                              : status === 'Absent'
+                                ? 'bg-[#F3D1D1] text-[#7A2D2D]'
+                                : 'bg-[#F3EBD1] text-[#7A6A2D]'
+                            : 'border border-[#E5E3DD] bg-white text-[#8B7E74] hover:bg-[#F3F2EE]'
+                        }`}
+                      >
+                        {status === 'Present' ? '출석' : status === 'Absent' ? '결석' : '지각'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+
+              {(!currentDateRecord || currentDateRecord.attendance.length === 0) && (
+                <div className="py-6 text-center text-sm text-[#8B7E74]">
+                  현재 날짜 기록에 저장된 학생 출석 정보가 없습니다.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-8">
+        <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-6 shadow-sm">
+          <div className="mb-6 flex items-center justify-between">
+            <h3 className="font-bold text-[#4A3728]">
+              {viewMonth.getFullYear()}년 {viewMonth.getMonth() + 1}월
+            </h3>
+            <div className="flex gap-1">
+              <button
+                onClick={() =>
+                  setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1))
+                }
+                className="rounded-lg p-1.5 text-[#8B7E74] transition-all hover:bg-[#F3F2EE]"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <button
+                onClick={() =>
+                  setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1))
+                }
+                className="rounded-lg p-1.5 text-[#8B7E74] transition-all hover:bg-[#F3F2EE]"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+
+          <p className="mb-4 text-xs font-medium text-[#8B7E74]">
+            날짜를 선택한 뒤 활성화하면 아래 기록 영역이 열립니다.
+          </p>
+          <div className="mb-2 grid grid-cols-7 gap-1">
+            {weekDays.map((day) => (
+              <div key={day} className="py-1 text-center text-[10px] font-bold text-[#A89F94]">
+                {day}
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-7 gap-1">
+            {calendarDays.map((date, idx) => {
+              if (!date) {
+                return <div key={`empty-${idx}`} className="h-8" />;
+              }
+
+              const dateStr = getLocalDateString(date);
+              const isSelected = dateStr === selectedDate;
+              const isToday = dateStr === getLocalDateString(new Date());
+              const isActive = activeDateSet.has(dateStr);
+
+              return (
+                <button
+                  key={dateStr}
+                  onClick={() => setSelectedDate(dateStr)}
+                  className={`relative flex h-8 w-full items-center justify-center rounded-lg text-xs font-bold transition-all ${
+                    isSelected
+                      ? 'bg-[#8B5E3C] text-white shadow-md shadow-[#8B5E3C]/20'
+                      : isToday
+                        ? 'bg-[#FFF5E9] text-[#8B5E3C]'
+                        : 'text-[#4A3728] hover:bg-[#F3F2EE]'
+                  }`}
+                >
+                  {date.getDate()}
+                  {isActive && !isSelected && (
+                    <div className="absolute bottom-1 h-1 w-1 rounded-full bg-[#8B5E3C]" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {isCurrentDateActive ? (
+          <div className="flex h-[300px] flex-col rounded-[32px] border border-[#E5E3DD] bg-white p-6 text-left shadow-sm">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="flex items-center gap-2 text-lg font-bold text-[#4A3728]">
+                <MessageSquare className="text-[#8B5E3C]" size={18} />
+                오늘의 수업 메모
+              </h2>
+            </div>
+            <p className="mb-4 text-sm text-[#8B7E74]">
+              활성화된 날짜에만 메모가 저장됩니다.
+            </p>
+            <textarea
+              value={localMemo}
+              onChange={(event) => setLocalMemo(event.target.value)}
+              onBlur={handleSaveMemo}
+              placeholder="특이사항이나 운영 메모를 기록하세요."
+              className="custom-scrollbar flex-1 w-full resize-none rounded-2xl border border-[#F3F2EE] bg-[#FBFBFA] p-4 text-sm outline-none transition-all focus:border-[#8B5E3C]"
+            />
+          </div>
+        ) : (
+          <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-6 shadow-sm">
+            <div className="mb-4 flex items-center gap-2 text-[#8B5E3C]">
+              <AlertCircle size={18} />
+              <h2 className="text-lg font-bold text-[#4A3728]">기록 대기 상태</h2>
+            </div>
+            <p className="text-sm leading-relaxed text-[#8B7E74]">
+              이 날짜는 아직 비활성 상태입니다. 활성화 버튼을 누르면 수업기록, 수업메모,
+              출석체크가 열리고 캘린더에도 표시됩니다.
+            </p>
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+
+  const renderStudentsTab = () => (
+    <motion.div
+      key="students"
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      className="rounded-[40px] border border-[#E5E3DD] bg-white p-10 text-left shadow-sm"
+    >
+      <div className="mb-8 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F3F2EE] text-[#8B5E3C]">
+            <Users size={20} />
+          </div>
+          <h2 className="text-2xl font-bold">학생 명단 ({students.length}명)</h2>
+        </div>
+      </div>
+
+      <div className="mb-8 flex gap-4">
+        <div className="grid flex-1 grid-cols-2 gap-3">
+          <div className="relative col-span-2">
+            <input
+              type="text"
+              value={newStudentName}
+              onChange={(event) => setNewStudentName(event.target.value)}
+              disabled={isSavingStudentAction}
+              placeholder="이름 (필수)"
+              className="w-full rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] py-3 pl-10 pr-4 text-sm transition-all focus:border-[#8B5E3C] focus:outline-none"
+            />
+            <UserPlus size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A89F94]" />
+          </div>
+          <input
+            type="text"
+            value={newStudentAge}
+            onChange={(event) => setNewStudentAge(event.target.value)}
+            disabled={isSavingStudentAction}
+            placeholder="나이"
+            className="rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] px-4 py-3 text-sm transition-all focus:border-[#8B5E3C] focus:outline-none"
+          />
+          <input
+            type="text"
+            value={newStudentContact}
+            onChange={(event) => setNewStudentContact(event.target.value)}
+            disabled={isSavingStudentAction}
+            placeholder="연락처"
+            className="rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] px-4 py-3 text-sm transition-all focus:border-[#8B5E3C] focus:outline-none"
+          />
+          <div className="col-span-2">
+            <textarea
+              value={newStudentMemo}
+              onChange={(event) => setNewStudentMemo(event.target.value)}
+              disabled={isSavingStudentAction}
+              placeholder="학생 메모"
+              rows={3}
+              className="w-full resize-none rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] px-4 py-3 text-sm transition-all focus:border-[#8B5E3C] focus:outline-none"
+            />
+          </div>
+        </div>
+        <button
+          onClick={() => void handleAddStudent()}
+          disabled={isSavingStudentAction || !newStudentName.trim()}
+          className="self-start rounded-2xl bg-[#8B5E3C] px-6 py-4 font-bold text-white shadow-md transition-all hover:bg-[#724D31] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#8B5E3C]"
+        >
+          {studentAction === 'add' ? '저장 중...' : '추가'}
+        </button>
+      </div>
+
+      {studentSaveError && <p className="mb-6 text-sm font-medium text-red-500">{studentSaveError}</p>}
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        {students.map((student, index) => (
+          <motion.div
+            key={student.id}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.05 }}
+            className="group overflow-hidden rounded-2xl border border-[#F3F2EE] bg-[#FBFBFA]"
+          >
+            <div
+              className="flex cursor-pointer items-center justify-between p-4 transition-all hover:bg-[#F3F2EE]"
+              onClick={() => setExpandedStudent(expandedStudent === student.id ? null : student.id)}
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#EBD9C1] text-xs font-bold text-[#8B5E3C]">
+                  {student.initials}
+                </div>
+                <div>
+                  <span className="block font-bold text-[#4A3728]">{student.name}</span>
+                  {(student.age || student.contact) && (
+                    <span className="text-xs text-[#A89F94]">
+                      {[student.age, student.contact].filter(Boolean).join(' · ')}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <button
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void handleRemoveStudent(student);
+                }}
+                disabled={isSavingStudentAction}
+                className="rounded-full p-1 text-[#A89F94] opacity-0 transition-all hover:bg-red-100 hover:text-red-500 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
+                title="학생 삭제"
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            <AnimatePresence>
+              {expandedStudent === student.id && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden border-t border-[#F3F2EE] px-4 pb-4"
+                >
+                  {editingStudent?.id === student.id ? (
+                    <div className="space-y-2 pt-4">
+                      <input
+                        value={editingStudent.name}
+                        onChange={(event) =>
+                          setEditingStudent({ ...editingStudent, name: event.target.value })
+                        }
+                        disabled={isSavingStudentAction}
+                        placeholder="이름"
+                        className="w-full rounded-xl border border-[#E5E3DD] px-3 py-2 text-sm focus:border-[#8B5E3C] focus:outline-none"
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          value={editingStudent.age || ''}
+                          onChange={(event) =>
+                            setEditingStudent({ ...editingStudent, age: event.target.value })
+                          }
+                          disabled={isSavingStudentAction}
+                          placeholder="나이"
+                          className="rounded-xl border border-[#E5E3DD] px-3 py-2 text-sm focus:border-[#8B5E3C] focus:outline-none"
+                        />
+                        <input
+                          value={editingStudent.contact || ''}
+                          onChange={(event) =>
+                            setEditingStudent({ ...editingStudent, contact: event.target.value })
+                          }
+                          disabled={isSavingStudentAction}
+                          placeholder="연락처"
+                          className="rounded-xl border border-[#E5E3DD] px-3 py-2 text-sm focus:border-[#8B5E3C] focus:outline-none"
+                        />
+                      </div>
+                      <textarea
+                        value={editingStudent.memo || ''}
+                        onChange={(event) =>
+                          setEditingStudent({ ...editingStudent, memo: event.target.value })
+                        }
+                        disabled={isSavingStudentAction}
+                        placeholder="기타 메모"
+                        rows={2}
+                        className="w-full resize-none rounded-xl border border-[#E5E3DD] px-3 py-2 text-sm focus:border-[#8B5E3C] focus:outline-none"
+                      />
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          onClick={() => void handleSaveStudentEdit(editingStudent)}
+                          disabled={isSavingStudentAction || !editingStudent.name.trim()}
+                          className="flex-1 rounded-xl bg-[#8B5E3C] py-2 text-sm font-bold text-white transition-all hover:bg-[#724D31] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {studentAction === 'edit' ? '저장 중...' : '저장'}
+                        </button>
+                        <button
+                          onClick={() => setEditingStudent(null)}
+                          disabled={isSavingStudentAction}
+                          className="rounded-xl bg-[#F3F2EE] px-4 py-2 text-sm font-bold text-[#8B7E74] transition-all hover:bg-[#E5E3DD]"
+                        >
+                          취소
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 pt-4 text-sm">
+                      {student.age && (
+                        <div className="flex items-center gap-2 text-[#8B7E74]">
+                          <span className="w-12 text-[#A89F94]">나이</span>
+                          <span className="font-medium text-[#4A3728]">{student.age}</span>
+                        </div>
+                      )}
+                      {student.contact && (
+                        <div className="flex items-center gap-2 text-[#8B7E74]">
+                          <span className="w-12 text-[#A89F94]">연락처</span>
+                          <span className="font-medium text-[#4A3728]">{student.contact}</span>
+                        </div>
+                      )}
+                      {student.memo && (
+                        <div className="flex items-start gap-2 text-[#8B7E74]">
+                          <span className="w-12 text-[#A89F94]">메모</span>
+                          <span className="font-medium text-[#4A3728]">{student.memo}</span>
+                        </div>
+                      )}
+                      {!student.age && !student.contact && !student.memo && (
+                        <p className="italic text-[#A89F94]">추가 정보 없음</p>
+                      )}
+
+                      <div className="mt-4 border-t border-[#F3F2EE] pt-4">
+                        <p className="mb-2 text-[11px] font-bold tracking-wide text-[#A89F94]">반 이동</p>
+                        {availableMoveFolders.length > 0 ? (
+                          <div className="flex gap-2">
+                            <select
+                              value={studentMoveTargets[student.id] || defaultMoveTargetId}
+                              onChange={(event) =>
+                                setStudentMoveTargets((currentTargets) => ({
+                                  ...currentTargets,
+                                  [student.id]: event.target.value,
+                                }))
+                              }
+                              disabled={isSavingStudentAction}
+                              className="flex-1 rounded-xl border border-[#E5E3DD] bg-white px-3 py-2 text-sm text-[#4A3728] outline-none focus:border-[#8B5E3C]"
+                            >
+                              {availableMoveFolders.map((targetFolder) => (
+                                <option key={targetFolder.id} value={targetFolder.id}>
+                                  {targetFolder.name}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => void handleMoveStudentToFolder(student)}
+                              disabled={isSavingStudentAction || !(studentMoveTargets[student.id] || defaultMoveTargetId)}
+                              className="rounded-xl bg-[#FFF5E9] px-4 py-2 text-xs font-bold text-[#8B5E3C] transition-all hover:bg-[#EBD9C1] disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {studentAction === 'move' ? '이동 중...' : '반 이동'}
+                            </button>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-[#A89F94]">이동 가능한 다른 반이 없습니다.</p>
+                        )}
+                      </div>
+
+                      <button
+                        disabled={isSavingStudentAction}
+                        onClick={() => setEditingStudent({ ...student })}
+                        className="mt-2 rounded-xl bg-[#F3F2EE] px-4 py-1.5 text-xs font-bold text-[#8B5E3C] transition-all hover:bg-[#EBD9C1]"
+                      >
+                        수정
+                      </button>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        ))}
+      </div>
+    </motion.div>
+  );
+
+  const renderSettingsTab = () => {
+    const PreviewIcon = iconMap[settingsDraft.icon] || BookOpen;
+
+    return (
+      <motion.div
+        key="settings"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10 }}
+        className="rounded-[40px] border border-[#E5E3DD] bg-white p-10 text-left shadow-sm"
+      >
+        <div className="mb-8 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F3F2EE] text-[#8B5E3C]">
+              <Settings size={20} />
+            </div>
+            <h2 className="text-2xl font-bold">반 설정</h2>
+          </div>
+          <button
+            onClick={() => {
+              onUpdateFolder?.(folder.id, settingsDraft);
+              window.alert('반 설정이 저장되었습니다.');
+            }}
+            className="flex items-center gap-2 rounded-xl bg-[#8B5E3C] px-5 py-2.5 text-sm font-bold text-white transition-all hover:bg-[#724D31]"
+          >
+            <Save size={16} />
+            저장
+          </button>
+        </div>
+
+        <div className="mb-10">
+          <div className="mb-4 flex items-center gap-2">
+            <Edit3 size={18} className="text-[#8B5E3C]" />
+            <h3 className="text-lg font-bold text-[#4A3728]">반 이름</h3>
+          </div>
+          <input
+            type="text"
+            value={settingsDraft.name}
+            onChange={(event) => setSettingsDraft({ ...settingsDraft, name: event.target.value })}
+            className="w-full rounded-2xl border-2 border-[#E5E3DD] px-5 py-3.5 text-lg font-bold text-[#4A3728] transition-all focus:border-[#8B5E3C] focus:outline-none"
+            placeholder="반 이름을 입력하세요."
+          />
+        </div>
+
+        <div className="mb-10">
+          <div className="mb-4 flex items-center gap-2">
+            <Palette size={18} className="text-[#8B5E3C]" />
+            <h3 className="text-lg font-bold text-[#4A3728]">대표 컬러</h3>
+          </div>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            {FOLDER_COLORS.map((color) => {
+              const isSelected = settingsDraft.color === color.value;
+              return (
+                <button
+                  key={color.value}
+                  onClick={() => setSettingsDraft({ ...settingsDraft, color: color.value })}
+                  className={`flex items-center gap-3 rounded-2xl border-2 p-4 transition-all ${
+                    isSelected ? 'scale-[1.02] shadow-md' : 'border-transparent hover:border-[#E5E3DD]'
+                  }`}
+                  style={{
+                    backgroundColor: color.bg,
+                    color: color.value,
+                    borderColor: isSelected ? color.value : undefined,
+                  }}
+                >
+                  <div className="h-8 w-8 rounded-full" style={{ backgroundColor: color.value }} />
+                  <span className="text-sm font-bold">{color.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <div className="mb-4 flex items-center gap-2">
+            <Star size={18} className="text-[#8B5E3C]" />
+            <h3 className="text-lg font-bold text-[#4A3728]">아이콘</h3>
+          </div>
+          <div className="grid grid-cols-3 gap-3 md:grid-cols-6">
+            {FOLDER_ICONS.map((iconInfo) => {
+              const IconComp = iconMap[iconInfo.icon];
+              const isSelected = settingsDraft.icon === iconInfo.icon;
+              return (
+                <button
+                  key={iconInfo.icon}
+                  onClick={() => setSettingsDraft({ ...settingsDraft, icon: iconInfo.icon })}
+                  className={`flex flex-col items-center gap-2 rounded-2xl border-2 p-4 transition-all ${
+                    isSelected ? 'scale-[1.02] shadow-md' : 'border-transparent hover:border-[#E5E3DD]'
+                  }`}
+                  style={{
+                    borderColor: isSelected ? settingsDraft.color : undefined,
+                    backgroundColor: isSelected ? previewIconBg : '#FBFBFA',
+                  }}
+                >
+                  {IconComp && (
+                    <IconComp
+                      size={24}
+                      style={isSelected ? { color: settingsDraft.color } : undefined}
+                      className={isSelected ? '' : 'text-[#A89F94]'}
+                    />
+                  )}
+                  <span
+                    className={`text-xs font-bold ${isSelected ? '' : 'text-[#A89F94]'}`}
+                    style={isSelected ? { color: settingsDraft.color } : undefined}
+                  >
+                    {iconInfo.name}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="mt-10 rounded-2xl border border-[#F3F2EE] bg-[#FBFBFA] p-6">
+          <p className="mb-3 text-xs font-bold text-[#A89F94]">미리보기</p>
+          <div className="flex items-center gap-4">
+            <div
+              className="flex h-14 w-14 items-center justify-center rounded-2xl"
+              style={{ backgroundColor: previewIconBg }}
+            >
+              <PreviewIcon size={28} style={{ color: previewIconColor }} />
+            </div>
+            <div>
+              <h4 className="text-lg font-bold" style={{ color: previewIconColor }}>
+                {settingsDraft.name}
+              </h4>
+              <p className="text-sm text-[#A89F94]">학생 {folder.students?.length || 0}명</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-10 rounded-2xl border border-red-100 bg-red-50 p-6">
+          <div className="mb-3 flex items-center gap-2">
+            <AlertCircle size={18} className="text-red-500" />
+            <h3 className="text-lg font-bold text-red-600">위험 영역</h3>
+          </div>
+          <p className="mb-4 text-sm text-red-400">
+            반을 삭제하면 활성 날짜 기록과 학생 명단이 함께 삭제됩니다.
+          </p>
+          <button
+            onClick={() => {
+              const message = `'${folder.name}' 반을 정말 삭제할까요? 이 작업은 되돌릴 수 없습니다.`;
+              if (window.confirm(message)) {
+                onDeleteFolder?.(folder.id);
+              }
+            }}
+            className="rounded-xl bg-red-500 px-6 py-3 text-sm font-bold text-white transition-all hover:bg-red-600"
+          >
+            반 삭제
+          </button>
+        </div>
+      </motion.div>
+    );
   };
-
-  const [viewMonth, setViewMonth] = useState(new Date());
-
-  const getDaysInMonth = (date: Date) => {
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    const firstDay = new Date(year, month, 1).getDay();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    
-    const days = [];
-    for (let i = 0; i < firstDay; i++) {
-      days.push(null);
-    }
-    for (let i = 1; i <= daysInMonth; i++) {
-      days.push(new Date(year, month, i));
-    }
-    return days;
-  };
-
-  const calendarDays = getDaysInMonth(viewMonth);
-  const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
 
   return (
     <main className="flex-1 overflow-y-auto bg-[#FBFBFA] p-8">
-      <div className="max-w-6xl mx-auto">
-        {/* Header Section */}
+      <div className="mx-auto max-w-6xl">
         <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <span className="px-3 py-1 bg-[#FFF5E9] text-[#8B5E3C] text-[10px] font-bold uppercase tracking-widest rounded-full">
-              클래스 관리
+          <div className="mb-2 flex items-center gap-3">
+            <span className="rounded-full bg-[#FFF5E9] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#8B5E3C]">
+              반 관리
             </span>
           </div>
-          <h1 className="text-5xl font-serif font-bold text-[#4A3728] mb-4">{folder.name}</h1>
-          <p className="text-[#8B7E74] max-w-md">
-            날짜를 선택하여 클래스를 등록하고, 학생들의 출석과 수업 메모를 관리하세요.
+          <h1 className="mb-4 text-5xl font-serif font-bold text-[#4A3728]">{folder.name}</h1>
+          <p className="max-w-md text-[#8B7E74]">
+            반별 콘텐츠 배정과 날짜별 운영 기록을 한 화면에서 관리합니다.
           </p>
-          <p className="mt-3 text-sm text-[#8B7E74] max-w-2xl">
-            콘텐츠는 반 단위로 공통 배정되고, 출석과 메모는 날짜별로 따로 기록됩니다.
+          <p className="mt-3 max-w-2xl text-sm text-[#8B7E74]">
+            콘텐츠는 학생 페이지 노출 기준이고, 날짜 기록은 활성화한 날에만 별도로 저장됩니다.
           </p>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-8 border-b border-[#E5E3DD] mb-8">
+        <div className="mb-8 flex gap-8 border-b border-[#E5E3DD]">
           {[
             { id: 'dashboard', label: '수업 대시보드', icon: ClipboardList },
             { id: 'students', label: '학생 명단 관리', icon: Users },
-            { id: 'settings', label: '클래스 설정', icon: Settings },
-          ].map(tab => (
+            { id: 'settings', label: '반 설정', icon: Settings },
+          ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as Tab)}
-              className={`flex items-center gap-2 pb-4 font-bold text-sm transition-all relative ${
+              className={`relative flex items-center gap-2 pb-4 text-sm font-bold transition-all ${
                 activeTab === tab.id ? 'text-[#8B5E3C]' : 'text-[#8B7E74] hover:text-[#4A3728]'
               }`}
             >
               <tab.icon size={18} />
               {tab.label}
               {activeTab === tab.id && (
-                <motion.div 
-                  layoutId="activeTab"
-                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#8B5E3C]" 
+                <motion.div
+                  layoutId="activeFolderTab"
+                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#8B5E3C]"
                 />
               )}
             </button>
@@ -593,685 +1389,11 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
         </div>
 
         <AnimatePresence mode="wait">
-          {activeTab === 'dashboard' ? (
-            <motion.div 
-              key="dashboard"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="grid grid-cols-1 lg:grid-cols-3 gap-8"
-            >
-              {/* Left Column (span 2) */}
-              <div className="lg:col-span-2 space-y-8">
-                {(() => {
-                  const selectedIds = assignedContentIds;
-                  const missingAssignedContentCount = Math.max(selectedIds.length - assignedContents.length, 0);
-                  
-                  return (
-                    <div className="bg-white rounded-[40px] border border-[#E5E3DD] shadow-sm p-10">
-                      <div className="flex items-center justify-between mb-8">
-                        <h2 className="text-xl font-bold text-[#4A3728] flex items-center gap-2">
-                          <FileText className="text-[#8B5E3C]" size={20} />
-                          콘텐츠
-                        </h2>
-                      </div>
-                      <p className="mb-8 text-sm text-[#8B7E74]">
-                        이 반 학생 페이지에 보일 콘텐츠를 배정합니다. 날짜를 바꿔도 이 목록은 유지됩니다.
-                      </p>
-                      {/* Warning for missing content */}
-                      {missingAssignedContentCount > 0 && (
-                        <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-100 rounded-2xl mb-8 text-red-600">
-                          <AlertCircle size={20} />
-                          <div className="text-sm">
-                            <p className="font-bold">연결된 콘텐츠를 찾을 수 없습니다.</p>
-                            <p className="opacity-80">콘텐츠가 삭제되었을 수 있습니다. 아래 목록에서 새로운 콘텐츠를 선택해주세요.</p>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Selected Content Bubbles (Multiple) */}
-                      {assignedContents.length > 0 && (
-                        <div className="flex flex-wrap gap-2 items-center mb-8 pb-8 border-b border-[#E5E3DD]">
-                          {assignedContents.map(c => (
-                            <div key={c.id} className="relative group inline-flex">
-                              <button className="px-5 py-3 bg-[#8B5E3C] text-white rounded-full font-bold text-sm shadow-md pr-10 text-left transition-all cursor-default">
-                                {c.title}
-                              </button>
-                              <button 
-                                onClick={() => handleToggleContent(c)}
-                                className="absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 bg-white/20 hover:bg-[#D9534F] hover:text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all text-white/80 z-10"
-                                title="콘텐츠 제거"
-                              >
-                                <X size={14} />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Category Tabs */}
-                      <div className="flex flex-wrap gap-2 mb-6 border-b border-[#E5E3DD] pb-4">
-                        {categories.map(cat => (
-                          <button 
-                             key={cat.id}
-                             onClick={() => setSelectedCategory(cat.id)}
-                             className={`px-4 py-2 rounded-xl font-bold text-sm transition-all ${
-                               selectedCategory === cat.id ? 'bg-[#8B5E3C] text-white shadow-md' : 'bg-[#F3F2EE] text-[#8B7E74] hover:bg-[#EBD9C1] hover:text-[#8B5E3C]'
-                             }`}
-                          >
-                            {cat.name}
-                          </button>
-                        ))}
-                      </div>
-
-                      {/* Bubble Tags */}
-                      <div className="flex flex-wrap gap-3">
-                        {contents.filter(c => c.categoryId !== null && c.categoryId === selectedCategory).map(content => {
-                          const isSelected = selectedIds.includes(content.id);
-                          return (
-                            <button 
-                               key={content.id}
-                               onClick={() => handleToggleContent(content)}
-                               className={`px-5 py-3 rounded-full font-bold text-sm transition-all text-left ${
-                                  isSelected 
-                                    ? 'bg-[#F3F2EE] text-[#D0C9C0] border border-transparent shadow-inner cursor-default opacity-80'
-                                    : 'bg-[#FFF5E9] text-[#8B5E3C] border border-[#EBD9C1] hover:bg-[#EBD9C1] hover:shadow-md hover:-translate-y-0.5'
-                               }`}
-                               disabled={isSelected}
-                            >
-                              {content.title}
-                            </button>
-                          );
-                        })}
-                        {contents.filter(c => c.categoryId !== null && c.categoryId === selectedCategory).length === 0 && (
-                           <p className="text-[#8B7E74] text-sm py-4">이 카테고리에 등록된 콘텐츠가 없습니다.</p>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                <div className="bg-white rounded-[40px] border border-[#E5E3DD] shadow-sm p-10">
-                  <div className="mb-8 flex items-center justify-between gap-4">
-                    <h2 className="text-xl font-bold text-[#4A3728] flex items-center gap-2">
-                      <Clock className="text-[#8B5E3C]" size={20} />
-                      날짜별 수업 기록
-                    </h2>
-                    <span className="rounded-full bg-[#FFF5E9] px-4 py-2 text-xs font-bold text-[#8B5E3C]">
-                      {selectedDate}
-                    </span>
-                  </div>
-                  <p className="mb-8 text-sm text-[#8B7E74]">
-                    이 날짜에 실제로 진행한 수업을 기록합니다. 학생 페이지에 보이는 목록과는 별개이며, 이 반에 배정된 콘텐츠 안에서만 선택할 수 있습니다.
-                  </p>
-
-                  {missingCurrentLessonContentCount > 0 && (
-                    <div className="mb-8 flex items-center gap-3 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-amber-800">
-                      <AlertCircle size={20} />
-                      <div className="text-sm">
-                        <p className="font-bold">현재 기록된 수업 중 일부를 찾을 수 없습니다.</p>
-                        <p className="opacity-80">삭제되었거나 지금은 이 반에 배정되지 않은 콘텐츠입니다. 아래에서 다시 선택해 주세요.</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {currentLessonRecordedContents.length > 0 ? (
-                    <div className="mb-8 flex flex-wrap items-center gap-2 border-b border-[#E5E3DD] pb-8">
-                      {currentLessonRecordedContents.map((content) => (
-                        <div key={content.id} className="relative inline-flex">
-                          <button className="cursor-default rounded-full bg-[#4A3728] px-5 py-3 pr-10 text-left text-sm font-bold text-white shadow-md">
-                            {content.title}
-                          </button>
-                          <button
-                            onClick={() => handleToggleLessonContent(content)}
-                            className="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-white/20 text-white/80 transition-all hover:bg-[#D9534F] hover:text-white"
-                            title="수업 기록에서 제거"
-                          >
-                            <X size={14} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="mb-8 rounded-[28px] border border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-6 py-8 text-sm text-[#8B7E74]">
-                      선택된 날짜에 기록된 수업이 아직 없습니다. 아래에서 실제로 진행한 콘텐츠를 선택해 주세요.
-                    </div>
-                  )}
-
-                  {assignedContents.length > 0 ? (
-                    <div className="flex flex-wrap gap-3">
-                      {assignedContents.map((content) => {
-                        const isRecorded = currentLessonRecordedContentIdSet.has(content.id);
-                        return (
-                          <button
-                            key={content.id}
-                            onClick={() => handleToggleLessonContent(content)}
-                            className={`px-5 py-3 rounded-full font-bold text-sm transition-all text-left ${
-                              isRecorded
-                                ? 'bg-[#4A3728] text-white shadow-md'
-                                : 'bg-[#F3F2EE] text-[#4A3728] border border-transparent hover:bg-[#E5E3DD]'
-                            }`}
-                          >
-                            {content.title}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="rounded-[28px] border border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-6 py-8 text-sm text-[#8B7E74]">
-                      먼저 위에서 이 반 학생 페이지에 보여줄 콘텐츠를 배정해 주세요.
-                    </div>
-                  )}
-                </div>
-
-                {/* Always-visible Attendance List */}
-                <div className="bg-white rounded-[32px] border border-[#E5E3DD] p-8 shadow-sm text-left">
-                  <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-xl font-bold text-[#4A3728] flex items-center gap-2">
-                      <CheckCircle2 className="text-[#8B5E3C]" size={20} />
-                      출석 체크 ({getAttendanceStats(currentLesson).present}명 출석)
-                    </h2>
-                  </div>
-                  <p className="mb-6 text-sm text-[#8B7E74]">
-                    아래 기록은 선택한 날짜에만 저장됩니다.
-                  </p>
-                  <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                    {((currentLesson ? currentLesson.attendance : null) || folder.students?.map(s => ({ studentId: s.id, studentName: s.name, initials: s.initials, status: 'Present' })) || []).map(record => (
-                      <div key={record.studentId} className="flex items-center justify-between p-3 bg-[#FBFBFA] rounded-xl border border-[#F3F2EE]">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-[#EBD9C1] flex items-center justify-center text-[#8B5E3C] font-bold text-xs">
-                            {record.initials}
-                          </div>
-                          <span className="font-bold text-[#4A3728] text-sm">{record.studentName}</span>
-                        </div>
-                        <div className="flex gap-1">
-                          {(['Present', 'Absent', 'Late'] as const).map(status => (
-                            <button
-                              key={status}
-                              onClick={() => updateAttendance(record.studentId, status)}
-                              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
-                                record.status === status
-                                  ? status === 'Present' ? 'bg-[#D1F3E0] text-[#2D7A4D]' : status === 'Absent' ? 'bg-[#F3D1D1] text-[#7A2D2D]' : 'bg-[#F3EBD1] text-[#7A6A2D]'
-                                  : 'bg-white border border-[#E5E3DD] text-[#8B7E74] hover:bg-[#F3F2EE]'
-                              }`}
-                            >
-                              {status === 'Present' ? '출석' : status === 'Absent' ? '결석' : '지각'}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                    {(!folder.students || folder.students.length === 0) && (
-                      <div className="py-6 text-center text-sm text-[#8B7E74]">명단이 없습니다. 학생 명단 관리 탭에서 학생을 추가하세요.</div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Right Column (span 1) */}
-              <div className="space-y-8">
-                {/* Small Calendar Card */}
-                <div className="bg-white p-6 rounded-[32px] border border-[#E5E3DD] shadow-sm">
-                  <div className="flex items-center justify-between mb-6">
-                    <h3 className="font-bold text-[#4A3728]">
-                      {viewMonth.getFullYear()}년 {viewMonth.getMonth() + 1}월
-                    </h3>
-                    <div className="flex gap-1">
-                      <button 
-                        onClick={() => setViewMonth(new Date(viewMonth.setMonth(viewMonth.getMonth() - 1)))}
-                        className="p-1.5 hover:bg-[#F3F2EE] rounded-lg text-[#8B7E74] transition-all"
-                      >
-                        <ChevronLeft size={16} />
-                      </button>
-                      <button 
-                        onClick={() => setViewMonth(new Date(viewMonth.setMonth(viewMonth.getMonth() + 1)))}
-                        className="p-1.5 hover:bg-[#F3F2EE] rounded-lg text-[#8B7E74] transition-all"
-                      >
-                        <ChevronRight size={16} />
-                      </button>
-                    </div>
-                  </div>
-
-                  <p className="mb-4 text-xs font-medium text-[#8B7E74]">
-                    날짜를 선택해서 출석과 메모를 따로 기록하세요.
-                  </p>
-                  <div className="grid grid-cols-7 gap-1 mb-2">
-                    {weekDays.map(day => (
-                      <div key={day} className="text-center text-[10px] font-bold text-[#A89F94] py-1">
-                        {day}
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="grid grid-cols-7 gap-1">
-                    {calendarDays.map((date, idx) => {
-                      if (!date) return <div key={`empty-${idx}`} className="h-8" />;
-                      
-                      const dateStr = getLocalDateString(date);
-                      const isSelected = dateStr === selectedDate;
-                      const isToday = dateStr === getLocalDateString(new Date());
-                      const hasLesson = folderLessons.some((lesson) => lesson.date === dateStr);
-
-                      return (
-                        <button
-                          key={dateStr}
-                          onClick={() => setSelectedDate(dateStr)}
-                          className={`h-8 w-full rounded-lg text-xs font-bold transition-all relative flex items-center justify-center ${
-                            isSelected 
-                              ? 'bg-[#8B5E3C] text-white shadow-md shadow-[#8B5E3C]/20' 
-                              : isToday 
-                                ? 'text-[#8B5E3C] bg-[#FFF5E9]' 
-                                : 'text-[#4A3728] hover:bg-[#F3F2EE]'
-                          }`}
-                        >
-                          {date.getDate()}
-                          {hasLesson && !isSelected && (
-                            <div className="absolute bottom-1 w-1 h-1 bg-[#8B5E3C] rounded-full" />
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Always-visible Memo Card */}
-                <div className="bg-white rounded-[32px] border border-[#E5E3DD] p-6 shadow-sm text-left flex flex-col h-[300px]">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-bold text-[#4A3728] flex items-center gap-2">
-                      <MessageSquare className="text-[#8B5E3C]" size={18} />
-                      오늘의 수업 메모
-                    </h2>
-                  </div>
-                  <p className="mb-4 text-sm text-[#8B7E74]">
-                    메모도 선택한 날짜에만 저장됩니다.
-                  </p>
-                  <textarea
-                    value={localMemo}
-                    onChange={(e) => setLocalMemo(e.target.value)}
-                    onBlur={handleSaveMemo}
-                    placeholder="특이사항이나 메모를 자유롭게 남기세요 (자동 저장)"
-                    className="flex-1 w-full p-4 bg-[#FBFBFA] border border-[#F3F2EE] rounded-2xl text-sm outline-none focus:border-[#8B5E3C] transition-all resize-none custom-scrollbar"
-                  />
-                </div>
-              </div>
-            </motion.div>
-          ) : activeTab === 'students' ? (
-            <motion.div 
-              key="students"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="bg-white rounded-[40px] border border-[#E5E3DD] p-10 shadow-sm text-left"
-            >
-              <div className="flex items-center justify-between mb-8">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-[#F3F2EE] rounded-xl flex items-center justify-center text-[#8B5E3C]">
-                    <Users size={20} />
-                  </div>
-                  <h2 className="text-2xl font-bold">학생 명단 ({students.length}명)</h2>
-                </div>
-              </div>
-
-              <div className="flex gap-4 mb-8">
-                <div className="flex-1 grid grid-cols-2 gap-3">
-                  <div className="relative col-span-2">
-                    <input 
-                      type="text" 
-                      value={newStudentName}
-                      onChange={(e) => setNewStudentName(e.target.value)}
-                      disabled={isSavingStudentAction}
-                      placeholder="이름 (필수)"
-                      className="w-full pl-10 pr-4 py-3 bg-[#FBFBFA] border border-[#E5E3DD] rounded-2xl focus:outline-none focus:border-[#8B5E3C] transition-all text-sm"
-                    />
-                    <UserPlus size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A89F94]" />
-                  </div>
-                  <input 
-                    type="text" 
-                    value={newStudentAge}
-                    onChange={(e) => setNewStudentAge(e.target.value)}
-                    disabled={isSavingStudentAction}
-                    placeholder="나이"
-                    className="w-full px-4 py-3 bg-[#FBFBFA] border border-[#E5E3DD] rounded-2xl focus:outline-none focus:border-[#8B5E3C] transition-all text-sm"
-                  />
-                  <input 
-                    type="text" 
-                    value={newStudentContact}
-                    onChange={(e) => setNewStudentContact(e.target.value)}
-                    disabled={isSavingStudentAction}
-                    placeholder="연락처"
-                    className="w-full px-4 py-3 bg-[#FBFBFA] border border-[#E5E3DD] rounded-2xl focus:outline-none focus:border-[#8B5E3C] transition-all text-sm"
-                  />
-                  <textarea
-                    value={newStudentMemo}
-                    onChange={(e) => setNewStudentMemo(e.target.value)}
-                    disabled={isSavingStudentAction}
-                    placeholder="기타 메모"
-                    rows={2}
-                    className="col-span-2 w-full px-4 py-3 bg-[#FBFBFA] border border-[#E5E3DD] rounded-2xl focus:outline-none focus:border-[#8B5E3C] transition-all text-sm resize-none"
-                  />
-                </div>
-                <button 
-                  onClick={() => void handleAddStudent()}
-                  disabled={isSavingStudentAction || !newStudentName.trim()}
-                  className="px-6 py-4 bg-[#8B5E3C] text-white rounded-2xl font-bold hover:bg-[#724D31] transition-all self-start shadow-md disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-[#8B5E3C]"
-                >
-                  {studentAction === 'add' ? '저장 중...' : '추가'}
-                </button>
-              </div>
-
-              {studentSaveError && (
-                <p className="mb-6 text-sm font-medium text-red-500">{studentSaveError}</p>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {students.map((student, idx) => (
-                  <motion.div 
-                    key={student.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: idx * 0.05 }}
-                    className="bg-[#FBFBFA] rounded-2xl border border-[#F3F2EE] group overflow-hidden"
-                  >
-                    {/* Card Header */}
-                    <div
-                      className="flex items-center justify-between p-4 cursor-pointer hover:bg-[#F3F2EE] transition-all"
-                      onClick={() => setExpandedStudent(expandedStudent === student.id ? null : student.id)}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-[#EBD9C1] rounded-full flex items-center justify-center text-[#8B5E3C] font-bold text-xs flex-shrink-0">
-                          {student.initials}
-                        </div>
-                        <div>
-                          <span className="font-bold text-[#4A3728] block">{student.name}</span>
-                          {(student.age || student.contact) && (
-                            <span className="text-xs text-[#A89F94]">{[student.age ? student.age + '세' : null, student.contact].filter(Boolean).join(' · ')}</span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void handleRemoveStudent(student);
-                          }}
-                          disabled={isSavingStudentAction}
-                          className="w-7 h-7 flex items-center justify-center rounded-full text-[#A89F94] hover:bg-red-100 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#A89F94]"
-                          title="학생 삭제"
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Expanded Detail / Edit Panel */}
-                    <AnimatePresence>
-                      {expandedStudent === student.id && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.2 }}
-                          className="px-4 pb-4 border-t border-[#F3F2EE] overflow-hidden"
-                        >
-                          {editingStudent?.id === student.id ? (
-                            <div className="pt-4 space-y-2">
-                              <input
-                                value={editingStudent.name}
-                                onChange={(e) => setEditingStudent({ ...editingStudent, name: e.target.value })}
-                                disabled={isSavingStudentAction}
-                                placeholder="이름"
-                                className="w-full px-3 py-2 border border-[#E5E3DD] rounded-xl text-sm focus:outline-none focus:border-[#8B5E3C]"
-                              />
-                              <div className="grid grid-cols-2 gap-2">
-                                <input
-                                  value={editingStudent.age || ''}
-                                  onChange={(e) => setEditingStudent({ ...editingStudent, age: e.target.value })}
-                                  disabled={isSavingStudentAction}
-                                  placeholder="나이"
-                                  className="px-3 py-2 border border-[#E5E3DD] rounded-xl text-sm focus:outline-none focus:border-[#8B5E3C]"
-                                />
-                                <input
-                                  value={editingStudent.contact || ''}
-                                  onChange={(e) => setEditingStudent({ ...editingStudent, contact: e.target.value })}
-                                  disabled={isSavingStudentAction}
-                                  placeholder="연락처"
-                                  className="px-3 py-2 border border-[#E5E3DD] rounded-xl text-sm focus:outline-none focus:border-[#8B5E3C]"
-                                />
-                              </div>
-                              <textarea
-                                value={editingStudent.memo || ''}
-                                onChange={(e) => setEditingStudent({ ...editingStudent, memo: e.target.value })}
-                                disabled={isSavingStudentAction}
-                                placeholder="기타 메모"
-                                rows={2}
-                                className="w-full px-3 py-2 border border-[#E5E3DD] rounded-xl text-sm focus:outline-none focus:border-[#8B5E3C] resize-none"
-                              />
-                              <div className="flex gap-2 pt-1">
-                                <button
-                                  onClick={() => void handleSaveStudentEdit(editingStudent)}
-                                  disabled={isSavingStudentAction || !editingStudent.name.trim()}
-                                  className="flex-1 py-2 bg-[#8B5E3C] text-white font-bold text-sm rounded-xl hover:bg-[#724D31] transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-[#8B5E3C]"
-                                >{studentAction === 'edit' ? '저장 중...' : '저장'}</button>
-                                <button
-                                  onClick={() => setEditingStudent(null)}
-                                  disabled={isSavingStudentAction}
-                                  className="px-4 py-2 bg-[#F3F2EE] text-[#8B7E74] font-bold text-sm rounded-xl hover:bg-[#E5E3DD] transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-[#F3F2EE]"
-                                >취소</button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="pt-4 space-y-2 text-sm">
-                              {student.age && <div className="flex items-center gap-2 text-[#8B7E74]"><span className="text-[#A89F94] w-12">나이</span><span className="text-[#4A3728] font-medium">{student.age}세</span></div>}
-                              {student.contact && <div className="flex items-center gap-2 text-[#8B7E74]"><span className="text-[#A89F94] w-12">연락처</span><span className="text-[#4A3728] font-medium">{student.contact}</span></div>}
-                              {student.memo && <div className="flex items-start gap-2 text-[#8B7E74]"><span className="text-[#A89F94] w-12">메모</span><span className="text-[#4A3728] font-medium">{student.memo}</span></div>}
-                              {!student.age && !student.contact && !student.memo && (
-                                <p className="text-[#A89F94] italic">추가 정보 없음</p>
-                              )}
-                              <div className="mt-4 border-t border-[#F3F2EE] pt-4">
-                                <p className="mb-2 text-[11px] font-bold tracking-wide text-[#A89F94]">반 이동</p>
-                                {availableMoveFolders.length > 0 ? (
-                                  <div className="flex gap-2">
-                                    <select
-                                      value={studentMoveTargets[student.id] || defaultMoveTargetId}
-                                      onChange={(e) => {
-                                        const nextTargetId = e.target.value;
-                                        setStudentMoveTargets((currentTargets) => ({
-                                          ...currentTargets,
-                                          [student.id]: nextTargetId
-                                        }));
-                                      }}
-                                      disabled={isSavingStudentAction}
-                                      className="flex-1 rounded-xl border border-[#E5E3DD] bg-white px-3 py-2 text-sm text-[#4A3728] outline-none focus:border-[#8B5E3C] disabled:cursor-not-allowed"
-                                    >
-                                      {availableMoveFolders.map(targetFolder => (
-                                        <option key={targetFolder.id} value={targetFolder.id}>
-                                          {targetFolder.name}
-                                        </option>
-                                      ))}
-                                    </select>
-                                    <button
-                                      type="button"
-                                      onClick={() => void handleMoveStudent(student)}
-                                      disabled={isSavingStudentAction || !(studentMoveTargets[student.id] || defaultMoveTargetId)}
-                                      className="px-4 py-2 bg-[#FFF5E9] text-[#8B5E3C] font-bold text-xs rounded-xl hover:bg-[#EBD9C1] transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-[#FFF5E9]"
-                                    >
-                                      {studentAction === 'move' ? '이동 중...' : '반 이동'}
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <p className="text-xs text-[#A89F94]">이동 가능한 다른 반이 없습니다.</p>
-                                )}
-                              </div>
-                              <button
-                                disabled={isSavingStudentAction}
-                                onClick={() => setEditingStudent({ ...student })}
-                                className="mt-2 px-4 py-1.5 bg-[#F3F2EE] text-[#8B5E3C] font-bold text-xs rounded-xl hover:bg-[#EBD9C1] transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-[#F3F2EE]"
-                              >수정</button>
-                            </div>
-                          )}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </motion.div>
-                ))}
-              </div>
-            </motion.div>
-          ) : activeTab === 'settings' ? (
-            <motion.div
-              key="settings"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="bg-white rounded-[40px] border border-[#E5E3DD] p-10 shadow-sm text-left"
-            >
-              <div className="flex items-center justify-between mb-8">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-[#F3F2EE] rounded-xl flex items-center justify-center text-[#8B5E3C]">
-                    <Settings size={20} />
-                  </div>
-                  <h2 className="text-2xl font-bold">클래스 설정</h2>
-                </div>
-                <button
-                  onClick={() => {
-                    onUpdateFolder?.(folder.id, settingsDraft);
-                    alert("설정이 저장되었습니다.");
-                  }}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-[#8B5E3C] text-white font-bold text-sm rounded-xl hover:bg-[#724D31] transition-all"
-                >
-                  <Save size={16} />
-                  저장
-                </button>
-              </div>
-
-              {/* Class Name */}
-              <div className="mb-10">
-                <div className="flex items-center gap-2 mb-4">
-                  <Edit3 size={18} className="text-[#8B5E3C]" />
-                  <h3 className="font-bold text-lg text-[#4A3728]">클래스 이름</h3>
-                </div>
-                <input
-                  type="text"
-                  value={settingsDraft.name}
-                  onChange={(e) => setSettingsDraft({ ...settingsDraft, name: e.target.value })}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                  }}
-                  className="w-full px-5 py-3.5 border-2 border-[#E5E3DD] rounded-2xl text-lg font-bold text-[#4A3728] focus:outline-none focus:border-[#8B5E3C] transition-all"
-                  placeholder="클래스 이름을 입력하세요"
-                />
-              </div>
-
-              {/* Color Picker */}
-              <div className="mb-10">
-                <div className="flex items-center gap-2 mb-4">
-                  <Palette size={18} className="text-[#8B5E3C]" />
-                  <h3 className="font-bold text-lg text-[#4A3728]">테마 컬러</h3>
-                </div>
-                <div className="grid grid-cols-4 gap-3">
-                  {FOLDER_COLORS.map(c => {
-                    const isSelected = settingsDraft.color === c.value;
-                    return (
-                      <button
-                        key={c.value}
-                        onClick={() => setSettingsDraft({ ...settingsDraft, color: c.value })}
-                        className={`flex items-center gap-3 p-4 rounded-2xl border-2 transition-all ${
-                          isSelected
-                            ? 'border-current shadow-md scale-[1.02]'
-                            : 'border-transparent hover:border-[#E5E3DD]'
-                        }`}
-                        style={{ 
-                          backgroundColor: c.bg,
-                          color: c.value,
-                          borderColor: isSelected ? c.value : undefined
-                        }}
-                      >
-                        <div 
-                          className="w-8 h-8 rounded-full flex items-center justify-center"
-                          style={{ backgroundColor: c.value }}
-                        >
-                          {isSelected && <CheckCircle2 size={16} className="text-white" />}
-                        </div>
-                        <span className="font-bold text-sm" style={{ color: c.value }}>{c.name}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Icon Picker */}
-              <div>
-                <div className="flex items-center gap-2 mb-4">
-                  <Star size={18} className="text-[#8B5E3C]" />
-                  <h3 className="font-bold text-lg text-[#4A3728]">아이콘</h3>
-                </div>
-                <div className="grid grid-cols-4 md:grid-cols-6 gap-3">
-                  {FOLDER_ICONS.map(ic => {
-                    const IconComp = iconMap[ic.icon];
-                    const isSelected = settingsDraft.icon === ic.icon;
-                    const folderColor = settingsDraft.color;
-                    return (
-                      <button
-                        key={ic.icon}
-                        onClick={() => setSettingsDraft({ ...settingsDraft, icon: ic.icon })}
-                        className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${
-                          isSelected
-                            ? 'shadow-md scale-[1.02]'
-                            : 'border-transparent hover:border-[#E5E3DD] bg-[#FBFBFA]'
-                        }`}
-                        style={{
-                          borderColor: isSelected ? folderColor : undefined,
-                          backgroundColor: isSelected ? FOLDER_COLORS.find(c => c.value === folderColor)?.bg || '#FFF5E9' : undefined
-                        }}
-                      >
-                        {IconComp && <IconComp size={24} className={isSelected ? '' : 'text-[#A89F94]'} style={isSelected ? { color: folderColor } : undefined} />}
-                        <span className={`text-xs font-bold ${isSelected ? '' : 'text-[#A89F94]'}`} style={isSelected ? { color: folderColor } : undefined}>{ic.name}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Preview */}
-              <div className="mt-10 p-6 bg-[#FBFBFA] rounded-2xl border border-[#F3F2EE]">
-                <p className="text-xs font-bold text-[#A89F94] mb-3">미리보기</p>
-                <div className="flex items-center gap-4">
-                  <div 
-                    className="w-14 h-14 rounded-2xl flex items-center justify-center"
-                    style={{ backgroundColor: FOLDER_COLORS.find(c => c.value === settingsDraft.color)?.bg || '#FFF5E9' }}
-                  >
-                    {(() => {
-                      const IconComp = iconMap[settingsDraft.icon];
-                      return IconComp ? <IconComp size={28} style={{ color: settingsDraft.color }} /> : null;
-                    })()}
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-lg" style={{ color: settingsDraft.color }}>{settingsDraft.name}</h4>
-                    <p className="text-sm text-[#A89F94]">학생 {folder.students?.length || 0}명</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Danger Zone */}
-              <div className="mt-10 p-6 bg-red-50 rounded-2xl border border-red-100">
-                <div className="flex items-center gap-2 mb-3">
-                  <AlertCircle size={18} className="text-red-500" />
-                  <h3 className="font-bold text-lg text-red-600">위험 영역</h3>
-                </div>
-                <p className="text-sm text-red-400 mb-4">클래스를 삭제하면 수업 기록, 학생 명단 등 모든 데이터가 영구적으로 삭제됩니다.</p>
-                <button
-                  onClick={() => {
-                    const msg = "'" + folder.name + "' 클래스를 정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.";
-                    if (window.confirm(msg)) {
-                      onDeleteFolder?.(folder.id);
-                    }
-                  }}
-                  className="px-6 py-3 bg-red-500 text-white font-bold text-sm rounded-xl hover:bg-red-600 transition-all"
-                >
-                  클래스 삭제
-                </button>
-              </div>
-            </motion.div>
-          ) : null}
+          {activeTab === 'dashboard'
+            ? renderDashboardTab()
+            : activeTab === 'students'
+              ? renderStudentsTab()
+              : renderSettingsTab()}
         </AnimatePresence>
       </div>
     </main>

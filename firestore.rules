@@ -51,6 +51,29 @@ service cloud.firestore {
              data.ownerUid == request.auth.uid;
     }
 
+    function isValidFolderDateRecord(data) {
+      return data.keys().hasAll([
+               'folderId',
+               'folderName',
+               'date',
+               'ownerUid',
+               'contentIds',
+               'attendance',
+               'memo',
+               'createdAt',
+               'updatedAt'
+             ]) &&
+             data.folderId is string &&
+             data.folderName is string &&
+             data.date is string &&
+             data.contentIds is list &&
+             data.attendance is list &&
+             data.memo is string &&
+             data.createdAt is string &&
+             data.updatedAt is string &&
+             data.ownerUid == request.auth.uid;
+    }
+
     function isValidMemo(data) {
       return data.keys().hasAll(['content', 'date', 'ownerUid']) &&
              data.content is string && data.content.size() > 0 && data.content.size() < 5000 &&
@@ -93,6 +116,13 @@ service cloud.firestore {
     match /lessons/{lessonId} {
       allow read: if true;
       allow create: if isAdmin() && isValidLesson(request.resource.data);
+      allow update: if isDocOwner() || isAdmin();
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /folderDateRecords/{recordId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidFolderDateRecord(request.resource.data);
       allow update: if isDocOwner() || isAdmin();
       allow delete: if isDocOwner() || isAdmin();
     }

@@ -3,10 +3,16 @@ import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { Dashboard } from './components/Dashboard';
 import { MemoSection } from './components/MemoSection';
-import { LessonDetail } from './components/LessonDetail';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { StudentPage } from './components/StudentPage';
-import { LessonFolder, Memo, Lesson, Student, LessonCategory, LessonContent } from './types';
+import {
+  FolderDateRecord,
+  LessonFolder,
+  Memo,
+  Student,
+  LessonCategory,
+  LessonContent,
+} from './types';
 import {
   auth, 
   db, 
@@ -32,7 +38,7 @@ import { FolderDashboard } from './components/FolderDashboard';
 import { ContentLibrary, CONTENT_EDIT_DISCARD_WARNING } from './components/ContentLibrary';
 import { resolveAppPath } from './utils/appPaths';
 import { normalizeAssignedContentIds } from './utils/folderContentAssignments';
-import { normalizeLessonContentIds } from './utils/lessonRecordContent';
+import { normalizeFolderDateRecordContentIds } from './utils/folderDateRecordContent';
 
 type GoogleSheetsSyncRequest = {
   folderId: string;
@@ -52,7 +58,7 @@ type ContentReorderUpdate = {
   order: number;
 };
 
-type AdminTab = 'home' | 'memo' | 'lesson-detail' | 'folder-management' | 'content-library';
+type AdminTab = 'home' | 'memo' | 'folder-management' | 'content-library';
 
 const UNCATEGORIZED_CATEGORY_ID = null;
 const MISC_CATEGORY_NAME = '기타';
@@ -117,12 +123,11 @@ export default function App() {
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [folders, setFolders] = useState<LessonFolder[]>([]);
   const [memos, setMemos] = useState<Memo[]>([]);
-  const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [folderDateRecords, setFolderDateRecords] = useState<FolderDateRecord[]>([]);
   const [categories, setCategories] = useState<LessonCategory[]>([]);
   const [contents, setContents] = useState<LessonContent[]>([]);
   const [activeTab, setActiveTab] = useState<AdminTab>('home');
   const [viewMode, setViewMode] = useState<'admin' | 'student'>('student');
-  const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
   const [activeFolder, setActiveFolder] = useState<LessonFolder | null>(null);
   const [isContentLibraryDirty, setIsContentLibraryDirty] = useState(false);
   const [googleSheetsSyncError, setGoogleSheetsSyncError] = useState<GoogleSheetsSyncErrorState | null>(null);
@@ -267,7 +272,6 @@ export default function App() {
           assignedContentIds: Array.isArray(data.assignedContentIds)
             ? normalizeAssignedContentIds(data.assignedContentIds)
             : undefined,
-          lessons: [],
         };
       }) as LessonFolder[];
       foldersData.sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -298,25 +302,38 @@ export default function App() {
       setMemos([]);
     }
 
-    // Lessons Listener
-    const lessonsQuery = query(
-      collection(db, 'lessons'),
-      orderBy('date', 'desc')
-    );
-    const unsubscribeLessons = onSnapshot(lessonsQuery, (snapshot) => {
-      const lessonsData = snapshot.docs.map((lessonDoc) => {
-        const data = lessonDoc.data() as Partial<Lesson>;
-        const contentIds = normalizeLessonContentIds(data);
+    let unsubscribeFolderDateRecords = () => {};
+    if (user) {
+      const folderDateRecordsQuery = query(
+        collection(db, 'folderDateRecords'),
+        orderBy('date', 'desc')
+      );
+      unsubscribeFolderDateRecords = onSnapshot(
+        folderDateRecordsQuery,
+        (snapshot) => {
+          const nextFolderDateRecords = snapshot.docs.map((recordDoc) => {
+            const data = recordDoc.data() as Partial<FolderDateRecord>;
+            return {
+              id: recordDoc.id,
+              folderId: data.folderId ?? '',
+              folderName: data.folderName ?? '',
+              ownerUid: data.ownerUid ?? '',
+              date: data.date ?? '',
+              contentIds: normalizeFolderDateRecordContentIds(data),
+              attendance: Array.isArray(data.attendance) ? data.attendance : [],
+              memo: data.memo ?? '',
+              createdAt: data.createdAt ?? '',
+              updatedAt: data.updatedAt ?? '',
+            } satisfies FolderDateRecord;
+          });
 
-        return {
-          id: lessonDoc.id,
-          ...data,
-          contentId: contentIds[0] ?? '',
-          contentIds,
-        };
-      }) as Lesson[];
-      setLessons(lessonsData);
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'lessons'));
+          setFolderDateRecords(nextFolderDateRecords);
+        },
+        (error) => handleFirestoreError(error, OperationType.LIST, 'folderDateRecords')
+      );
+    } else {
+      setFolderDateRecords([]);
+    }
 
     // Categories Listener
     const categoriesQuery = query(
@@ -361,7 +378,7 @@ export default function App() {
     return () => {
       unsubscribeFolders();
       unsubscribeMemos();
-      unsubscribeLessons();
+      unsubscribeFolderDateRecords();
       unsubscribeCategories();
       unsubscribeContents();
     };
@@ -560,14 +577,11 @@ export default function App() {
     if (!user) return;
     try {
       const folderToDelete = folders.find(folder => folder.id === folderId);
-      // Delete all lessons belonging to this folder
-      const folderLessons = lessons.filter(l => l.folderId === folderId);
-      for (const lesson of folderLessons) {
-        await deleteDoc(doc(db, 'lessons', lesson.id));
+      const recordsToDelete = folderDateRecords.filter((record) => record.folderId === folderId);
+      for (const record of recordsToDelete) {
+        await deleteDoc(doc(db, 'folderDateRecords', record.id));
       }
-      // Delete the folder itself
       await deleteDoc(doc(db, 'folders', folderId));
-      // Navigate back to home
       setActiveFolder(null);
       setActiveTab('home');
       triggerGoogleSheetsSync([{
@@ -715,57 +729,41 @@ export default function App() {
     }
   };
 
-  const handleCreateLesson = (folderId?: string, date?: string) => {
-    const targetFolder = folderId ? folders.find(f => f.id === folderId) : folders[0];
-    if (targetFolder) {
-      runWithContentLibraryNavigationGuard(() => {
-        setActiveFolder(targetFolder);
-        setSelectedLesson(null); // Ensure we start fresh
-        setActiveTab('folder-management');
-      });
-    }
-  };
-
-  const handleSaveLesson = async (updatedLesson: Lesson) => {
+  const handleSaveFolderDateRecord = async (record: FolderDateRecord) => {
     if (!user) return;
+
     try {
-      const lessonRef = doc(db, 'lessons', (!updatedLesson.id || updatedLesson.id.startsWith('new-')) ? doc(collection(db, 'lessons')).id : updatedLesson.id);
-      const normalizedContentIds = normalizeLessonContentIds(updatedLesson);
-      const { id, ...lessonData } = updatedLesson;
-      
-      // Ensure folderName is correct if folderId changed
-      const folder = folders.find(f => f.id === updatedLesson.folderId);
-      if (folder) {
-        lessonData.folderName = folder.name;
-      }
+      const folder = folders.find((candidate) => candidate.id === record.folderId);
+      const recordId = record.id || `${record.folderId}_${record.date}`;
+      const existingRecord = folderDateRecords.find((candidate) => candidate.id === recordId);
 
-      lessonData.contentIds = normalizedContentIds;
-      lessonData.contentId = normalizedContentIds[0] ?? '';
-
-      await setDoc(lessonRef, {
-        ...lessonData,
-        ownerUid: user.uid,
-        updatedAt: new Date().toISOString()
-      }, { merge: true });
-      
-      if (activeTab === 'lesson-detail') {
-        setActiveTab('home');
-        setSelectedLesson(null);
-      }
+      await setDoc(
+        doc(db, 'folderDateRecords', recordId),
+        {
+          folderId: record.folderId,
+          folderName: folder?.name || record.folderName,
+          date: record.date,
+          contentIds: normalizeFolderDateRecordContentIds(record),
+          attendance: Array.isArray(record.attendance) ? record.attendance : [],
+          memo: record.memo ?? '',
+          ownerUid: user.uid,
+          createdAt: existingRecord?.createdAt || record.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `lessons/${updatedLesson.id}`);
+      handleFirestoreError(error, OperationType.UPDATE, `folderDateRecords/${record.id}`);
     }
   };
 
-  const handleSelectLesson = (lesson: Lesson) => {
-    const targetFolder = folders.find(f => f.id === lesson.folderId);
-    if (targetFolder) {
-      runWithContentLibraryNavigationGuard(() => {
-        setViewMode('admin');
-        setActiveFolder(targetFolder);
-        setSelectedLesson(lesson);
-        setActiveTab('folder-management');
-      });
+  const handleDeleteFolderDateRecord = async (recordId: string) => {
+    if (!user) return;
+
+    try {
+      await deleteDoc(doc(db, 'folderDateRecords', recordId));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `folderDateRecords/${recordId}`);
     }
   };
 
@@ -773,7 +771,6 @@ export default function App() {
     runWithContentLibraryNavigationGuard(() => {
       setViewMode('admin');
       setActiveFolder(folder);
-      setSelectedLesson(null);
       setActiveTab('folder-management');
     });
   };
@@ -793,7 +790,6 @@ export default function App() {
           isAdmin={isAdmin} 
           onBackToAdmin={user ? () => setViewMode('admin') : undefined} 
           onLogin={handleLogin}
-          lessons={lessons}
           folders={folders}
           categories={categories}
           contents={contents}
@@ -854,7 +850,6 @@ export default function App() {
               embeddedInAdminShell
               isAdmin={isAdmin}
               onBackToAdmin={() => setViewMode('admin')}
-              lessons={lessons}
               folders={folders}
               categories={categories}
               contents={contents}
@@ -880,10 +875,9 @@ export default function App() {
           {activeTab === 'home' && (
             <Dashboard 
               folders={folders}
-              onStartLesson={handleCreateLesson} 
-              onSelectLesson={handleSelectLesson}
               onManageFolder={handleManageFolder}
               onGoToLibrary={() => handleTabChange('content-library')}
+              onGoToMemo={() => handleTabChange('memo')}
               onSwitchToStudent={handleSwitchToStudent}
             />
           )}
@@ -891,7 +885,7 @@ export default function App() {
             <MemoSection 
               memos={memos}
               folders={folders}
-              lessons={lessons}
+              dateRecords={folderDateRecords}
               onAddMemo={handleAddMemo} 
               onDeleteMemo={handleDeleteMemo} 
             />
@@ -901,15 +895,13 @@ export default function App() {
               key={activeFolder.id}
               folder={activeFolder}
               folders={folders}
-              lessons={lessons}
+              dateRecords={folderDateRecords}
               categories={categories}
               contents={contents}
-              initialLesson={selectedLesson}
               onSaveStudents={handleSaveStudents}
               onMoveStudent={handleMoveStudent}
-              onSelectLesson={handleSelectLesson}
-              onCreateLesson={handleCreateLesson}
-              onSaveLesson={handleSaveLesson}
+              onSaveDateRecord={handleSaveFolderDateRecord}
+              onDeleteDateRecord={handleDeleteFolderDateRecord}
               onSaveFolderContents={handleSaveFolderContents}
               onGoToLibrary={() => handleTabChange('content-library')}
               onUpdateFolder={handleUpdateFolder}
@@ -929,14 +921,6 @@ export default function App() {
               onDirtyStateChange={setIsContentLibraryDirty}
             />
           )}
-          {activeTab === 'lesson-detail' && (
-              <LessonDetail 
-                lesson={selectedLesson!} 
-                folders={folders}
-                contents={contents}
-                onSave={handleSaveLesson}
-              />
-              )}
             </>
           )}
         </div>
