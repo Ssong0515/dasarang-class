@@ -5,6 +5,7 @@ export const LEGACY_CLASSROOMS_COLLECTION = 'folders';
 export const CLASSROOM_DATE_RECORDS_COLLECTION = 'classroomDateRecords';
 export const LEGACY_CLASSROOM_DATE_RECORDS_COLLECTION = 'folderDateRecords';
 export const STUDENTS_COLLECTION = 'students';
+export const DAILY_REVIEWS_COLLECTION = 'dailyReviews';
 
 const getTrimmedString = (value: unknown) =>
   typeof value === 'string' ? value.trim() : '';
@@ -59,13 +60,41 @@ export const mergeClassroomCollections = <T extends { id: string }>(
   legacyItems: T[]
 ) => {
   const mergedItems = new Map<string, T>();
+  const getUpdatedAtTime = (item: T) => {
+    const updatedAt = (item as { updatedAt?: unknown }).updatedAt;
+    if (typeof updatedAt !== 'string' || updatedAt.trim().length === 0) {
+      return Number.NaN;
+    }
+
+    return new Date(updatedAt).getTime();
+  };
+
+  const setMergedItem = (item: T) => {
+    const existingItem = mergedItems.get(item.id);
+    if (!existingItem) {
+      mergedItems.set(item.id, item);
+      return;
+    }
+
+    const existingUpdatedAt = getUpdatedAtTime(existingItem);
+    const nextUpdatedAt = getUpdatedAtTime(item);
+    const hasComparableTimestamps =
+      Number.isFinite(existingUpdatedAt) && Number.isFinite(nextUpdatedAt);
+
+    if (hasComparableTimestamps) {
+      mergedItems.set(item.id, nextUpdatedAt >= existingUpdatedAt ? item : existingItem);
+      return;
+    }
+
+    mergedItems.set(item.id, item);
+  };
 
   legacyItems.forEach((item) => {
-    mergedItems.set(item.id, item);
+    setMergedItem(item);
   });
 
   nextItems.forEach((item) => {
-    mergedItems.set(item.id, item);
+    setMergedItem(item);
   });
 
   return [...mergedItems.values()];

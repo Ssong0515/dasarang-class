@@ -123,6 +123,23 @@ service cloud.firestore {
              data.ownerUid == request.auth.uid;
     }
 
+    function isValidDailyReview(data) {
+      return data.keys().hasAll([
+               'date',
+               'ownerUid',
+               'summary',
+               'sourceRecordIds',
+               'createdAt',
+               'updatedAt'
+             ]) &&
+             data.date is string &&
+             data.ownerUid == request.auth.uid &&
+             data.summary is string && data.summary.size() > 0 && data.summary.size() < 5000 &&
+             data.sourceRecordIds is list &&
+             data.createdAt is string &&
+             data.updatedAt is string;
+    }
+
     function isValidCategory(data) {
       return data.keys().hasAll(['name', 'ownerUid']) &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
@@ -195,6 +212,13 @@ service cloud.firestore {
       allow create: if isAdmin() && isValidMemo(request.resource.data);
       allow update: if isDocOwner() || isAdmin();
       allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /dailyReviews/{reviewId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin() && isValidDailyReview(request.resource.data);
+      allow update: if isAdmin() && isValidDailyReview(request.resource.data);
+      allow delete: if isAdmin();
     }
 
     match /categories/{categoryId} {

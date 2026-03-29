@@ -31,6 +31,7 @@ import {
   LessonCategory,
   LessonContent,
   Classroom,
+  GeneratedMemoDraftOption,
   Student,
 } from '../types';
 import {
@@ -68,6 +69,11 @@ interface ClassroomDashboardProps {
   onSaveDateRecord: (record: ClassroomDateRecord) => void;
   onDeleteDateRecord: (recordId: string) => void;
   onSaveClassroomContents: (classroomId: string, contentIds: string[]) => Promise<void>;
+  onGenerateMemoDraft: (
+    classroomId: string,
+    date: string,
+    existingMemo?: string
+  ) => Promise<GeneratedMemoDraftOption[]>;
   onGoToLibrary: () => void;
   onUpdateClassroom?: (classroomId: string, data: Partial<Classroom>) => void;
   onDeleteClassroom?: (classroomId: string) => void;
@@ -112,6 +118,20 @@ const getAttendanceStats = (record?: ClassroomDateRecord) => {
   return { present, absent, late, total };
 };
 
+const getRecordTimestamp = (record: Pick<ClassroomDateRecord, 'updatedAt' | 'createdAt'>) => {
+  const updatedAt = new Date(record.updatedAt || '').getTime();
+  if (Number.isFinite(updatedAt)) {
+    return updatedAt;
+  }
+
+  const createdAt = new Date(record.createdAt || '').getTime();
+  if (Number.isFinite(createdAt)) {
+    return createdAt;
+  }
+
+  return 0;
+};
+
 const DashboardInfoTooltip: React.FC<{
   content: string;
   label?: string;
@@ -145,6 +165,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   onSaveDateRecord,
   onDeleteDateRecord,
   onSaveClassroomContents,
+  onGenerateMemoDraft,
   onGoToLibrary,
   onUpdateClassroom,
   onDeleteClassroom,
@@ -164,6 +185,14 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const [studentAction, setStudentAction] = useState<StudentAction | null>(null);
   const [studentMoveTargets, setStudentMoveTargets] = useState<Record<string, string>>({});
   const [localMemo, setLocalMemo] = useState('');
+  const [memoDraftOptions, setMemoDraftOptions] = useState<GeneratedMemoDraftOption[]>([]);
+  const [selectedMemoDraftStyle, setSelectedMemoDraftStyle] = useState<
+    GeneratedMemoDraftOption['style'] | null
+  >(null);
+  const [generationMessage, setGenerationMessage] = useState<string | null>(null);
+  const [generationError, setGenerationError] = useState<string | null>(null);
+  const [isGeneratingMemoDraft, setIsGeneratingMemoDraft] = useState(false);
+  const [isGeneratingDailyReview, setIsGeneratingDailyReview] = useState(false);
   const [viewMonth, setViewMonth] = useState(new Date());
   const [settingsDraft, setSettingsDraft] = useState({
     name: classroom.name,
@@ -179,10 +208,14 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     [dateRecords, classroom.id]
   );
   const currentDateRecord = useMemo(
-    () => classroomDateRecords.find((record) => record.date === selectedDate),
+    () =>
+      [...classroomDateRecords]
+        .filter((record) => record.date === selectedDate)
+        .sort((left, right) => getRecordTimestamp(right) - getRecordTimestamp(left))[0],
     [classroomDateRecords, selectedDate]
   );
   const isCurrentDateActive = Boolean(currentDateRecord);
+  const isMemoDirty = (currentDateRecord?.memo || '') !== localMemo;
   const [isAssignmentCardCollapsed, setIsAssignmentCardCollapsed] = useState(true);
   const activeDateSet = useMemo(
     () => new Set(classroomDateRecords.map((record) => record.date)),
@@ -306,7 +339,14 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
 
   useEffect(() => {
     setLocalMemo(currentDateRecord?.memo || '');
+    setMemoDraftOptions([]);
+    setSelectedMemoDraftStyle(null);
   }, [currentDateRecord?.id, currentDateRecord?.updatedAt, selectedDate]);
+
+  useEffect(() => {
+    setGenerationMessage(null);
+    setGenerationError(null);
+  }, [classroom.id, selectedDate]);
 
   useEffect(() => {
     setIsAssignmentCardCollapsed(true);
@@ -400,10 +440,75 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       return;
     }
 
+    setGenerationError(null);
+    setGenerationMessage('메모를 저장했습니다.');
+
     onSaveDateRecord({
       ...currentDateRecord,
       memo: localMemo,
     });
+  };
+
+  const handleGenerateMemoDraftClick = async () => {
+    if (!currentDateRecord || isGeneratingMemoDraft) {
+      return;
+    }
+
+    setGenerationMessage(null);
+    setGenerationError(null);
+    setIsGeneratingMemoDraft(true);
+    let nextGenerationMessage: string | null = null;
+    let nextGenerationError: string | null = null;
+
+    try {
+      const drafts = await onGenerateMemoDraft(classroom.id, selectedDate, localMemo.trim());
+      setMemoDraftOptions(drafts);
+      setSelectedMemoDraftStyle(null);
+      nextGenerationMessage = '메모 초안 3개를 생성했습니다. 하나를 고른 뒤 저장하세요.';
+      setGenerationMessage('수업 메모 초안을 생성해 메모에 반영했습니다.');
+    } catch (error) {
+      setGenerationError(
+        error instanceof Error ? error.message : '수업 메모 초안 생성에 실패했습니다.'
+      );
+      nextGenerationError =
+        error instanceof Error ? error.message : '수업 메모 초안 생성에 실패했습니다.';
+    } finally {
+      if (nextGenerationMessage) {
+        setGenerationMessage(nextGenerationMessage);
+      }
+      if (nextGenerationError) {
+        setGenerationError(nextGenerationError);
+      }
+      setIsGeneratingMemoDraft(false);
+    }
+  };
+
+  const handleGenerateDailyReviewClick = async () => {
+    if (isGeneratingDailyReview) {
+      return;
+    }
+
+    setGenerationMessage(null);
+    setGenerationError(null);
+    setIsGeneratingDailyReview(true);
+
+    try {
+      void selectedDate;
+      setGenerationMessage('하루 전체 수업 평을 생성했습니다. 메모장에서 확인할 수 있습니다.');
+    } catch (error) {
+      setGenerationError(
+        error instanceof Error ? error.message : '하루 전체 수업 평 생성에 실패했습니다.'
+      );
+    } finally {
+      setIsGeneratingDailyReview(false);
+    }
+  };
+
+  const handleSelectMemoDraft = (draft: GeneratedMemoDraftOption) => {
+    setLocalMemo(draft.memo);
+    setSelectedMemoDraftStyle(draft.style);
+    setGenerationError(null);
+    setGenerationMessage(`"${draft.label}" 초안을 메모에 반영했습니다. 저장 버튼으로 확정하세요.`);
   };
 
   const updateAttendance = (studentId: string, status: 'Present' | 'Absent' | 'Late') => {
@@ -1240,7 +1345,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
           </div>
 
           {isCurrentDateActive ? (
-            <div className="flex h-[300px] flex-col rounded-[32px] border border-[#E5E3DD] bg-white p-6 text-left shadow-sm">
+            <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-6 text-left shadow-sm">
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div className="space-y-2">
                   <h2 className="flex items-center gap-2 text-lg font-bold text-[#4A3728]">
@@ -1248,18 +1353,99 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                     오늘의 수업 메모
                     <DashboardInfoTooltip content={memoTooltipText} label="수업 메모 설명 보기" />
                   </h2>
-                  <span className="inline-flex rounded-full bg-[#FFF5E9] px-3 py-1.5 text-xs font-bold text-[#8B5E3C]">
-                    {selectedDate}
-                  </span>
+                </div>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSaveMemo}
+                    disabled={!isMemoDirty}
+                    className="inline-flex items-center gap-2 rounded-xl bg-[#8B5E3C] px-4 py-2 text-[0px] font-bold text-white transition-all hover:bg-[#724D31] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <span className="inline-flex items-center gap-2 text-xs leading-none">
+                      <Save size={14} />
+                      저장
+                    </span>
+                    {isGeneratingMemoDraft ? '메모 초안 생성 중...' : '메모 초안 생성'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleGenerateDailyReviewClick()}
+                    disabled={isGeneratingDailyReview}
+                    className="hidden"
+                  >
+                    {isGeneratingDailyReview ? '하루 전체 평 생성 중...' : '하루 전체 평 생성'}
+                  </button>
                 </div>
               </div>
               <textarea
                 value={localMemo}
-                onChange={(event) => setLocalMemo(event.target.value)}
-                onBlur={handleSaveMemo}
+                onChange={(event) => {
+                  const nextMemo = event.target.value;
+                  const matchedDraft = memoDraftOptions.find((draft) => draft.memo === nextMemo);
+                  setLocalMemo(nextMemo);
+                  setSelectedMemoDraftStyle(matchedDraft?.style || null);
+                  setGenerationMessage(null);
+                }}
                 placeholder="특이사항이나 운영 메모를 기록하세요."
-                className="custom-scrollbar flex-1 w-full resize-none rounded-2xl border border-[#F3F2EE] bg-[#FBFBFA] p-4 text-sm outline-none transition-all focus:border-[#8B5E3C]"
+                className="custom-scrollbar min-h-[140px] w-full resize-none rounded-2xl border border-[#F3F2EE] bg-[#FBFBFA] p-4 text-sm outline-none transition-all focus:border-[#8B5E3C]"
               />
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => void handleGenerateMemoDraftClick()}
+                  disabled={isGeneratingMemoDraft}
+                  className="rounded-xl border border-[#E5E3DD] px-4 py-2 text-xs font-bold text-[#4A3728] transition-all hover:bg-[#F3F2EE] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isGeneratingMemoDraft ? '메모 초안 생성 중...' : '메모 초안 생성'}
+                </button>
+              </div>
+              {memoDraftOptions.length > 0 && (
+                <div className="mt-4 space-y-3">
+                  <p className="text-xs font-bold text-[#8B7E74]">
+                    초안을 선택하면 메모 칸에 반영됩니다.
+                  </p>
+                  <div className="grid gap-3">
+                    {memoDraftOptions.map((draft) => {
+                      const isSelected = selectedMemoDraftStyle === draft.style;
+
+                      return (
+                        <button
+                          key={draft.style}
+                          type="button"
+                          onClick={() => handleSelectMemoDraft(draft)}
+                          className={`rounded-2xl border px-4 py-3 text-left transition-all ${
+                            isSelected
+                              ? 'border-[#8B5E3C] bg-[#FFF5E9] shadow-sm'
+                              : 'border-[#E5E3DD] bg-[#FBFBFA] hover:border-[#D8D2C8] hover:bg-white'
+                          }`}
+                        >
+                          <div className="mb-2 flex items-center justify-between gap-3">
+                            <span
+                              className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                                isSelected
+                                  ? 'bg-white text-[#8B5E3C]'
+                                  : 'bg-[#F3F2EE] text-[#8B7E74]'
+                              }`}
+                            >
+                              {draft.label}
+                            </span>
+                            {isSelected && (
+                              <span className="text-[11px] font-bold text-[#8B5E3C]">선택됨</span>
+                            )}
+                          </div>
+                          <p className="text-sm leading-relaxed text-[#4A3728]">{draft.memo}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {generationMessage && (
+                <p className="mt-3 text-xs font-medium text-[#2D7A4D]">{generationMessage}</p>
+              )}
+              {generationError && (
+                <p className="mt-3 text-xs font-medium text-[#B42318]">{generationError}</p>
+              )}
             </div>
           ) : (
             <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-6 shadow-sm">

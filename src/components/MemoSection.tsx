@@ -1,21 +1,52 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, Trash2, Calendar, StickyNote, Users, BookOpen } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import { ClassroomDateRecord, Memo, Classroom } from '../types';
+import {
+  BookOpen,
+  Calendar,
+  ClipboardList,
+  type LucideIcon,
+  Plus,
+  StickyNote,
+  Trash2,
+  Users,
+} from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
+import { Classroom, ClassroomDateRecord, DailyReview, Memo } from '../types';
 import { normalizeClassroomDateRecordContentIds } from '../utils/classroomDateRecordContent';
 
 interface MemoSectionProps {
   memos: Memo[];
+  dailyReviews?: DailyReview[];
   classrooms?: Classroom[];
   classroomDateRecords?: ClassroomDateRecord[];
   onAddMemo: (content: string) => void;
   onDeleteMemo: (id: string) => void;
 }
 
-type Tab = 'general' | 'date-records' | 'students';
+type Tab = 'general' | 'date-records' | 'students' | 'daily-reviews';
+
+const TEXT = {
+  title: '\uba54\ubaa8\uc7a5',
+  subtitle:
+    '\uc6b4\uc601 \uba54\ubaa8\uc640 \ub0a0\uc9dc\ubcc4 \uc218\uc5c5 \uba54\ubaa8, \ud559\uc0dd\ubcc4 \uba54\ubaa8\ub97c \ud55c\uacf3\uc5d0\uc11c \ubd05\ub2c8\ub2e4.',
+  newMemoPlaceholder: '\uc0c8 \uba54\ubaa8\ub97c \uc785\ub825\ud558\uc138\uc694.',
+  saveMemo: '\uba54\ubaa8 \uc800\uc7a5',
+  dailyReviewTab: '\ud558\ub8e8 \uc804\uccb4 \ud3c9',
+  dateRecordTab: '\uc218\uc5c5\ubcc4 \uba54\ubaa8',
+  studentTab: '\ud559\uc0dd\ubcc4 \uba54\ubaa8',
+  generalTab: '\uae30\ud0c0 \uba54\ubaa8',
+  dailyReviewBadge: '\ud558\ub8e8 \uc804\uccb4 \uc218\uc5c5 \ud3c9',
+  dailyReviewSuffix: '\uac1c \uc218\uc5c5 \uae30\ub85d \uae30\uc900',
+  noDailyReview: '\uc544\uc9c1 \uc0dd\uc131\ub41c \ud558\ub8e8 \uc804\uccb4 \uc218\uc5c5 \ud3c9\uc774 \uc5c6\uc2b5\ub2c8\ub2e4.',
+  noGeneralMemo: '\uc544\uc9c1 \uc791\uc131\ub41c \uae30\ud0c0 \uba54\ubaa8\uac00 \uc5c6\uc2b5\ub2c8\ub2e4.',
+  noDateRecordMemo: '\ud65c\uc131 \ub0a0\uc9dc\uc5d0 \uc791\uc131\ub41c \uc218\uc5c5 \uba54\ubaa8\uac00 \uc5c6\uc2b5\ub2c8\ub2e4.',
+  noStudentMemo: '\ud559\uc0dd\ubcc4\ub85c \uc791\uc131\ub41c \uba54\ubaa8\uac00 \uc5c6\uc2b5\ub2c8\ub2e4.',
+  recordedContentCountSuffix: '\uac1c \uc218\uc5c5 \ucf58\ud150\uce20',
+  noRecordedContent: '\uc9c4\ud589 \ucf58\ud150\uce20 \ubbf8\uc120\ud0dd',
+};
 
 export const MemoSection: React.FC<MemoSectionProps> = ({
   memos,
+  dailyReviews = [],
   classrooms = [],
   classroomDateRecords = [],
   onAddMemo,
@@ -62,12 +93,44 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
 
   const isGeneralTab = activeTab === 'general';
 
+  const tabs: Array<{
+    id: Tab;
+    label: string;
+    icon: LucideIcon;
+    count: number;
+  }> = [
+    {
+      id: 'daily-reviews',
+      label: TEXT.dailyReviewTab,
+      icon: ClipboardList,
+      count: dailyReviews.length,
+    },
+    {
+      id: 'date-records',
+      label: TEXT.dateRecordTab,
+      icon: BookOpen,
+      count: dateRecordMemos.length,
+    },
+    {
+      id: 'students',
+      label: TEXT.studentTab,
+      icon: Users,
+      count: studentMemos.length,
+    },
+    {
+      id: 'general',
+      label: TEXT.generalTab,
+      icon: StickyNote,
+      count: memos.length,
+    },
+  ];
+
   return (
     <main className="flex-1 overflow-y-auto bg-[#FBFBFA] p-8">
       <div className="mx-auto max-w-4xl">
         <header className="mb-10">
-          <h2 className="mb-2 text-3xl font-serif font-bold text-[#4A3728]">메모장</h2>
-          <p className="text-[#8B7E74]">운영 메모와 날짜별 수업 메모, 학생별 메모를 한곳에서 봅니다.</p>
+          <h2 className="mb-2 text-3xl font-serif font-bold text-[#4A3728]">{TEXT.title}</h2>
+          <p className="text-[#8B7E74]">{TEXT.subtitle}</p>
         </header>
 
         {isGeneralTab && (
@@ -76,7 +139,7 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
               <textarea
                 value={newMemo}
                 onChange={(event) => setNewMemo(event.target.value)}
-                placeholder="새 메모를 입력하세요."
+                placeholder={TEXT.newMemoPlaceholder}
                 className="min-h-[120px] w-full resize-none rounded-2xl border-none bg-[#F3F2EE] p-6 text-[#4A3728] outline-none transition-all placeholder:text-[#A89F94] focus:ring-2 focus:ring-[#8B5E3C]/20"
               />
               <div className="flex justify-end">
@@ -86,7 +149,7 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
                   className="flex items-center gap-2 rounded-xl bg-[#8B5E3C] px-8 py-3 font-bold text-white shadow-lg shadow-[#8B5E3C]/20 transition-all hover:bg-[#724D31] disabled:opacity-50 disabled:shadow-none"
                 >
                   <Plus size={18} />
-                  메모 저장
+                  {TEXT.saveMemo}
                 </button>
               </div>
             </form>
@@ -94,19 +157,10 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
         )}
 
         <div className="mb-8 flex gap-4 border-b border-[#E5E3DD]">
-          {[
-            {
-              id: 'date-records',
-              label: '수업별 메모',
-              icon: BookOpen,
-              count: dateRecordMemos.length,
-            },
-            { id: 'students', label: '학생별 메모', icon: Users, count: studentMemos.length },
-            { id: 'general', label: '기타 메모', icon: StickyNote, count: memos.length },
-          ].map((tab) => (
+          {tabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as Tab)}
+              onClick={() => setActiveTab(tab.id)}
               className={`relative flex items-center gap-2 pb-4 text-sm font-bold transition-all ${
                 activeTab === tab.id ? 'text-[#8B5E3C]' : 'text-[#8B7E74] hover:text-[#4A3728]'
               }`}
@@ -128,6 +182,51 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
 
         <section className="space-y-6">
           <AnimatePresence mode="wait">
+            {activeTab === 'daily-reviews' && (
+              <motion.div
+                key="daily-reviews"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="grid grid-cols-1 gap-6"
+              >
+                {dailyReviews.map((review) => (
+                  <div
+                    key={review.id}
+                    className="rounded-[24px] border border-[#E5E3DD] bg-white p-6 shadow-sm"
+                  >
+                    <div className="mb-4 flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-[#EEF7F0] px-2 py-0.5 text-[10px] font-bold text-[#2D7A4D]">
+                        {TEXT.dailyReviewBadge}
+                      </span>
+                      <span className="flex items-center gap-1 text-[11px] font-bold text-[#A89F94]">
+                        <Calendar size={12} />
+                        {review.date}
+                      </span>
+                      <span className="rounded-full bg-[#F3F2EE] px-2 py-0.5 text-[10px] font-bold text-[#8B7E74]">
+                        {`${review.sourceRecordIds.length}${TEXT.dailyReviewSuffix}`}
+                      </span>
+                    </div>
+                    <div className="flex gap-4">
+                      <div className="mt-1 text-[#D5E8D8]">
+                        <ClipboardList size={20} />
+                      </div>
+                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#4A3728]">
+                        {review.summary}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+
+                {dailyReviews.length === 0 && (
+                  <div className="col-span-full flex flex-col items-center justify-center rounded-[32px] border-2 border-dashed border-[#E5E3DD] bg-[#F3F2EE]/50 py-20 text-[#A89F94]">
+                    <ClipboardList size={48} className="mb-4 opacity-20" />
+                    <p>{TEXT.noDailyReview}</p>
+                  </div>
+                )}
+              </motion.div>
+            )}
+
             {activeTab === 'general' && (
               <motion.div
                 key="general"
@@ -172,7 +271,7 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
                 {memos.length === 0 && (
                   <div className="col-span-1 flex flex-col items-center justify-center rounded-[32px] border-2 border-dashed border-[#E5E3DD] bg-[#F3F2EE]/50 py-20 text-[#A89F94] md:col-span-2">
                     <StickyNote size={48} className="mb-4 opacity-20" />
-                    <p>아직 작성된 기타 메모가 없습니다.</p>
+                    <p>{TEXT.noGeneralMemo}</p>
                   </div>
                 )}
               </motion.div>
@@ -190,8 +289,8 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
                   const recordedContentIds = normalizeClassroomDateRecordContentIds(record);
                   const recordTitle =
                     recordedContentIds.length > 0
-                      ? `${recordedContentIds.length}개 수업 콘텐츠`
-                      : '진행 콘텐츠 미선택';
+                      ? `${recordedContentIds.length}${TEXT.recordedContentCountSuffix}`
+                      : TEXT.noRecordedContent;
 
                   return (
                     <div
@@ -227,7 +326,7 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
                 {dateRecordMemos.length === 0 && (
                   <div className="col-span-full flex flex-col items-center justify-center rounded-[32px] border-2 border-dashed border-[#E5E3DD] bg-[#F3F2EE]/50 py-20 text-[#A89F94]">
                     <BookOpen size={48} className="mb-4 opacity-20" />
-                    <p>활성 날짜에 작성된 수업 메모가 없습니다.</p>
+                    <p>{TEXT.noDateRecordMemo}</p>
                   </div>
                 )}
               </motion.div>
@@ -273,7 +372,7 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
                 {studentMemos.length === 0 && (
                   <div className="col-span-full flex flex-col items-center justify-center rounded-[32px] border-2 border-dashed border-[#E5E3DD] bg-[#F3F2EE]/50 py-20 text-[#A89F94]">
                     <Users size={48} className="mb-4 opacity-20" />
-                    <p>학생별로 작성된 메모가 없습니다.</p>
+                    <p>{TEXT.noStudentMemo}</p>
                   </div>
                 )}
               </motion.div>

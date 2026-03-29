@@ -9,6 +9,8 @@ import { StudentPage } from './components/StudentPage';
 import {
   ClassroomDateRecord,
   Classroom,
+  DailyReview,
+  GeneratedMemoDraftOption,
   Memo,
   Student,
   LessonCategory,
@@ -46,6 +48,7 @@ import { normalizeAssignedContentIds } from './utils/classroomContentAssignments
 import { normalizeClassroomDateRecordContentIds } from './utils/classroomDateRecordContent';
 import {
   CLASSROOMS_COLLECTION,
+  DAILY_REVIEWS_COLLECTION,
   LEGACY_CLASSROOMS_COLLECTION,
   CLASSROOM_DATE_RECORDS_COLLECTION,
   LEGACY_CLASSROOM_DATE_RECORDS_COLLECTION,
@@ -74,6 +77,20 @@ type GoogleSheetsSyncRequest = {
 type GoogleSheetsSyncErrorState = {
   message: string;
   requests: GoogleSheetsSyncRequest[];
+};
+
+type GeneratedMemoDraftResponse = {
+  drafts: GeneratedMemoDraftOption[];
+  classroomId: string;
+  date: string;
+  contentIds: string[];
+};
+
+type GeneratedDailyReviewResponse = {
+  summary: string;
+  date: string;
+  recordCount: number;
+  classroomCount: number;
 };
 
 type ContentReorderUpdate = {
@@ -117,6 +134,50 @@ const compareCreatedAt = (left: LessonContent, right: LessonContent) =>
 
 const sortClassrooms = (items: Classroom[]) =>
   [...items].sort((left, right) => (left.order || 0) - (right.order || 0));
+
+const getClassroomDateRecordTimestamp = (
+  record: Pick<ClassroomDateRecord, 'updatedAt' | 'createdAt'>
+) => {
+  const updatedAt = new Date(record.updatedAt || '').getTime();
+  if (Number.isFinite(updatedAt)) {
+    return updatedAt;
+  }
+
+  const createdAt = new Date(record.createdAt || '').getTime();
+  if (Number.isFinite(createdAt)) {
+    return createdAt;
+  }
+
+  return 0;
+};
+
+const dedupeClassroomDateRecords = (records: ClassroomDateRecord[]) => {
+  const recordMap = new Map<string, ClassroomDateRecord>();
+
+  records.forEach((record) => {
+    const compositeKey = `${record.classroomId}::${record.date}`;
+    const existingRecord = recordMap.get(compositeKey);
+
+    if (!existingRecord) {
+      recordMap.set(compositeKey, record);
+      return;
+    }
+
+    const existingTime = getClassroomDateRecordTimestamp(existingRecord);
+    const nextTime = getClassroomDateRecordTimestamp(record);
+
+    if (nextTime > existingTime) {
+      recordMap.set(compositeKey, record);
+      return;
+    }
+
+    if (nextTime === existingTime && record.memo.trim().length > existingRecord.memo.trim().length) {
+      recordMap.set(compositeKey, record);
+    }
+  });
+
+  return [...recordMap.values()];
+};
 
 const sortContents = (items: LessonContent[]) =>
   [...items].sort((left, right) => {
@@ -184,6 +245,7 @@ export default function App() {
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [memos, setMemos] = useState<Memo[]>([]);
+  const [dailyReviews, setDailyReviews] = useState<DailyReview[]>([]);
   const [classroomDateRecords, setClassroomDateRecords] = useState<ClassroomDateRecord[]>([]);
   const [categories, setCategories] = useState<LessonCategory[]>([]);
   const [contents, setContents] = useState<LessonContent[]>([]);
@@ -270,9 +332,9 @@ export default function App() {
     runWithContentLibraryNavigationGuard(() => setViewMode('student'));
   };
 
-  const postGoogleSheetsRequest = async (path: string, payload: unknown) => {
+  const postAdminRequest = async <TResponse,>(path: string, payload: unknown): Promise<TResponse> => {
     if (!user) {
-      throw new Error('Google Sheets 동기화를 위한 로그인 정보를 확인할 수 없습니다.');
+      throw new Error('관리자 요청을 보내려면 로그인 정보가 필요합니다.');
     }
 
     const idToken = await user.getIdToken();
@@ -285,10 +347,12 @@ export default function App() {
       body: JSON.stringify(payload),
     });
 
+    const responsePayload = await response.json().catch(() => null);
+
     if (!response.ok) {
-      const errorPayload = await response.json().catch(() => null);
-      throw new Error(errorPayload?.error || 'Google Sheets 동기화에 실패했습니다.');
+      throw new Error(responsePayload?.error || '관리자 요청 처리에 실패했습니다.');
     }
+    return (responsePayload || {}) as TResponse;
   };
 
   const syncClassroomsWithGoogleSheets = async (
@@ -304,7 +368,7 @@ export default function App() {
     try {
       await Promise.all(
         requests.map((request) =>
-          postGoogleSheetsRequest('api/google-sheets/sync-classroom', request)
+          postAdminRequest<unknown>('api/google-sheets/sync-classroom', request)
         )
       );
       setGoogleSheetsSyncError(null);
@@ -448,16 +512,51 @@ export default function App() {
       setMemos([]);
     }
 
+    let unsubscribeDailyReviews = () => {};
+    if (user && isAdmin) {
+      const dailyReviewsQuery = query(collection(db, DAILY_REVIEWS_COLLECTION), orderBy('date', 'desc'));
+      unsubscribeDailyReviews = onSnapshot(
+        dailyReviewsQuery,
+        (snapshot) => {
+          const dailyReviewsData = snapshot.docs.map((reviewDoc) => {
+            const data = reviewDoc.data() as Partial<DailyReview>;
+            return {
+              id: reviewDoc.id,
+              date: data.date ?? '',
+              ownerUid: data.ownerUid ?? '',
+              summary: data.summary ?? '',
+              sourceRecordIds: Array.isArray(data.sourceRecordIds)
+                ? data.sourceRecordIds.filter((value): value is string => typeof value === 'string')
+                : [],
+              createdAt: data.createdAt ?? '',
+              updatedAt: data.updatedAt ?? '',
+            } satisfies DailyReview;
+          });
+
+          setDailyReviews(dailyReviewsData);
+        },
+        (error) => handleFirestoreError(error, OperationType.LIST, DAILY_REVIEWS_COLLECTION)
+      );
+    } else {
+      setDailyReviews([]);
+    }
+
     let unsubscribeClassroomDateRecords = () => {};
     let unsubscribeLegacyClassroomDateRecords = () => {};
     if (user) {
       let nextClassroomDateRecords: ClassroomDateRecord[] = [];
       let legacyClassroomDateRecords: ClassroomDateRecord[] = [];
       const updateMergedClassroomDateRecords = () => {
-        const mergedRecords = mergeClassroomCollections(
-          nextClassroomDateRecords,
-          legacyClassroomDateRecords
-        ).sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime());
+        const mergedRecords = dedupeClassroomDateRecords(
+          mergeClassroomCollections(nextClassroomDateRecords, legacyClassroomDateRecords)
+        ).sort((left, right) => {
+          const dateDiff = new Date(right.date).getTime() - new Date(left.date).getTime();
+          if (dateDiff !== 0) {
+            return dateDiff;
+          }
+
+          return getClassroomDateRecordTimestamp(right) - getClassroomDateRecordTimestamp(left);
+        });
         setClassroomDateRecords(mergedRecords);
       };
 
@@ -553,6 +652,7 @@ export default function App() {
       unsubscribeLegacyClassrooms();
       unsubscribeStudents();
       unsubscribeMemos();
+      unsubscribeDailyReviews();
       unsubscribeClassroomDateRecords();
       unsubscribeLegacyClassroomDateRecords();
       unsubscribeCategories();
@@ -631,6 +731,32 @@ export default function App() {
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `memos/${id}`);
     }
+  };
+
+  const handleGenerateMemoDraft = async (
+    classroomId: string,
+    date: string,
+    existingMemo?: string
+  ) => {
+    const response = await postAdminRequest<GeneratedMemoDraftResponse>(
+      'api/classroom-date-records/generate-memo-draft',
+      {
+        classroomId,
+        date,
+        existingMemo,
+      }
+    );
+
+    return response.drafts;
+  };
+
+  const handleGenerateDailyReview = async (date: string) => {
+    const response = await postAdminRequest<GeneratedDailyReviewResponse>(
+      'api/daily-reviews/generate',
+      { date }
+    );
+
+    return response.summary;
   };
 
   const handleSaveStudents = async (classroomId: string, students: Student[]): Promise<void> => {
@@ -979,7 +1105,7 @@ export default function App() {
 
     try {
       const classroom = classrooms.find((candidate) => candidate.id === record.classroomId);
-      const recordId = record.id || `${record.classroomId}_${record.date}`;
+      const recordId = `${record.classroomId}_${record.date}`;
       const existingRecord = classroomDateRecords.find((candidate) => candidate.id === recordId);
       const nextRecord: ClassroomDateRecord = {
         ...record,
@@ -1138,6 +1264,7 @@ export default function App() {
           {activeTab === 'memo' && (
             <MemoSection 
               memos={memos}
+              dailyReviews={dailyReviews}
               classrooms={classroomsWithStudents}
               classroomDateRecords={classroomDateRecords}
               onAddMemo={handleAddMemo} 
@@ -1158,6 +1285,7 @@ export default function App() {
               onSaveDateRecord={handleSaveClassroomDateRecord}
               onDeleteDateRecord={handleDeleteClassroomDateRecord}
               onSaveClassroomContents={handleSaveClassroomContents}
+              onGenerateMemoDraft={handleGenerateMemoDraft}
               onGoToLibrary={() => handleTabChange('content-library')}
               onUpdateClassroom={handleUpdateClassroom}
               onDeleteClassroom={handleDeleteClassroom}

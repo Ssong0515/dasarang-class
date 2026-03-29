@@ -82,5 +82,23 @@ export interface Memo {
   date: string;
 }
 
+export interface DailyReview {
+  id: string;
+  date: string;
+  ownerUid: string;
+  summary: string;
+  sourceRecordIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type GeneratedMemoDraftStyle = 'activity' | 'guidance' | 'check';
+
+export interface GeneratedMemoDraftOption {
+  style: GeneratedMemoDraftStyle;
+  label: string;
+  memo: string;
+}
+
 export type LessonFolder = Classroom;
 export type FolderDateRecord = ClassroomDateRecord;

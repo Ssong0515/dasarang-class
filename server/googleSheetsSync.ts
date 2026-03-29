@@ -1,14 +1,4 @@
 import { google } from 'googleapis';
-import {
-  applicationDefault,
-  cert,
-  getApps,
-  initializeApp,
-  type ServiceAccount,
-} from 'firebase-admin/app';
-import { getAuth as getAdminAuth } from 'firebase-admin/auth';
-import { getFirestore } from 'firebase-admin/firestore';
-import firebaseConfig from '../firebase-applet-config.json';
 import type { Classroom, Student } from '../src/types';
 import {
   getVisibleStudents,
@@ -16,8 +6,8 @@ import {
   normalizeStudentRecord,
   sortStudents,
 } from '../src/utils/students';
+import { getAdminDb, verifyAdminIdToken as verifyAdminToken } from './firebaseAdmin';
 
-const ADMIN_EMAIL = 'songes0515@gmail.com';
 const INTEGRATIONS_COLLECTION = 'integrations';
 const GOOGLE_SHEETS_DOC_ID = 'googleSheets';
 const CLASSROOMS_COLLECTION = 'classrooms';
@@ -137,8 +127,6 @@ const getServiceAccountFromEnv = (prefix: 'GOOGLE' | 'FIREBASE'): ServiceAccount
   };
 };
 
-const getFirebaseServiceAccount = () =>
-  getServiceAccountFromEnv('FIREBASE') || getServiceAccountFromEnv('GOOGLE');
 const getGoogleServiceAccount = () =>
   getServiceAccountFromEnv('GOOGLE') || getServiceAccountFromEnv('FIREBASE');
 
@@ -152,32 +140,6 @@ const getSpreadsheetId = () => {
   }
   return spreadsheetId;
 };
-
-const getFirebaseAdminApp = () => {
-  if (getApps().length > 0) {
-    return getApps()[0]!;
-  }
-
-  const serviceAccount = getFirebaseServiceAccount();
-
-  if (serviceAccount) {
-    return initializeApp({
-      credential: cert({
-        projectId: serviceAccount.projectId,
-        clientEmail: serviceAccount.clientEmail,
-        privateKey: serviceAccount.privateKey,
-      } satisfies ServiceAccount),
-      projectId: serviceAccount.projectId || firebaseConfig.projectId,
-    });
-  }
-
-  return initializeApp({
-    credential: applicationDefault(),
-    projectId: firebaseConfig.projectId,
-  });
-};
-
-const getAdminDb = () => getFirestore(getFirebaseAdminApp(), firebaseConfig.firestoreDatabaseId);
 
 const getGoogleSheetsClient = () => {
   const serviceAccount = getGoogleServiceAccount();
@@ -624,7 +586,8 @@ const deleteClassroomSheet = async (rawPayload: ClassroomSyncPayload | FolderSyn
   };
 };
 
-export const verifyAdminIdToken = async (idToken: string) => {
+export const verifyAdminIdToken = async (idToken: string) => verifyAdminToken(idToken);
+/*
   const decodedToken = await getAdminAuth(getFirebaseAdminApp()).verifyIdToken(idToken);
 
   if (decodedToken.email !== ADMIN_EMAIL) {
@@ -634,6 +597,7 @@ export const verifyAdminIdToken = async (idToken: string) => {
   return decodedToken;
 };
 
+*/
 export const syncClassroomToGoogleSheets = async (
   rawPayload: ClassroomSyncPayload | FolderSyncPayload
 ) => {
