@@ -11,7 +11,6 @@ import { getAdminDb, verifyAdminIdToken as verifyAdminToken } from './firebaseAd
 const INTEGRATIONS_COLLECTION = 'integrations';
 const GOOGLE_SHEETS_DOC_ID = 'googleSheets';
 const CLASSROOMS_COLLECTION = 'classrooms';
-const LEGACY_CLASSROOMS_COLLECTION = 'folders';
 const STUDENTS_COLLECTION = 'students';
 const SHEET_HEADERS = [
   'studentId',
@@ -35,9 +34,7 @@ interface ClassroomSheetMapping {
 interface GoogleSheetsSyncMeta {
   spreadsheetId: string;
   classrooms?: Record<string, ClassroomSheetMapping>;
-  folders?: Record<string, ClassroomSheetMapping>;
   classroomCount?: number;
-  folderCount?: number;
   lastSyncAt?: string;
   lastError?: string | null;
   updatedAt?: string;
@@ -54,28 +51,14 @@ export interface ClassroomSyncPayload {
   mode?: SyncMode;
   previousName?: string;
   classroomName?: string;
-  folderId?: string;
-  folderName?: string;
-}
-
-export interface FolderSyncPayload {
-  folderId: string;
-  mode?: SyncMode;
-  previousName?: string;
-  folderName?: string;
-  classroomId?: string;
-  classroomName?: string;
 }
 
 export interface StudentSyncPayload {
   classroomId?: string;
-  folderId?: string;
   studentId?: string;
   mode?: 'upsert' | 'delete' | 'move';
   sourceClassroomId?: string;
   targetClassroomId?: string;
-  sourceFolderId?: string;
-  targetFolderId?: string;
 }
 
 const nowIso = () => new Date().toISOString();
@@ -165,43 +148,18 @@ const getGoogleSheetsClient = () => {
 
 const getMetaRef = () => getAdminDb().collection(INTEGRATIONS_COLLECTION).doc(GOOGLE_SHEETS_DOC_ID);
 
-const getClassroomMappings = (
-  meta: Pick<GoogleSheetsSyncMeta, 'classrooms' | 'folders'>
-) => meta.classrooms || meta.folders || {};
-
-const normalizeClassroomSyncPayload = (
-  payload: Partial<ClassroomSyncPayload> & Partial<FolderSyncPayload>
-): ClassroomSyncPayload => {
-  const classroomId = (payload.classroomId || payload.folderId || '').trim();
-
-  if (!classroomId) {
-    throw new Error('classroomId is required for Google Sheets sync.');
-  }
-
-  return {
-    classroomId,
-    folderId: payload.folderId || classroomId,
-    mode: payload.mode,
-    previousName: payload.previousName,
-    classroomName: payload.classroomName || payload.folderName,
-    folderName: payload.folderName || payload.classroomName,
-  };
-};
-
 const readMeta = async (): Promise<GoogleSheetsSyncMeta> => {
   const snapshot = await getMetaRef().get();
   const data: Partial<GoogleSheetsSyncMeta> = snapshot.exists
     ? (snapshot.data() as GoogleSheetsSyncMeta)
     : {};
-  const classroomMappings = data.classrooms || data.folders || {};
+  const classroomMappings = data.classrooms || {};
   const classroomCount = Object.keys(classroomMappings).length;
 
   return {
     spreadsheetId: getSpreadsheetId(),
     classrooms: classroomMappings,
-    folders: classroomMappings,
     classroomCount: data.classroomCount ?? classroomCount,
-    folderCount: data.folderCount ?? classroomCount,
     lastSyncAt: data.lastSyncAt,
     lastError: data.lastError,
     updatedAt: data.updatedAt,
@@ -214,7 +172,7 @@ const stripUndefined = <T extends Record<string, unknown>>(value: T) => {
 };
 
 const writeMeta = async (meta: GoogleSheetsSyncMeta) => {
-  const classroomMappings = getClassroomMappings(meta);
+  const classroomMappings = meta.classrooms || {};
   const classroomCount = Object.keys(classroomMappings).length;
 
   await getMetaRef().set(
@@ -222,12 +180,9 @@ const writeMeta = async (meta: GoogleSheetsSyncMeta) => {
       ...meta,
       spreadsheetId: getSpreadsheetId(),
       classrooms: classroomMappings,
-      folders: classroomMappings,
       classroomCount,
-      folderCount: classroomCount,
       updatedAt: nowIso(),
-    }),
-    { merge: true }
+    })
   );
 };
 
@@ -314,23 +269,36 @@ const buildSheetValues = (classroom: Classroom, students: Student[]) => {
   ];
 };
 
-const getClassroomDoc = async (classroomId: string) => {
-  for (const collectionName of [CLASSROOMS_COLLECTION, LEGACY_CLASSROOMS_COLLECTION]) {
-    const snapshot = await getAdminDb().collection(collectionName).doc(classroomId).get();
+const normalizeClassroomSyncPayload = (payload: Partial<ClassroomSyncPayload>): ClassroomSyncPayload => {
+  const classroomId = (payload.classroomId || '').trim();
 
-    if (snapshot.exists) {
-      return {
-        id: snapshot.id,
-        ...(snapshot.data() as Omit<Classroom, 'id'>),
-      } as Classroom;
-    }
+  if (!classroomId) {
+    throw new Error('classroomId is required for Google Sheets sync.');
   }
 
-  throw new Error(`Classroom '${classroomId}' was not found in Firestore.`);
+  return {
+    classroomId,
+    mode: payload.mode,
+    previousName: payload.previousName,
+    classroomName: payload.classroomName,
+  };
+};
+
+const getClassroomDoc = async (classroomId: string) => {
+  const snapshot = await getAdminDb().collection(CLASSROOMS_COLLECTION).doc(classroomId).get();
+
+  if (!snapshot.exists) {
+    throw new Error(`Classroom '${classroomId}' was not found in Firestore.`);
+  }
+
+  return {
+    id: snapshot.id,
+    ...(snapshot.data() as Omit<Classroom, 'id'>),
+  } as Classroom;
 };
 
 const getStudentsForClassroom = async (classroom: Classroom) => {
-  const legacyStudents = normalizeLegacyStudents(classroom.students, {
+  const embeddedStudents = normalizeLegacyStudents(classroom.students, {
     classroomId: classroom.id,
     ownerUid: classroom.ownerUid,
     createdAt: classroom.createdAt,
@@ -345,7 +313,7 @@ const getStudentsForClassroom = async (classroom: Classroom) => {
   );
   const mergedStudentsById = new Map<string, Student>();
 
-  legacyStudents.forEach((student) => {
+  embeddedStudents.forEach((student) => {
     if (student.id) {
       mergedStudentsById.set(student.id, student);
     }
@@ -362,15 +330,12 @@ const getStudentsForClassroom = async (classroom: Classroom) => {
   );
 };
 
-const persistClassroomSheet = async (
-  classroom: Classroom,
-  rawPayload?: ClassroomSyncPayload | FolderSyncPayload
-) => {
+const persistClassroomSheet = async (classroom: Classroom, rawPayload?: ClassroomSyncPayload) => {
   const payload = rawPayload ? normalizeClassroomSyncPayload(rawPayload) : undefined;
   const meta = await readMeta();
   const { sheets, spreadsheetId, spreadsheet } = await getSpreadsheet();
   const students = await getStudentsForClassroom(classroom);
-  const classroomMappings = getClassroomMappings(meta);
+  const classroomMappings = meta.classrooms || {};
   const otherMappedSheetIds = new Set(
     Object.entries(classroomMappings)
       .filter(([mappedClassroomId]) => mappedClassroomId !== classroom.id)
@@ -467,7 +432,6 @@ const persistClassroomSheet = async (
       title: sheetTitle,
     },
   };
-  meta.folders = meta.classrooms;
   await writeMeta(meta);
 
   const range = `${quoteSheetTitle(sheetTitle)}!A:I`;
@@ -490,18 +454,17 @@ const persistClassroomSheet = async (
 
   return {
     classroomId: classroom.id,
-    folderId: classroom.id,
     sheetId,
     title: sheetTitle,
     syncedStudentCount: students.length,
   };
 };
 
-const deleteClassroomSheet = async (rawPayload: ClassroomSyncPayload | FolderSyncPayload) => {
+const deleteClassroomSheet = async (rawPayload: ClassroomSyncPayload) => {
   const payload = normalizeClassroomSyncPayload(rawPayload);
   const meta = await readMeta();
   const { sheets, spreadsheetId, spreadsheet } = await getSpreadsheet();
-  const classroomMappings = getClassroomMappings(meta);
+  const classroomMappings = meta.classrooms || {};
   const mapping = classroomMappings[payload.classroomId];
   const allSheets = spreadsheet.sheets || [];
 
@@ -573,7 +536,6 @@ const deleteClassroomSheet = async (rawPayload: ClassroomSyncPayload | FolderSyn
   if (meta.classrooms) {
     delete meta.classrooms[payload.classroomId];
   }
-  meta.folders = meta.classrooms;
 
   meta.lastSyncAt = nowIso();
   meta.lastError = null;
@@ -581,26 +543,13 @@ const deleteClassroomSheet = async (rawPayload: ClassroomSyncPayload | FolderSyn
 
   return {
     classroomId: payload.classroomId,
-    folderId: payload.classroomId,
     removed: true,
   };
 };
 
 export const verifyAdminIdToken = async (idToken: string) => verifyAdminToken(idToken);
-/*
-  const decodedToken = await getAdminAuth(getFirebaseAdminApp()).verifyIdToken(idToken);
 
-  if (decodedToken.email !== ADMIN_EMAIL) {
-    throw new Error('관리자 권한이 필요합니다.');
-  }
-
-  return decodedToken;
-};
-
-*/
-export const syncClassroomToGoogleSheets = async (
-  rawPayload: ClassroomSyncPayload | FolderSyncPayload
-) => {
+export const syncClassroomToGoogleSheets = async (rawPayload: ClassroomSyncPayload) => {
   const payload = normalizeClassroomSyncPayload(rawPayload);
 
   try {
@@ -625,12 +574,9 @@ export const syncClassroomToGoogleSheets = async (
   }
 };
 
-export const syncFolderToGoogleSheets = async (payload: FolderSyncPayload) =>
-  syncClassroomToGoogleSheets(payload);
-
 export const syncStudentToGoogleSheets = async (payload: StudentSyncPayload) => {
-  const sourceClassroomId = payload.sourceClassroomId || payload.sourceFolderId;
-  const targetClassroomId = payload.targetClassroomId || payload.targetFolderId;
+  const sourceClassroomId = payload.sourceClassroomId;
+  const targetClassroomId = payload.targetClassroomId;
 
   if (payload.mode === 'move') {
     if (!sourceClassroomId || !targetClassroomId) {
@@ -643,7 +589,7 @@ export const syncStudentToGoogleSheets = async (payload: StudentSyncPayload) => 
     ]);
   }
 
-  const classroomId = payload.classroomId || payload.folderId;
+  const classroomId = payload.classroomId;
   if (!classroomId) {
     throw new Error('classroomId is required for student sync.');
   }
@@ -656,7 +602,7 @@ export const syncStudentToGoogleSheets = async (payload: StudentSyncPayload) => 
 
 export const getGoogleSheetsStatus = async () => {
   const meta = await readMeta();
-  const classroomMappings = getClassroomMappings(meta);
+  const classroomMappings = meta.classrooms || {};
   const classroomCount = Object.keys(classroomMappings).length;
 
   return {
@@ -665,6 +611,5 @@ export const getGoogleSheetsStatus = async () => {
     lastSyncAt: meta.lastSyncAt || null,
     lastError: meta.lastError || null,
     classroomCount,
-    folderCount: classroomCount,
   };
 };

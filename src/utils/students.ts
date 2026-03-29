@@ -47,9 +47,7 @@ export const normalizeStudentRecord = (
     ownerUid: getTrimmedString(value?.ownerUid) || getTrimmedString(fallback?.ownerUid),
     classroomId:
       getTrimmedString(value?.classroomId) ||
-      getTrimmedString(value?.folderId) ||
-      getTrimmedString(fallback?.classroomId) ||
-      getTrimmedString(fallback?.folderId),
+      getTrimmedString(fallback?.classroomId),
     name,
     initials,
     order:
@@ -70,11 +68,6 @@ export const normalizeStudentRecord = (
     deletedAt:
       getOptionalTrimmedString(value?.deletedAt) ??
       getOptionalTrimmedString(fallback?.deletedAt),
-    folderId:
-      getTrimmedString(value?.folderId) ||
-      getTrimmedString(value?.classroomId) ||
-      getTrimmedString(fallback?.folderId) ||
-      getTrimmedString(fallback?.classroomId),
   };
 };
 

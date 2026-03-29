@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
+    "migrate-classroom-domain": "node scripts/migrateClassroomDomain.mjs",
     "migrate-global-students": "node scripts/migrateStudentsToGlobalCollection.mjs",
     "clear-legacy-lesson-content-links": "node scripts/clearLegacyLessonContentLinks.mjs",
     "delete-legacy-lessons": "node scripts/deleteLegacyLessons.mjs"

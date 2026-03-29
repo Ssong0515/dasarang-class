@@ -7,10 +7,7 @@ import {
   CLASSROOMS_COLLECTION,
   CLASSROOM_DATE_RECORDS_COLLECTION,
   DAILY_REVIEWS_COLLECTION,
-  LEGACY_CLASSROOMS_COLLECTION,
-  LEGACY_CLASSROOM_DATE_RECORDS_COLLECTION,
-  getClassroomId,
-  getClassroomName,
+  getClassroomDateRecordId,
 } from '../src/utils/classroomDomain';
 import { getAdminDb } from './firebaseAdmin';
 
@@ -435,7 +432,7 @@ const normalizeClassroomDateRecord = (snapshot: DocumentSnapshot): ClassroomDate
     return null;
   }
 
-  const classroomId = getClassroomId(data);
+  const classroomId = normalizeString((data as { classroomId?: unknown }).classroomId);
   if (!classroomId) {
     return null;
   }
@@ -445,101 +442,62 @@ const normalizeClassroomDateRecord = (snapshot: DocumentSnapshot): ClassroomDate
     classroomId,
     ownerUid: normalizeString(data.ownerUid),
     date: normalizeString(data.date),
-    classroomName: getClassroomName(data),
+    classroomName: normalizeString((data as { classroomName?: unknown }).classroomName),
     contentIds: normalizeClassroomDateRecordContentIds(data),
     attendance: normalizeAttendanceRecords(data.attendance),
     memo: normalizeString(data.memo),
     createdAt: normalizeString(data.createdAt),
     updatedAt: normalizeString(data.updatedAt),
-    folderId: normalizeString((data as { folderId?: unknown }).folderId) || undefined,
-    folderName: normalizeString((data as { folderName?: unknown }).folderName) || undefined,
   };
 };
 
-const getClassroomDateRecordTimestamp = (
-  record: Pick<ClassroomDateRecord, 'updatedAt' | 'createdAt'>
+const assertNoDuplicateClassroomDateRecords = (
+  records: ClassroomDateRecord[],
+  context: string
 ) => {
-  const updatedAt = new Date(record.updatedAt || '').getTime();
-  if (Number.isFinite(updatedAt)) {
-    return updatedAt;
-  }
-
-  const createdAt = new Date(record.createdAt || '').getTime();
-  if (Number.isFinite(createdAt)) {
-    return createdAt;
-  }
-
-  return 0;
-};
-
-const pickLatestClassroomDateRecord = (records: ClassroomDateRecord[]) =>
-  [...records].sort(
-    (left, right) => getClassroomDateRecordTimestamp(right) - getClassroomDateRecordTimestamp(left)
-  )[0] || null;
-
-const dedupeClassroomDateRecords = (records: ClassroomDateRecord[]) => {
-  const recordMap = new Map<string, ClassroomDateRecord>();
+  const seenKeys = new Map<string, ClassroomDateRecord>();
 
   records.forEach((record) => {
-    const compositeKey = `${record.classroomId}::${record.date}`;
-    const existingRecord = recordMap.get(compositeKey);
+    const canonicalId = getClassroomDateRecordId(record.classroomId, record.date);
+    const existingRecord = seenKeys.get(canonicalId);
 
-    if (!existingRecord) {
-      recordMap.set(compositeKey, record);
-      return;
+    if (existingRecord) {
+      throw new ApiError(
+        409,
+        `Duplicate classroom date records found for ${context}. Run the classroom domain cleanup before generating notes.`
+      );
     }
 
-    if (getClassroomDateRecordTimestamp(record) >= getClassroomDateRecordTimestamp(existingRecord)) {
-      recordMap.set(compositeKey, record);
-    }
+    seenKeys.set(canonicalId, record);
   });
 
-  return [...recordMap.values()];
+  return records;
 };
 
 const fetchClassroomName = async (classroomId: string) => {
   const db = getAdminDb();
-  const [currentSnapshot, legacySnapshot] = await Promise.all([
-    db.collection(CLASSROOMS_COLLECTION).doc(classroomId).get(),
-    db.collection(LEGACY_CLASSROOMS_COLLECTION).doc(classroomId).get(),
-  ]);
+  const currentSnapshot = await db.collection(CLASSROOMS_COLLECTION).doc(classroomId).get();
+  const currentData = currentSnapshot.data() as { name?: unknown; classroomName?: unknown } | undefined;
 
-  const currentData = currentSnapshot.data() as
-    | { name?: unknown; classroomName?: unknown; folderName?: unknown }
-    | undefined;
-  const legacyData = legacySnapshot.data() as
-    | { name?: unknown; classroomName?: unknown; folderName?: unknown }
-    | undefined;
-
-  return (
-    normalizeString(currentData?.name) ||
-    getClassroomName(currentData) ||
-    normalizeString(legacyData?.name) ||
-    getClassroomName(legacyData)
-  );
+  return normalizeString(currentData?.name) || normalizeString(currentData?.classroomName);
 };
 
 const loadStoredClassroomDateRecord = async (classroomId: string, date: string) => {
   const db = getAdminDb();
-  const [currentSnapshot, legacySnapshot] = await Promise.all([
-    db
-      .collection(CLASSROOM_DATE_RECORDS_COLLECTION)
-      .where('classroomId', '==', classroomId)
-      .where('date', '==', date)
-      .get(),
-    db
-      .collection(LEGACY_CLASSROOM_DATE_RECORDS_COLLECTION)
-      .where('folderId', '==', classroomId)
-      .where('date', '==', date)
-      .get(),
-  ]);
+  const currentSnapshot = await db
+    .collection(CLASSROOM_DATE_RECORDS_COLLECTION)
+    .where('classroomId', '==', classroomId)
+    .get();
 
-  const records = [
-    ...currentSnapshot.docs.map((snapshot) => normalizeClassroomDateRecord(snapshot)),
-    ...legacySnapshot.docs.map((snapshot) => normalizeClassroomDateRecord(snapshot)),
-  ].filter((record): record is ClassroomDateRecord => Boolean(record));
+  const records = assertNoDuplicateClassroomDateRecords(
+    currentSnapshot.docs
+      .map((snapshot) => normalizeClassroomDateRecord(snapshot))
+      .filter((record) => record?.date === date)
+      .filter((record): record is ClassroomDateRecord => Boolean(record)),
+    `${classroomId} on ${date}`
+  );
 
-  const record = pickLatestClassroomDateRecord(dedupeClassroomDateRecords(records));
+  const record = records[0] || null;
   if (!record) {
     throw new ApiError(404, 'No classroom date record was found for the requested date.');
   }
@@ -660,28 +618,14 @@ const generateDailyReviewSummary = async (records: DailyReviewRecordContext[]) =
 
 const collectDailyReviewRecords = async (date: string) => {
   const db = getAdminDb();
-  const [currentSnapshot, legacySnapshot] = await Promise.all([
-    db.collection(CLASSROOM_DATE_RECORDS_COLLECTION).where('date', '==', date).get(),
-    db.collection(LEGACY_CLASSROOM_DATE_RECORDS_COLLECTION).where('date', '==', date).get(),
-  ]);
+  const currentSnapshot = await db.collection(CLASSROOM_DATE_RECORDS_COLLECTION).where('date', '==', date).get();
 
-  const recordMap = new Map<string, ClassroomDateRecord>();
-
-  legacySnapshot.docs.forEach((snapshot) => {
-    const record = normalizeClassroomDateRecord(snapshot);
-    if (record) {
-      recordMap.set(record.id, record);
-    }
-  });
-
-  currentSnapshot.docs.forEach((snapshot) => {
-    const record = normalizeClassroomDateRecord(snapshot);
-    if (record) {
-      recordMap.set(record.id, record);
-    }
-  });
-
-  const records = dedupeClassroomDateRecords([...recordMap.values()]);
+  const records = assertNoDuplicateClassroomDateRecords(
+    currentSnapshot.docs
+      .map((snapshot) => normalizeClassroomDateRecord(snapshot))
+      .filter((record): record is ClassroomDateRecord => Boolean(record)),
+    `date ${date}`
+  );
   if (records.length === 0) {
     throw new ApiError(404, 'No classroom date records were found for the requested date.');
   }

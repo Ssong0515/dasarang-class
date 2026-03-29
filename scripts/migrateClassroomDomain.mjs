@@ -1,4 +1,6 @@
+import 'dotenv/config';
 import fs from 'node:fs';
+import path from 'node:path';
 import {
   applicationDefault,
   cert,
@@ -6,27 +8,20 @@ import {
   initializeApp as initializeAdminApp,
 } from 'firebase-admin/app';
 import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
-import { deleteApp, initializeApp as initializeClientApp } from 'firebase/app';
-import { getAuth, signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import {
-  collection as clientCollection,
-  doc as clientDoc,
-  getDoc as clientGetDoc,
-  getDocs as clientGetDocs,
-  getFirestore as getClientFirestore,
-  writeBatch as createClientBatch,
-} from 'firebase/firestore';
 
-const ADMIN_EMAIL = 'songes0515@gmail.com';
-const BATCH_SIZE = 350;
-const LEGACY_CLASSROOMS_COLLECTION = 'folders';
 const CLASSROOMS_COLLECTION = 'classrooms';
-const LEGACY_CLASSROOM_DATE_RECORDS_COLLECTION = 'folderDateRecords';
+const LEGACY_CLASSROOMS_COLLECTION = 'folders';
 const CLASSROOM_DATE_RECORDS_COLLECTION = 'classroomDateRecords';
-const STUDENTS_COLLECTION = 'students';
-const INTEGRATIONS_COLLECTION = 'integrations';
-const GOOGLE_SHEETS_DOC_ID = 'googleSheets';
-const SHOULD_EXECUTE = process.argv.includes('--execute');
+const LEGACY_CLASSROOM_DATE_RECORDS_COLLECTION = 'folderDateRecords';
+const DEFAULT_AUDIT_PATH = path.resolve(process.cwd(), 'scripts', 'classroom-domain-audit.json');
+const BATCH_SIZE = 350;
+
+const args = new Set(process.argv.slice(2));
+const shouldApply = args.has('--apply');
+const outputArg = [...args].find((arg) => arg.startsWith('--output='));
+const auditOutputPath = outputArg
+  ? path.resolve(process.cwd(), outputArg.slice('--output='.length))
+  : DEFAULT_AUDIT_PATH;
 
 const firebaseConfig = JSON.parse(fs.readFileSync('./firebase-applet-config.json', 'utf8'));
 
@@ -76,465 +71,457 @@ const getServiceAccountFromEnv = (prefix) => {
 const getFirebaseServiceAccount = () =>
   getServiceAccountFromEnv('FIREBASE') || getServiceAccountFromEnv('GOOGLE');
 
-const chunk = (items, size) => {
-  const chunks = [];
-  for (let index = 0; index < items.length; index += size) {
-    chunks.push(items.slice(index, index + size));
+const getAdminDb = () => {
+  const existingApp = getAdminApps()[0];
+  if (existingApp) {
+    return getAdminFirestore(existingApp, firebaseConfig.firestoreDatabaseId);
   }
-  return chunks;
+
+  const serviceAccount = getFirebaseServiceAccount();
+  const app = initializeAdminApp(
+    serviceAccount
+      ? {
+          credential: cert({
+            projectId: serviceAccount.projectId,
+            clientEmail: serviceAccount.clientEmail,
+            privateKey: serviceAccount.privateKey,
+          }),
+          projectId: serviceAccount.projectId || firebaseConfig.projectId,
+        }
+      : {
+          credential: applicationDefault(),
+          projectId: firebaseConfig.projectId,
+        }
+  );
+
+  return getAdminFirestore(app, firebaseConfig.firestoreDatabaseId);
 };
 
-const getTrimmedString = (value) => (typeof value === 'string' ? value.trim() : '');
+const normalizeString = (value) => (typeof value === 'string' ? value.trim() : '');
 
-const getOptionalTrimmedString = (value) => {
-  const trimmed = getTrimmedString(value);
-  return trimmed || undefined;
+const getOptionalString = (value) => {
+  const normalized = normalizeString(value);
+  return normalized || undefined;
 };
 
-const getNormalizedStringArray = (value) =>
+const normalizeStringArray = (value) =>
   Array.isArray(value)
-    ? value
-        .map((entry) => getTrimmedString(entry))
-        .filter(Boolean)
+    ? value.map((entry) => normalizeString(entry)).filter(Boolean)
     : [];
 
-const stripUndefinedDeep = (value) => {
-  if (Array.isArray(value)) {
-    return value.map((entry) => stripUndefinedDeep(entry));
-  }
-
-  if (!value || typeof value !== 'object') {
-    return value;
-  }
-
-  return Object.fromEntries(
-    Object.entries(value)
-      .filter(([, entryValue]) => entryValue !== undefined)
-      .map(([key, entryValue]) => [key, stripUndefinedDeep(entryValue)])
-  );
-};
-
-const getStableComparableValue = (value) => {
-  if (Array.isArray(value)) {
-    return value.map((entry) => getStableComparableValue(entry));
-  }
-
-  if (!value || typeof value !== 'object') {
-    return value;
-  }
-
-  return Object.keys(value)
-    .sort()
-    .reduce((accumulator, key) => {
-      accumulator[key] = getStableComparableValue(value[key]);
-      return accumulator;
-    }, {});
-};
-
-const stableStringify = (value) =>
-  JSON.stringify(getStableComparableValue(stripUndefinedDeep(value)));
-
 const normalizeAttendanceEntry = (entry) => {
-  const studentId = getTrimmedString(entry?.studentId);
+  const studentId = normalizeString(entry?.studentId);
   if (!studentId) {
     return null;
   }
 
-  return stripUndefinedDeep({
+  return {
     studentId,
     status:
       entry?.status === 'Absent' || entry?.status === 'Late' || entry?.status === 'Present'
         ? entry.status
         : 'Present',
-    isExcluded: entry?.isExcluded === true ? true : undefined,
-  });
+    ...(entry?.isExcluded === true ? { isExcluded: true } : {}),
+  };
 };
 
-const normalizeClassroomData = (data) => {
-  return stripUndefinedDeep({
-    ...data,
-    name: getTrimmedString(data?.name),
-    ownerUid: getTrimmedString(data?.ownerUid),
-    students: Array.isArray(data?.students) ? data.students : [],
-    assignedContentIds: getNormalizedStringArray(data?.assignedContentIds),
-    isOpen: typeof data?.isOpen === 'boolean' ? data.isOpen : undefined,
-    order: Number.isFinite(data?.order) ? data.order : undefined,
-    icon: getOptionalTrimmedString(data?.icon),
-    color: getOptionalTrimmedString(data?.color),
-    createdAt: getOptionalTrimmedString(data?.createdAt),
-  });
+const normalizeAttendance = (value) =>
+  Array.isArray(value)
+    ? value.map((entry) => normalizeAttendanceEntry(entry)).filter(Boolean)
+    : [];
+
+const getCanonicalRecordId = (classroomId, date) => `${classroomId}_${date}`;
+
+const parseTimestamp = (value) => {
+  const normalized = normalizeString(value);
+  if (!normalized) {
+    return Number.NEGATIVE_INFINITY;
+  }
+
+  const timestamp = new Date(normalized).getTime();
+  return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
 };
 
-const normalizeClassroomDateRecordData = (data) => {
-  const classroomId = getTrimmedString(data?.classroomId) || getTrimmedString(data?.folderId);
-  if (!classroomId) {
+const compareRecordWinner = (left, right) => {
+  const updatedAtDiff = parseTimestamp(right.updatedAt) - parseTimestamp(left.updatedAt);
+  if (updatedAtDiff !== 0) {
+    return updatedAtDiff;
+  }
+
+  const createdAtDiff = parseTimestamp(right.createdAt) - parseTimestamp(left.createdAt);
+  if (createdAtDiff !== 0) {
+    return createdAtDiff;
+  }
+
+  const leftHasMemo = left.memo.length > 0;
+  const rightHasMemo = right.memo.length > 0;
+  if (leftHasMemo !== rightHasMemo) {
+    return rightHasMemo ? 1 : -1;
+  }
+
+  if (left.contentIds.length !== right.contentIds.length) {
+    return right.contentIds.length - left.contentIds.length;
+  }
+
+  if (left.sourceCollection !== right.sourceCollection) {
+    return left.sourceCollection === CLASSROOM_DATE_RECORDS_COLLECTION ? -1 : 1;
+  }
+
+  const leftHasCanonicalId = left.sourceId === left.canonicalId;
+  const rightHasCanonicalId = right.sourceId === right.canonicalId;
+  if (leftHasCanonicalId !== rightHasCanonicalId) {
+    return leftHasCanonicalId ? -1 : 1;
+  }
+
+  return left.sourceId.localeCompare(right.sourceId);
+};
+
+const earliestTimestampValue = (values) => {
+  const finiteValues = values.filter((value) => Number.isFinite(value));
+  return finiteValues.length > 0 ? Math.min(...finiteValues) : Date.now();
+};
+
+const latestTimestampValue = (values) => {
+  const finiteValues = values.filter((value) => Number.isFinite(value));
+  return finiteValues.length > 0 ? Math.max(...finiteValues) : Date.now();
+};
+
+const toIso = (timestamp) => new Date(timestamp).toISOString();
+
+const normalizeClassroomDoc = (snapshot, sourceCollection) => {
+  const data = snapshot.data() || {};
+
+  return {
+    id: snapshot.id,
+    sourceCollection,
+    name: normalizeString(data.name),
+    ownerUid: normalizeString(data.ownerUid),
+    students: Array.isArray(data.students) ? data.students : [],
+    assignedContentIds: normalizeStringArray(data.assignedContentIds),
+    isOpen: typeof data.isOpen === 'boolean' ? data.isOpen : undefined,
+    order: Number.isFinite(data.order) ? data.order : undefined,
+    icon: getOptionalString(data.icon),
+    color: getOptionalString(data.color),
+    createdAt: getOptionalString(data.createdAt),
+  };
+};
+
+const normalizeClassroomDateRecordDoc = (snapshot, sourceCollection) => {
+  const data = snapshot.data() || {};
+  const classroomId = normalizeString(data.classroomId) || normalizeString(data.folderId);
+  const date = normalizeString(data.date);
+
+  if (!classroomId || !date) {
     return null;
   }
 
-  const classroomName =
-    getTrimmedString(data?.classroomName) || getTrimmedString(data?.folderName);
-
-  return stripUndefinedDeep({
-    ...data,
+  return {
+    sourceCollection,
+    sourceId: snapshot.id,
+    canonicalId: getCanonicalRecordId(classroomId, date),
     classroomId,
-    classroomName,
-    folderId: classroomId,
-    folderName: classroomName,
-    ownerUid: getTrimmedString(data?.ownerUid),
-    date: getTrimmedString(data?.date),
-    contentIds: getNormalizedStringArray(data?.contentIds),
-    attendance: Array.isArray(data?.attendance)
-      ? data.attendance.map(normalizeAttendanceEntry).filter(Boolean)
-      : [],
-    memo: getTrimmedString(data?.memo),
-    createdAt: getTrimmedString(data?.createdAt),
-    updatedAt: getTrimmedString(data?.updatedAt),
-  });
-};
-
-const normalizeStudentUpdate = (data) => {
-  const classroomId = getTrimmedString(data?.classroomId) || getTrimmedString(data?.folderId);
-  if (!classroomId) {
-    return null;
-  }
-
-  return {
-    classroomId,
-    folderId: classroomId,
+    classroomName: normalizeString(data.classroomName) || normalizeString(data.folderName),
+    ownerUid: normalizeString(data.ownerUid),
+    date,
+    contentIds: normalizeStringArray(data.contentIds),
+    attendance: normalizeAttendance(data.attendance),
+    memo: normalizeString(data.memo),
+    createdAt: getOptionalString(data.createdAt),
+    updatedAt: getOptionalString(data.updatedAt),
   };
 };
 
-const normalizeClassroomMappings = (value) => {
-  if (!value || typeof value !== 'object') {
-    return {};
+const chooseClassroomValue = (currentValue, legacyValue) => {
+  if (currentValue === undefined || currentValue === null || currentValue === '') {
+    return legacyValue;
   }
 
-  return Object.entries(value).reduce((accumulator, [classroomId, mapping]) => {
-    if (!mapping || typeof mapping !== 'object') {
-      return accumulator;
-    }
+  if (Array.isArray(currentValue) && currentValue.length === 0 && Array.isArray(legacyValue)) {
+    return legacyValue;
+  }
 
-    const sheetId = Number.isFinite(mapping.sheetId) ? mapping.sheetId : undefined;
-    const title = getOptionalTrimmedString(mapping.title);
-
-    if (sheetId === undefined || !title) {
-      return accumulator;
-    }
-
-    accumulator[classroomId] = {
-      sheetId,
-      title,
-    };
-    return accumulator;
-  }, {});
+  return currentValue;
 };
 
-const normalizeGoogleSheetsMetaUpdate = (data) => {
-  const classroomMappings = normalizeClassroomMappings(data?.classrooms || data?.folders);
-  const classroomCount = Object.keys(classroomMappings).length;
-
-  return stripUndefinedDeep({
-    classrooms: classroomMappings,
-    folders: classroomMappings,
-    classroomCount,
-    folderCount: classroomCount,
-  });
-};
-
-const collectMigrationPlan = ({
-  legacyClassroomDocs,
-  classroomDocs,
-  legacyDateRecordDocs,
-  classroomDateRecordDocs,
-  studentDocs,
-  googleSheetsMeta,
-}) => {
-  const classroomWrites = [];
-  const dateRecordWrites = [];
-  const studentWrites = [];
-
-  const classroomDocsById = new Map(classroomDocs.map((doc) => [doc.id, doc]));
-  for (const legacyDoc of legacyClassroomDocs) {
-    const normalizedClassroom = normalizeClassroomData(legacyDoc.data());
-    const nextDoc = classroomDocsById.get(legacyDoc.id);
-    const nextClassroom = nextDoc ? normalizeClassroomData(nextDoc.data()) : null;
-
-    if (!nextClassroom || stableStringify(nextClassroom) !== stableStringify(normalizedClassroom)) {
-      classroomWrites.push({
-        collection: CLASSROOMS_COLLECTION,
-        id: legacyDoc.id,
-        data: normalizedClassroom,
-      });
-    }
-  }
-
-  const classroomDateRecordDocsById = new Map(classroomDateRecordDocs.map((doc) => [doc.id, doc]));
-  for (const legacyDoc of legacyDateRecordDocs) {
-    const normalizedRecord = normalizeClassroomDateRecordData(legacyDoc.data());
-    if (!normalizedRecord) {
-      continue;
-    }
-
-    const nextDoc = classroomDateRecordDocsById.get(legacyDoc.id);
-    const nextRecord = nextDoc ? normalizeClassroomDateRecordData(nextDoc.data()) : null;
-
-    if (!nextRecord || stableStringify(nextRecord) !== stableStringify(normalizedRecord)) {
-      dateRecordWrites.push({
-        collection: CLASSROOM_DATE_RECORDS_COLLECTION,
-        id: legacyDoc.id,
-        data: normalizedRecord,
-      });
-    }
-  }
-
-  let studentsMissingClassroomReference = 0;
-  for (const studentDoc of studentDocs) {
-    const normalizedUpdate = normalizeStudentUpdate(studentDoc.data());
-    if (!normalizedUpdate) {
-      studentsMissingClassroomReference += 1;
-      continue;
-    }
-
-    if (
-      getTrimmedString(studentDoc.data()?.classroomId) !== normalizedUpdate.classroomId ||
-      getTrimmedString(studentDoc.data()?.folderId) !== normalizedUpdate.folderId
-    ) {
-      studentWrites.push({
-        collection: STUDENTS_COLLECTION,
-        id: studentDoc.id,
-        data: normalizedUpdate,
-      });
-    }
-  }
-
-  const normalizedMeta = normalizeGoogleSheetsMetaUpdate(googleSheetsMeta?.data || {});
-  const existingMetaComparable = stripUndefinedDeep({
-    classrooms: normalizeClassroomMappings(googleSheetsMeta?.data?.classrooms),
-    folders: normalizeClassroomMappings(googleSheetsMeta?.data?.folders),
-    classroomCount: Number.isFinite(googleSheetsMeta?.data?.classroomCount)
-      ? googleSheetsMeta.data.classroomCount
-      : undefined,
-    folderCount: Number.isFinite(googleSheetsMeta?.data?.folderCount)
-      ? googleSheetsMeta.data.folderCount
-      : undefined,
-  });
-  const googleSheetsMetaWrite =
-    stableStringify(existingMetaComparable) === stableStringify(normalizedMeta)
-      ? null
-      : {
-          collection: INTEGRATIONS_COLLECTION,
-          id: GOOGLE_SHEETS_DOC_ID,
-          data: normalizedMeta,
-        };
+const mergeClassroomDocs = (currentDoc, legacyDoc) => {
+  const currentData = currentDoc || {};
+  const legacyData = legacyDoc || {};
 
   return {
-    stats: {
-      dryRun: !SHOULD_EXECUTE,
-      legacyClassroomCount: legacyClassroomDocs.length,
-      classroomCount: classroomDocs.length,
-      legacyClassroomDateRecordCount: legacyDateRecordDocs.length,
-      classroomDateRecordCount: classroomDateRecordDocs.length,
-      studentCount: studentDocs.length,
-      studentsMissingClassroomReference,
-      plannedClassroomUpserts: classroomWrites.length,
-      plannedClassroomDateRecordUpserts: dateRecordWrites.length,
-      plannedStudentUpdates: studentWrites.length,
-      plannedGoogleSheetsMetaUpdates: googleSheetsMetaWrite ? 1 : 0,
-    },
-    classroomWrites,
-    dateRecordWrites,
-    studentWrites,
-    googleSheetsMetaWrite,
+    id: currentData.id || legacyData.id,
+    name: chooseClassroomValue(currentData.name, legacyData.name) || 'Untitled classroom',
+    ownerUid: chooseClassroomValue(currentData.ownerUid, legacyData.ownerUid) || '',
+    students: chooseClassroomValue(currentData.students, legacyData.students) || [],
+    assignedContentIds:
+      chooseClassroomValue(currentData.assignedContentIds, legacyData.assignedContentIds) || [],
+    ...(typeof chooseClassroomValue(currentData.isOpen, legacyData.isOpen) === 'boolean'
+      ? { isOpen: chooseClassroomValue(currentData.isOpen, legacyData.isOpen) }
+      : {}),
+    ...(Number.isFinite(chooseClassroomValue(currentData.order, legacyData.order))
+      ? { order: chooseClassroomValue(currentData.order, legacyData.order) }
+      : {}),
+    ...(chooseClassroomValue(currentData.icon, legacyData.icon)
+      ? { icon: chooseClassroomValue(currentData.icon, legacyData.icon) }
+      : {}),
+    ...(chooseClassroomValue(currentData.color, legacyData.color)
+      ? { color: chooseClassroomValue(currentData.color, legacyData.color) }
+      : {}),
+    ...(chooseClassroomValue(currentData.createdAt, legacyData.createdAt)
+      ? { createdAt: chooseClassroomValue(currentData.createdAt, legacyData.createdAt) }
+      : {}),
   };
 };
 
-const commitAdminWrites = async (adminDb, operations) => {
-  for (const operationChunk of chunk(operations, BATCH_SIZE)) {
-    const batch = adminDb.batch();
+const mergeRecordGroup = (records, classroomNameById) => {
+  const sortedRecords = [...records].sort(compareRecordWinner);
+  const winner = sortedRecords[0];
+  const mergedContentIds = [];
+  const seenContentIds = new Set();
 
-    for (const operation of operationChunk) {
-      batch.set(adminDb.collection(operation.collection).doc(operation.id), operation.data, {
-        merge: true,
-      });
-    }
-
-    await batch.commit();
-  }
-};
-
-const commitClientWrites = async (clientDb, operations) => {
-  for (const operationChunk of chunk(operations, BATCH_SIZE)) {
-    const batch = createClientBatch(clientDb);
-
-    for (const operation of operationChunk) {
-      batch.set(clientDoc(clientDb, operation.collection, operation.id), operation.data, {
-        merge: true,
-      });
-    }
-
-    await batch.commit();
-  }
-};
-
-const migrateWithAdminSdk = async () => {
-  const serviceAccount = getFirebaseServiceAccount();
-  const adminApp =
-    getAdminApps()[0] ??
-    initializeAdminApp(
-      serviceAccount
-        ? {
-            credential: cert({
-              projectId: serviceAccount.projectId,
-              clientEmail: serviceAccount.clientEmail,
-              privateKey: serviceAccount.privateKey,
-            }),
-            projectId: serviceAccount.projectId || firebaseConfig.projectId,
-          }
-        : {
-            credential: applicationDefault(),
-            projectId: firebaseConfig.projectId,
-          }
-    );
-
-  const adminDb = getAdminFirestore(adminApp, firebaseConfig.firestoreDatabaseId);
-  const [
-    legacyClassroomSnapshot,
-    classroomSnapshot,
-    legacyDateRecordSnapshot,
-    classroomDateRecordSnapshot,
-    studentSnapshot,
-    googleSheetsMetaSnapshot,
-  ] = await Promise.all([
-    adminDb.collection(LEGACY_CLASSROOMS_COLLECTION).get(),
-    adminDb.collection(CLASSROOMS_COLLECTION).get(),
-    adminDb.collection(LEGACY_CLASSROOM_DATE_RECORDS_COLLECTION).get(),
-    adminDb.collection(CLASSROOM_DATE_RECORDS_COLLECTION).get(),
-    adminDb.collection(STUDENTS_COLLECTION).get(),
-    adminDb.collection(INTEGRATIONS_COLLECTION).doc(GOOGLE_SHEETS_DOC_ID).get(),
-  ]);
-
-  const plan = collectMigrationPlan({
-    legacyClassroomDocs: legacyClassroomSnapshot.docs,
-    classroomDocs: classroomSnapshot.docs,
-    legacyDateRecordDocs: legacyDateRecordSnapshot.docs,
-    classroomDateRecordDocs: classroomDateRecordSnapshot.docs,
-    studentDocs: studentSnapshot.docs,
-    googleSheetsMeta: {
-      exists: googleSheetsMetaSnapshot.exists,
-      data: googleSheetsMetaSnapshot.data() || {},
-    },
+  sortedRecords.forEach((record) => {
+    record.contentIds.forEach((contentId) => {
+      if (!seenContentIds.has(contentId)) {
+        seenContentIds.add(contentId);
+        mergedContentIds.push(contentId);
+      }
+    });
   });
 
-  if (!SHOULD_EXECUTE) {
-    return {
-      mode: 'admin-sdk',
-      ...plan.stats,
-    };
-  }
-
-  const operations = [
-    ...plan.classroomWrites,
-    ...plan.dateRecordWrites,
-    ...plan.studentWrites,
-    ...(plan.googleSheetsMetaWrite ? [plan.googleSheetsMetaWrite] : []),
-  ];
-
-  await commitAdminWrites(adminDb, operations);
+  const memoRecord = sortedRecords.find((record) => record.memo.length > 0);
+  const attendanceRecord = sortedRecords.find((record) => record.attendance.length > 0);
+  const earliestCreatedAt = earliestTimestampValue(
+    sortedRecords.map((record) => parseTimestamp(record.createdAt))
+  );
+  const latestUpdatedAt = latestTimestampValue(
+    sortedRecords.map((record) => parseTimestamp(record.updatedAt))
+  );
 
   return {
-    mode: 'admin-sdk',
-    executedWrites: operations.length,
-    ...plan.stats,
+    id: winner.canonicalId,
+    classroomId: winner.classroomId,
+    classroomName:
+      winner.classroomName || classroomNameById.get(winner.classroomId) || winner.classroomId,
+    ownerUid:
+      winner.ownerUid || sortedRecords.find((record) => record.ownerUid)?.ownerUid || '',
+    date: winner.date,
+    contentIds: mergedContentIds,
+    attendance: attendanceRecord ? attendanceRecord.attendance : [],
+    memo: memoRecord ? memoRecord.memo : '',
+    createdAt: toIso(earliestCreatedAt),
+    updatedAt: toIso(latestUpdatedAt),
   };
 };
 
-const migrateWithAdminLogin = async () => {
-  const rawPassword = process.env.ADMIN_PASSWORD;
-  if (!rawPassword) {
-    throw new Error(
-      'No Firebase Admin credentials were found. Set ADMIN_PASSWORD or FIREBASE_SERVICE_ACCOUNT_JSON.'
-    );
+const chunk = (items, size) => {
+  const result = [];
+  for (let index = 0; index < items.length; index += size) {
+    result.push(items.slice(index, index + size));
   }
+  return result;
+};
 
-  const finalPassword = rawPassword.length < 6 ? rawPassword.padEnd(6, '0') : rawPassword;
-  const clientApp = initializeClientApp(firebaseConfig, `migrate-classroom-domain-${Date.now()}`);
-  const auth = getAuth(clientApp);
-  await signInWithEmailAndPassword(auth, ADMIN_EMAIL, finalPassword);
+const batchSetDocuments = async (db, collectionName, writes) => {
+  for (const writeChunk of chunk(writes, BATCH_SIZE)) {
+    const batch = db.batch();
 
-  try {
-    const clientDb = getClientFirestore(clientApp, firebaseConfig.firestoreDatabaseId);
-    const [
-      legacyClassroomSnapshot,
-      classroomSnapshot,
-      legacyDateRecordSnapshot,
-      classroomDateRecordSnapshot,
-      studentSnapshot,
-      googleSheetsMetaSnapshot,
-    ] = await Promise.all([
-      clientGetDocs(clientCollection(clientDb, LEGACY_CLASSROOMS_COLLECTION)),
-      clientGetDocs(clientCollection(clientDb, CLASSROOMS_COLLECTION)),
-      clientGetDocs(clientCollection(clientDb, LEGACY_CLASSROOM_DATE_RECORDS_COLLECTION)),
-      clientGetDocs(clientCollection(clientDb, CLASSROOM_DATE_RECORDS_COLLECTION)),
-      clientGetDocs(clientCollection(clientDb, STUDENTS_COLLECTION)),
-      clientGetDoc(clientDoc(clientDb, INTEGRATIONS_COLLECTION, GOOGLE_SHEETS_DOC_ID)),
-    ]);
-
-    const plan = collectMigrationPlan({
-      legacyClassroomDocs: legacyClassroomSnapshot.docs,
-      classroomDocs: classroomSnapshot.docs,
-      legacyDateRecordDocs: legacyDateRecordSnapshot.docs,
-      classroomDateRecordDocs: classroomDateRecordSnapshot.docs,
-      studentDocs: studentSnapshot.docs,
-      googleSheetsMeta: {
-        exists: googleSheetsMetaSnapshot.exists(),
-        data: googleSheetsMetaSnapshot.data() || {},
-      },
+    writeChunk.forEach((write) => {
+      batch.set(db.collection(collectionName).doc(write.id), write.data);
     });
 
-    if (!SHOULD_EXECUTE) {
-      return {
-        mode: 'admin-login',
-        ...plan.stats,
-      };
-    }
-
-    const operations = [
-      ...plan.classroomWrites,
-      ...plan.dateRecordWrites,
-      ...plan.studentWrites,
-      ...(plan.googleSheetsMetaWrite ? [plan.googleSheetsMetaWrite] : []),
-    ];
-
-    await commitClientWrites(clientDb, operations);
-
-    return {
-      mode: 'admin-login',
-      executedWrites: operations.length,
-      ...plan.stats,
-    };
-  } finally {
-    await signOut(auth).catch(() => {});
-    await deleteApp(clientApp).catch(() => {});
+    await batch.commit();
   }
 };
 
-try {
-  const result = getFirebaseServiceAccount()
-    ? await migrateWithAdminSdk()
-    : await migrateWithAdminLogin();
+const batchDeleteDocuments = async (db, collectionName, ids) => {
+  for (const idChunk of chunk(ids, BATCH_SIZE)) {
+    const batch = db.batch();
 
-  console.log(JSON.stringify({ ok: true, ...result }, null, 2));
-  process.exit(0);
-} catch (error) {
-  console.error(
-    JSON.stringify(
-      {
-        ok: false,
-        error: error instanceof Error ? error.message : String(error),
-      },
-      null,
-      2
-    )
+    idChunk.forEach((id) => {
+      batch.delete(db.collection(collectionName).doc(id));
+    });
+
+    await batch.commit();
+  }
+};
+
+const buildAudit = ({
+  currentClassrooms,
+  legacyClassrooms,
+  currentDateRecords,
+  legacyDateRecords,
+}) => {
+  const classroomNameById = new Map();
+  const currentClassroomMap = new Map(currentClassrooms.map((doc) => [doc.id, doc]));
+  const legacyClassroomMap = new Map(legacyClassrooms.map((doc) => [doc.id, doc]));
+  const canonicalClassroomIds = new Set([
+    ...currentClassroomMap.keys(),
+    ...legacyClassroomMap.keys(),
+  ]);
+
+  const canonicalClassroomWrites = [...canonicalClassroomIds]
+    .sort()
+    .map((classroomId) => {
+      const mergedClassroom = mergeClassroomDocs(
+        currentClassroomMap.get(classroomId),
+        legacyClassroomMap.get(classroomId)
+      );
+      classroomNameById.set(classroomId, mergedClassroom.name);
+      return {
+        id: classroomId,
+        data: mergedClassroom,
+      };
+    });
+
+  const allDateRecords = [...currentDateRecords, ...legacyDateRecords];
+  const recordGroups = new Map();
+
+  allDateRecords.forEach((record) => {
+    const existingGroup = recordGroups.get(record.canonicalId);
+    if (existingGroup) {
+      existingGroup.push(record);
+    } else {
+      recordGroups.set(record.canonicalId, [record]);
+    }
+  });
+
+  const duplicateRecordGroups = [...recordGroups.entries()]
+    .filter(([, records]) => records.length > 1)
+    .map(([canonicalId, records]) => ({
+      canonicalId,
+      sourceIds: records.map((record) => `${record.sourceCollection}/${record.sourceId}`),
+    }));
+
+  const memoConflictGroups = [...recordGroups.entries()]
+    .filter(([, records]) => {
+      const distinctMemos = new Set(records.map((record) => record.memo).filter(Boolean));
+      return distinctMemos.size > 1;
+    })
+    .map(([canonicalId, records]) => ({
+      canonicalId,
+      memos: Array.from(new Set(records.map((record) => record.memo).filter(Boolean))),
+      sourceIds: records.map((record) => `${record.sourceCollection}/${record.sourceId}`),
+    }));
+
+  const canonicalDateRecordWrites = [...recordGroups.entries()]
+    .sort(([leftId], [rightId]) => leftId.localeCompare(rightId))
+    .map(([, records]) => ({
+      id: records[0].canonicalId,
+      data: mergeRecordGroup(records, classroomNameById),
+    }));
+
+  const currentNonCanonicalRecordIds = currentDateRecords
+    .filter((record) => record.sourceId !== record.canonicalId)
+    .map((record) => record.sourceId)
+    .sort();
+
+  const legacyOnlyClassroomIds = legacyClassrooms
+    .filter((doc) => !currentClassroomMap.has(doc.id))
+    .map((doc) => doc.id)
+    .sort();
+
+  return {
+    generatedAt: new Date().toISOString(),
+    applyRequested: shouldApply,
+    summary: {
+      currentClassroomCount: currentClassrooms.length,
+      legacyClassroomCount: legacyClassrooms.length,
+      currentDateRecordCount: currentDateRecords.length,
+      legacyDateRecordCount: legacyDateRecords.length,
+      legacyOnlyClassroomCount: legacyOnlyClassroomIds.length,
+      duplicateDateRecordGroupCount: duplicateRecordGroups.length,
+      memoConflictCount: memoConflictGroups.length,
+      currentNonCanonicalDateRecordCount: currentNonCanonicalRecordIds.length,
+      canonicalClassroomWriteCount: canonicalClassroomWrites.length,
+      canonicalDateRecordWriteCount: canonicalDateRecordWrites.length,
+    },
+    legacyOnlyClassroomIds,
+    duplicateDateRecordGroups: duplicateRecordGroups,
+    memoConflictGroups,
+    currentNonCanonicalDateRecordIds: currentNonCanonicalRecordIds,
+    canonicalClassroomWrites,
+    canonicalDateRecordWrites,
+    legacyClassroomDeleteIds: legacyClassrooms.map((doc) => doc.id).sort(),
+    legacyDateRecordDeleteIds: legacyDateRecords.map((record) => record.sourceId).sort(),
+  };
+};
+
+const verifyCanonicalWrites = async (db, audit) => {
+  await Promise.all([
+    ...audit.canonicalClassroomWrites.map(async (write) => {
+      const snapshot = await db.collection(CLASSROOMS_COLLECTION).doc(write.id).get();
+      if (!snapshot.exists) {
+        throw new Error(`Canonical classroom '${write.id}' was not written successfully.`);
+      }
+    }),
+    ...audit.canonicalDateRecordWrites.map(async (write) => {
+      const snapshot = await db.collection(CLASSROOM_DATE_RECORDS_COLLECTION).doc(write.id).get();
+      if (!snapshot.exists) {
+        throw new Error(`Canonical classroom date record '${write.id}' was not written successfully.`);
+      }
+    }),
+  ]);
+};
+
+const writeAuditFile = (audit) => {
+  fs.mkdirSync(path.dirname(auditOutputPath), { recursive: true });
+  fs.writeFileSync(auditOutputPath, `${JSON.stringify(audit, null, 2)}\n`, 'utf8');
+};
+
+const run = async () => {
+  const db = getAdminDb();
+  const [
+    currentClassroomSnapshot,
+    legacyClassroomSnapshot,
+    currentDateRecordSnapshot,
+    legacyDateRecordSnapshot,
+  ] = await Promise.all([
+    db.collection(CLASSROOMS_COLLECTION).get(),
+    db.collection(LEGACY_CLASSROOMS_COLLECTION).get(),
+    db.collection(CLASSROOM_DATE_RECORDS_COLLECTION).get(),
+    db.collection(LEGACY_CLASSROOM_DATE_RECORDS_COLLECTION).get(),
+  ]);
+
+  const audit = buildAudit({
+    currentClassrooms: currentClassroomSnapshot.docs.map((doc) =>
+      normalizeClassroomDoc(doc, CLASSROOMS_COLLECTION)
+    ),
+    legacyClassrooms: legacyClassroomSnapshot.docs.map((doc) =>
+      normalizeClassroomDoc(doc, LEGACY_CLASSROOMS_COLLECTION)
+    ),
+    currentDateRecords: currentDateRecordSnapshot.docs
+      .map((doc) => normalizeClassroomDateRecordDoc(doc, CLASSROOM_DATE_RECORDS_COLLECTION))
+      .filter(Boolean),
+    legacyDateRecords: legacyDateRecordSnapshot.docs
+      .map((doc) => normalizeClassroomDateRecordDoc(doc, LEGACY_CLASSROOM_DATE_RECORDS_COLLECTION))
+      .filter(Boolean),
+  });
+
+  writeAuditFile(audit);
+
+  if (!shouldApply) {
+    console.log(`Audit complete. Review ${auditOutputPath} and re-run with --apply to migrate.`);
+    return;
+  }
+
+  await batchSetDocuments(db, CLASSROOMS_COLLECTION, audit.canonicalClassroomWrites);
+  await batchSetDocuments(db, CLASSROOM_DATE_RECORDS_COLLECTION, audit.canonicalDateRecordWrites);
+  await verifyCanonicalWrites(db, audit);
+  await batchDeleteDocuments(db, LEGACY_CLASSROOMS_COLLECTION, audit.legacyClassroomDeleteIds);
+  await batchDeleteDocuments(
+    db,
+    LEGACY_CLASSROOM_DATE_RECORDS_COLLECTION,
+    audit.legacyDateRecordDeleteIds
   );
-  process.exit(1);
-}
+  await batchDeleteDocuments(
+    db,
+    CLASSROOM_DATE_RECORDS_COLLECTION,
+    audit.currentNonCanonicalDateRecordIds
+  );
+
+  console.log(`Migration applied successfully. Audit saved to ${auditOutputPath}.`);
+};
+
+run().catch((error) => {
+  console.error(error instanceof Error ? error.message : error);
+  process.exitCode = 1;
+});

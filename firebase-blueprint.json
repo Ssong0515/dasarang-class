@@ -42,7 +42,6 @@
       "properties": {
         "ownerUid": { "type": "string" },
         "classroomId": { "type": "string" },
-        "folderId": { "type": "string" },
         "name": { "type": "string" },
         "initials": { "type": "string" },
         "order": { "type": "number" },
@@ -63,8 +62,6 @@
       "properties": {
         "classroomId": { "type": "string" },
         "classroomName": { "type": "string" },
-        "folderId": { "type": "string" },
-        "folderName": { "type": "string" },
         "date": { "type": "string" },
         "ownerUid": { "type": "string" },
         "contentIds": {
@@ -86,7 +83,7 @@
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["classroomId", "date", "ownerUid", "contentIds", "attendance", "memo", "createdAt", "updatedAt"]
+      "required": ["classroomId", "classroomName", "date", "ownerUid", "contentIds", "attendance", "memo", "createdAt", "updatedAt"]
     },
     "Memo": {
       "title": "Memo",
@@ -99,6 +96,23 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["content", "date", "ownerUid"]
+    },
+    "DailyReview": {
+      "title": "Daily Review",
+      "description": "Daily classroom summary generated for admin memo view",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string" },
+        "ownerUid": { "type": "string" },
+        "summary": { "type": "string" },
+        "sourceRecordIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["date", "ownerUid", "summary", "sourceRecordIds", "createdAt", "updatedAt"]
     },
     "LessonCategory": {
       "title": "Lesson Category",
@@ -134,11 +148,7 @@
     },
     "/classrooms/{classroomId}": {
       "schema": "Classroom",
-      "description": "Primary classroom documents"
-    },
-    "/folders/{folderId}": {
-      "schema": "Classroom",
-      "description": "Legacy classroom documents kept during migration"
+      "description": "Classroom documents"
     },
     "/students/{studentId}": {
       "schema": "Student",
@@ -146,15 +156,15 @@
     },
     "/classroomDateRecords/{recordId}": {
       "schema": "ClassroomDateRecord",
-      "description": "Primary classroom date records"
-    },
-    "/folderDateRecords/{recordId}": {
-      "schema": "ClassroomDateRecord",
-      "description": "Legacy classroom date records kept during migration"
+      "description": "Canonical classroom date records"
     },
     "/memos/{memoId}": {
       "schema": "Memo",
       "description": "Memo list"
+    },
+    "/dailyReviews/{reviewId}": {
+      "schema": "DailyReview",
+      "description": "Generated daily classroom reviews"
     },
     "/categories/{categoryId}": {
       "schema": "LessonCategory",

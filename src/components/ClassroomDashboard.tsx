@@ -192,7 +192,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const [generationMessage, setGenerationMessage] = useState<string | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [isGeneratingMemoDraft, setIsGeneratingMemoDraft] = useState(false);
-  const [isGeneratingDailyReview, setIsGeneratingDailyReview] = useState(false);
   const [viewMonth, setViewMonth] = useState(new Date());
   const [settingsDraft, setSettingsDraft] = useState({
     name: classroom.name,
@@ -465,7 +464,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       setMemoDraftOptions(drafts);
       setSelectedMemoDraftStyle(null);
       nextGenerationMessage = '메모 초안 3개를 생성했습니다. 하나를 고른 뒤 저장하세요.';
-      setGenerationMessage('수업 메모 초안을 생성해 메모에 반영했습니다.');
     } catch (error) {
       setGenerationError(
         error instanceof Error ? error.message : '수업 메모 초안 생성에 실패했습니다.'
@@ -480,27 +478,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
         setGenerationError(nextGenerationError);
       }
       setIsGeneratingMemoDraft(false);
-    }
-  };
-
-  const handleGenerateDailyReviewClick = async () => {
-    if (isGeneratingDailyReview) {
-      return;
-    }
-
-    setGenerationMessage(null);
-    setGenerationError(null);
-    setIsGeneratingDailyReview(true);
-
-    try {
-      void selectedDate;
-      setGenerationMessage('하루 전체 수업 평을 생성했습니다. 메모장에서 확인할 수 있습니다.');
-    } catch (error) {
-      setGenerationError(
-        error instanceof Error ? error.message : '하루 전체 수업 평 생성에 실패했습니다.'
-      );
-    } finally {
-      setIsGeneratingDailyReview(false);
     }
   };
 
@@ -1366,14 +1343,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                       저장
                     </span>
                     {isGeneratingMemoDraft ? '메모 초안 생성 중...' : '메모 초안 생성'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleGenerateDailyReviewClick()}
-                    disabled={isGeneratingDailyReview}
-                    className="hidden"
-                  >
-                    {isGeneratingDailyReview ? '하루 전체 평 생성 중...' : '하루 전체 평 생성'}
                   </button>
                 </div>
               </div>

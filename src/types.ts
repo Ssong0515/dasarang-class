@@ -12,8 +12,6 @@ export interface Student {
   memo?: string;
   inactiveAt?: string;
   deletedAt?: string;
-  // Legacy compatibility during the classroom domain migration.
-  folderId?: string;
 }
 
 export interface AttendanceRecord {
@@ -57,9 +55,6 @@ export interface ClassroomDateRecord {
   memo: string;
   createdAt: string;
   updatedAt: string;
-  // Legacy compatibility during the classroom domain migration.
-  folderId?: string;
-  folderName?: string;
 }
 
 export interface Classroom {
@@ -99,6 +94,3 @@ export interface GeneratedMemoDraftOption {
   label: string;
   memo: string;
 }
-
-export type LessonFolder = Classroom;
-export type FolderDateRecord = ClassroomDateRecord;

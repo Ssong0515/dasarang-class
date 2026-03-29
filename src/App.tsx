@@ -24,6 +24,7 @@ import {
   signOut, 
   onAuthStateChanged,
   collection,
+  getDocs,
   query,
   where,
   onSnapshot,
@@ -49,14 +50,10 @@ import { normalizeClassroomDateRecordContentIds } from './utils/classroomDateRec
 import {
   CLASSROOMS_COLLECTION,
   DAILY_REVIEWS_COLLECTION,
-  LEGACY_CLASSROOMS_COLLECTION,
   CLASSROOM_DATE_RECORDS_COLLECTION,
-  LEGACY_CLASSROOM_DATE_RECORDS_COLLECTION,
-  getClassroomId,
-  getClassroomName,
-  mergeClassroomCollections,
-  toDualWriteClassroomDateRecordData,
-  toDualWriteStudentData,
+  comparePreferredClassroomDateRecord,
+  getClassroomDateRecordId,
+  sortClassroomDateRecords,
 } from './utils/classroomDomain';
 import {
   getVisibleStudents,
@@ -135,48 +132,19 @@ const compareCreatedAt = (left: LessonContent, right: LessonContent) =>
 const sortClassrooms = (items: Classroom[]) =>
   [...items].sort((left, right) => (left.order || 0) - (right.order || 0));
 
-const getClassroomDateRecordTimestamp = (
-  record: Pick<ClassroomDateRecord, 'updatedAt' | 'createdAt'>
-) => {
-  const updatedAt = new Date(record.updatedAt || '').getTime();
-  if (Number.isFinite(updatedAt)) {
-    return updatedAt;
-  }
-
-  const createdAt = new Date(record.createdAt || '').getTime();
-  if (Number.isFinite(createdAt)) {
-    return createdAt;
-  }
-
-  return 0;
-};
-
-const dedupeClassroomDateRecords = (records: ClassroomDateRecord[]) => {
+const canonicalizeClassroomDateRecords = (records: ClassroomDateRecord[]) => {
   const recordMap = new Map<string, ClassroomDateRecord>();
 
   records.forEach((record) => {
-    const compositeKey = `${record.classroomId}::${record.date}`;
-    const existingRecord = recordMap.get(compositeKey);
+    const canonicalId = getClassroomDateRecordId(record.classroomId, record.date);
+    const existingRecord = recordMap.get(canonicalId);
 
-    if (!existingRecord) {
-      recordMap.set(compositeKey, record);
-      return;
-    }
-
-    const existingTime = getClassroomDateRecordTimestamp(existingRecord);
-    const nextTime = getClassroomDateRecordTimestamp(record);
-
-    if (nextTime > existingTime) {
-      recordMap.set(compositeKey, record);
-      return;
-    }
-
-    if (nextTime === existingTime && record.memo.trim().length > existingRecord.memo.trim().length) {
-      recordMap.set(compositeKey, record);
+    if (!existingRecord || comparePreferredClassroomDateRecord(record, existingRecord) < 0) {
+      recordMap.set(canonicalId, record);
     }
   });
 
-  return [...recordMap.values()];
+  return sortClassroomDateRecords([...recordMap.values()]);
 };
 
 const sortContents = (items: LessonContent[]) =>
@@ -450,31 +418,13 @@ export default function App() {
         } satisfies Classroom;
       });
 
-    let legacyClassrooms: Classroom[] = [];
-    let nextClassrooms: Classroom[] = [];
-
-    const updateMergedClassrooms = () => {
-      setClassrooms(sortClassrooms(mergeClassroomCollections(nextClassrooms, legacyClassrooms)));
-    };
-
     const classroomsQuery = query(collection(db, CLASSROOMS_COLLECTION));
     const unsubscribeClassrooms = onSnapshot(
       classroomsQuery,
       (snapshot) => {
-        nextClassrooms = normalizeClassroomSnapshot(snapshot);
-        updateMergedClassrooms();
+        setClassrooms(sortClassrooms(normalizeClassroomSnapshot(snapshot)));
       },
       (error) => handleFirestoreError(error, OperationType.LIST, CLASSROOMS_COLLECTION)
-    );
-
-    const legacyClassroomsQuery = query(collection(db, LEGACY_CLASSROOMS_COLLECTION));
-    const unsubscribeLegacyClassrooms = onSnapshot(
-      legacyClassroomsQuery,
-      (snapshot) => {
-        legacyClassrooms = normalizeClassroomSnapshot(snapshot);
-        updateMergedClassrooms();
-      },
-      (error) => handleFirestoreError(error, OperationType.LIST, LEGACY_CLASSROOMS_COLLECTION)
     );
 
     const studentsQuery = query(collection(db, 'students'));
@@ -542,40 +492,30 @@ export default function App() {
     }
 
     let unsubscribeClassroomDateRecords = () => {};
-    let unsubscribeLegacyClassroomDateRecords = () => {};
     if (user) {
-      let nextClassroomDateRecords: ClassroomDateRecord[] = [];
-      let legacyClassroomDateRecords: ClassroomDateRecord[] = [];
-      const updateMergedClassroomDateRecords = () => {
-        const mergedRecords = dedupeClassroomDateRecords(
-          mergeClassroomCollections(nextClassroomDateRecords, legacyClassroomDateRecords)
-        ).sort((left, right) => {
-          const dateDiff = new Date(right.date).getTime() - new Date(left.date).getTime();
-          if (dateDiff !== 0) {
-            return dateDiff;
-          }
-
-          return getClassroomDateRecordTimestamp(right) - getClassroomDateRecordTimestamp(left);
-        });
-        setClassroomDateRecords(mergedRecords);
-      };
-
       const normalizeClassroomDateRecordSnapshot = (snapshot: QuerySnapshot<DocumentData>) =>
         snapshot.docs.map((recordDoc) => {
           const data = recordDoc.data() as Partial<ClassroomDateRecord>;
+          const classroomId = typeof data.classroomId === 'string' ? data.classroomId.trim() : '';
+          const date = typeof data.date === 'string' ? data.date.trim() : '';
+
+          if (!classroomId || !date) {
+            return null;
+          }
+
           return {
             id: recordDoc.id,
-            classroomId: getClassroomId(data),
-            classroomName: getClassroomName(data),
+            classroomId,
+            classroomName: typeof data.classroomName === 'string' ? data.classroomName.trim() : '',
             ownerUid: data.ownerUid ?? '',
-            date: data.date ?? '',
+            date,
             contentIds: normalizeClassroomDateRecordContentIds(data),
             attendance: normalizeAttendanceRecords(data.attendance),
             memo: data.memo ?? '',
             createdAt: data.createdAt ?? '',
             updatedAt: data.updatedAt ?? '',
           } satisfies ClassroomDateRecord;
-        });
+        }).filter((record): record is ClassroomDateRecord => Boolean(record));
 
       const classroomDateRecordsQuery = query(
         collection(db, CLASSROOM_DATE_RECORDS_COLLECTION),
@@ -584,24 +524,11 @@ export default function App() {
       unsubscribeClassroomDateRecords = onSnapshot(
         classroomDateRecordsQuery,
         (snapshot) => {
-          nextClassroomDateRecords = normalizeClassroomDateRecordSnapshot(snapshot);
-          updateMergedClassroomDateRecords();
+          setClassroomDateRecords(
+            canonicalizeClassroomDateRecords(normalizeClassroomDateRecordSnapshot(snapshot))
+          );
         },
         (error) => handleFirestoreError(error, OperationType.LIST, CLASSROOM_DATE_RECORDS_COLLECTION)
-      );
-
-      const legacyClassroomDateRecordsQuery = query(
-        collection(db, LEGACY_CLASSROOM_DATE_RECORDS_COLLECTION),
-        orderBy('date', 'desc')
-      );
-      unsubscribeLegacyClassroomDateRecords = onSnapshot(
-        legacyClassroomDateRecordsQuery,
-        (snapshot) => {
-          legacyClassroomDateRecords = normalizeClassroomDateRecordSnapshot(snapshot);
-          updateMergedClassroomDateRecords();
-        },
-        (error) =>
-          handleFirestoreError(error, OperationType.LIST, LEGACY_CLASSROOM_DATE_RECORDS_COLLECTION)
       );
     } else {
       setClassroomDateRecords([]);
@@ -649,12 +576,10 @@ export default function App() {
 
     return () => {
       unsubscribeClassrooms();
-      unsubscribeLegacyClassrooms();
       unsubscribeStudents();
       unsubscribeMemos();
       unsubscribeDailyReviews();
       unsubscribeClassroomDateRecords();
-      unsubscribeLegacyClassroomDateRecords();
       unsubscribeCategories();
       unsubscribeContents();
     };
@@ -759,6 +684,45 @@ export default function App() {
     return response.summary;
   };
 
+  const upsertLocalClassroomDateRecord = (record: ClassroomDateRecord) => {
+    setClassroomDateRecords((previousRecords) =>
+      canonicalizeClassroomDateRecords([
+        ...previousRecords.filter(
+          (candidate) =>
+            candidate.id !== record.id &&
+            getClassroomDateRecordId(candidate.classroomId, candidate.date) !==
+              getClassroomDateRecordId(record.classroomId, record.date)
+        ),
+        record,
+      ])
+    );
+  };
+
+  const removeLocalClassroomDateRecord = (recordId: string) => {
+    setClassroomDateRecords((previousRecords) =>
+      sortClassroomDateRecords(previousRecords.filter((record) => record.id !== recordId))
+    );
+  };
+
+  const deleteDuplicateClassroomDateRecordDocs = async (
+    classroomId: string,
+    date: string,
+    retainRecordId?: string
+  ) => {
+    const snapshot = await getDocs(
+      query(collection(db, CLASSROOM_DATE_RECORDS_COLLECTION), where('classroomId', '==', classroomId))
+    );
+
+    await Promise.all(
+      snapshot.docs
+        .filter((recordDoc) => {
+          const recordDate = recordDoc.data().date;
+          return recordDate === date && recordDoc.id !== retainRecordId;
+        })
+        .map((recordDoc) => deleteDoc(doc(db, CLASSROOM_DATE_RECORDS_COLLECTION, recordDoc.id)))
+    );
+  };
+
   const handleSaveStudents = async (classroomId: string, students: Student[]): Promise<void> => {
     if (!user) return;
     try {
@@ -788,9 +752,7 @@ export default function App() {
           })
         );
 
-        batch.set(doc(db, 'students', nextStudent.id), toDualWriteStudentData(nextStudent), {
-          merge: true,
-        });
+        batch.set(doc(db, 'students', nextStudent.id), nextStudent);
       });
 
       previousStudents
@@ -807,9 +769,7 @@ export default function App() {
             })
           );
 
-          batch.set(doc(db, 'students', student.id), toDualWriteStudentData(deletedStudent), {
-            merge: true,
-          });
+          batch.set(doc(db, 'students', student.id), deletedStudent);
         });
 
       if (students.length > 0 || previousStudents.length > 0) {
@@ -863,9 +823,7 @@ export default function App() {
           updatedAt: new Date().toISOString(),
         })
       );
-      await setDoc(doc(db, 'students', studentId), toDualWriteStudentData(movedStudent), {
-        merge: true,
-      });
+      await setDoc(doc(db, 'students', studentId), movedStudent);
       triggerGoogleSheetsSync([
         { classroomId: sourceClassroomId, mode: 'upsert' },
         { classroomId: targetClassroomId, mode: 'upsert' },
@@ -879,10 +837,7 @@ export default function App() {
     if (!user) return;
     try {
       const previousClassroom = classrooms.find((classroom) => classroom.id === classroomId);
-      const batch = writeBatch(db);
-      batch.set(doc(db, CLASSROOMS_COLLECTION, classroomId), data, { merge: true });
-      batch.set(doc(db, LEGACY_CLASSROOMS_COLLECTION, classroomId), data, { merge: true });
-      await batch.commit();
+      await setDoc(doc(db, CLASSROOMS_COLLECTION, classroomId), data, { merge: true });
       triggerGoogleSheetsSync([{
         classroomId,
         mode: 'upsert',
@@ -898,10 +853,7 @@ export default function App() {
 
     try {
       const nextData = { assignedContentIds: normalizeAssignedContentIds(contentIds) };
-      const batch = writeBatch(db);
-      batch.set(doc(db, CLASSROOMS_COLLECTION, classroomId), nextData, { merge: true });
-      batch.set(doc(db, LEGACY_CLASSROOMS_COLLECTION, classroomId), nextData, { merge: true });
-      await batch.commit();
+      await setDoc(doc(db, CLASSROOMS_COLLECTION, classroomId), nextData, { merge: true });
     } catch (error) {
       handleFirestoreError(
         error,
@@ -924,10 +876,7 @@ export default function App() {
         order: newOrder,
         createdAt: new Date().toISOString(),
       };
-      const batch = writeBatch(db);
-      batch.set(classroomRef, classroomData);
-      batch.set(doc(db, LEGACY_CLASSROOMS_COLLECTION, classroomRef.id), classroomData);
-      await batch.commit();
+      await setDoc(classroomRef, classroomData);
       triggerGoogleSheetsSync([{ classroomId: classroomRef.id, mode: 'upsert' }]);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, CLASSROOMS_COLLECTION);
@@ -938,21 +887,22 @@ export default function App() {
     if (!user) return;
     try {
       const classroomToDelete = classrooms.find((classroom) => classroom.id === classroomId);
-      const recordsToDelete = classroomDateRecords.filter(
-        (record) => record.classroomId === classroomId
+      const recordsToDeleteSnapshot = await getDocs(
+        query(
+          collection(db, CLASSROOM_DATE_RECORDS_COLLECTION),
+          where('classroomId', '==', classroomId)
+        )
       );
       const studentsToDelete = mergedStudents.filter(
         (student) => student.classroomId === classroomId
       );
-      for (const record of recordsToDelete) {
-        await deleteDoc(doc(db, CLASSROOM_DATE_RECORDS_COLLECTION, record.id));
-        await deleteDoc(doc(db, LEGACY_CLASSROOM_DATE_RECORDS_COLLECTION, record.id));
+      for (const recordDoc of recordsToDeleteSnapshot.docs) {
+        await deleteDoc(doc(db, CLASSROOM_DATE_RECORDS_COLLECTION, recordDoc.id));
       }
       for (const student of studentsToDelete) {
         await deleteDoc(doc(db, 'students', student.id));
       }
       await deleteDoc(doc(db, CLASSROOMS_COLLECTION, classroomId));
-      await deleteDoc(doc(db, LEGACY_CLASSROOMS_COLLECTION, classroomId));
       setActiveClassroomId(null);
       setActiveTab('home');
       triggerGoogleSheetsSync([{
@@ -1105,29 +1055,28 @@ export default function App() {
 
     try {
       const classroom = classrooms.find((candidate) => candidate.id === record.classroomId);
-      const recordId = `${record.classroomId}_${record.date}`;
-      const existingRecord = classroomDateRecords.find((candidate) => candidate.id === recordId);
+      const recordId = getClassroomDateRecordId(record.classroomId, record.date);
+      const existingRecord = classroomDateRecords.find(
+        (candidate) =>
+          getClassroomDateRecordId(candidate.classroomId, candidate.date) === recordId
+      );
       const nextRecord: ClassroomDateRecord = {
         ...record,
+        id: recordId,
         classroomId: record.classroomId,
         classroomName: classroom?.name || record.classroomName,
+        ownerUid: user.uid,
+        contentIds: normalizeClassroomDateRecordContentIds(record),
+        attendance: sanitizeAttendanceRecordsForStorage(record.attendance),
+        memo: record.memo ?? '',
         createdAt: existingRecord?.createdAt || record.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
 
-      const batch = writeBatch(db);
-      const recordData = toDualWriteClassroomDateRecordData({
-        ...nextRecord,
-        contentIds: normalizeClassroomDateRecordContentIds(record),
-        attendance: sanitizeAttendanceRecordsForStorage(record.attendance),
-        memo: record.memo ?? '',
-        ownerUid: user.uid,
-      });
-      batch.set(doc(db, CLASSROOM_DATE_RECORDS_COLLECTION, recordId), recordData, { merge: true });
-      batch.set(doc(db, LEGACY_CLASSROOM_DATE_RECORDS_COLLECTION, recordId), recordData, {
-        merge: true,
-      });
-      await batch.commit();
+      await setDoc(doc(db, CLASSROOM_DATE_RECORDS_COLLECTION, recordId), nextRecord);
+      await deleteDuplicateClassroomDateRecordDocs(record.classroomId, record.date, recordId);
+
+      upsertLocalClassroomDateRecord(nextRecord);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `classroomDateRecords/${record.id}`);
     }
@@ -1137,8 +1086,15 @@ export default function App() {
     if (!user) return;
 
     try {
-      await deleteDoc(doc(db, CLASSROOM_DATE_RECORDS_COLLECTION, recordId));
-      await deleteDoc(doc(db, LEGACY_CLASSROOM_DATE_RECORDS_COLLECTION, recordId));
+      const record = classroomDateRecords.find((candidate) => candidate.id === recordId);
+
+      if (record) {
+        await deleteDuplicateClassroomDateRecordDocs(record.classroomId, record.date);
+      } else {
+        await deleteDoc(doc(db, CLASSROOM_DATE_RECORDS_COLLECTION, recordId));
+      }
+
+      removeLocalClassroomDateRecord(recordId);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `classroomDateRecords/${recordId}`);
     }
@@ -1214,10 +1170,9 @@ export default function App() {
           onReorderClassrooms={async (newOrder) => {
             try {
               await Promise.all(
-                newOrder.flatMap((classroom, index) => [
-                  setDoc(doc(db, CLASSROOMS_COLLECTION, classroom.id), { order: index }, { merge: true }),
-                  setDoc(doc(db, LEGACY_CLASSROOMS_COLLECTION, classroom.id), { order: index }, { merge: true }),
-                ])
+                newOrder.map((classroom, index) =>
+                  setDoc(doc(db, CLASSROOMS_COLLECTION, classroom.id), { order: index }, { merge: true })
+                )
               );
             } catch (error) {
               console.error('Failed to reorder classrooms', error);
