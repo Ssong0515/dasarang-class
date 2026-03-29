@@ -4,6 +4,12 @@ import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 import type { LessonFolder, Student } from '../src/types';
+import {
+  getVisibleStudents,
+  normalizeLegacyStudents,
+  normalizeStudentRecord,
+  sortStudents,
+} from '../src/utils/students';
 
 const ADMIN_EMAIL = 'songes0515@gmail.com';
 const INTEGRATIONS_COLLECTION = 'integrations';
@@ -249,9 +255,7 @@ const getUniqueSheetTitle = (
 
 const quoteSheetTitle = (title: string) => `'${title.replace(/'/g, "''")}'`;
 
-const buildSheetValues = (folder: LessonFolder) => {
-  const students = folder.students || [];
-
+const buildSheetValues = (folder: LessonFolder, students: Student[]) => {
   return [
     [...SHEET_HEADERS],
     ...students.map((student: Student) => [
@@ -280,9 +284,43 @@ const getFolderDoc = async (folderId: string) => {
   } as LessonFolder;
 };
 
+const getStudentsForFolder = async (folder: LessonFolder) => {
+  const legacyStudents = normalizeLegacyStudents(folder.students, {
+    folderId: folder.id,
+    ownerUid: folder.ownerUid,
+    createdAt: folder.createdAt,
+    updatedAt: folder.createdAt,
+  });
+  const snapshot = await getAdminDb().collection('students').get();
+  const globalStudents = snapshot.docs.map((studentDoc) =>
+    normalizeStudentRecord({
+      id: studentDoc.id,
+      ...(studentDoc.data() as Partial<Student>),
+    })
+  );
+  const mergedStudentsById = new Map<string, Student>();
+
+  legacyStudents.forEach((student) => {
+    if (student.id) {
+      mergedStudentsById.set(student.id, student);
+    }
+  });
+
+  globalStudents.forEach((student) => {
+    if (student.id) {
+      mergedStudentsById.set(student.id, student);
+    }
+  });
+
+  return getVisibleStudents(sortStudents([...mergedStudentsById.values()])).filter(
+    (student) => student.folderId === folder.id
+  );
+};
+
 const persistFolderSheet = async (folder: LessonFolder, payload?: FolderSyncPayload) => {
   const meta = await readMeta();
   const { sheets, spreadsheetId, spreadsheet } = await getSpreadsheet();
+  const students = await getStudentsForFolder(folder);
   const otherMappedSheetIds = new Set(
     Object.entries(meta.folders || {})
       .filter(([mappedFolderId]) => mappedFolderId !== folder.id)
@@ -387,7 +425,7 @@ const persistFolderSheet = async (folder: LessonFolder, payload?: FolderSyncPayl
     range,
     valueInputOption: 'RAW',
     requestBody: {
-      values: buildSheetValues(folder),
+      values: buildSheetValues(folder, students),
     },
   });
 
@@ -399,7 +437,7 @@ const persistFolderSheet = async (folder: LessonFolder, payload?: FolderSyncPayl
     folderId: folder.id,
     sheetId,
     title: sheetTitle,
-    syncedStudentCount: folder.students?.length || 0,
+    syncedStudentCount: students.length,
   };
 };
 

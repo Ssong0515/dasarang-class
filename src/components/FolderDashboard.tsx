@@ -32,6 +32,8 @@ import {
   Star,
   Lightbulb,
   Power,
+  UserMinus,
+  Undo2,
 } from 'lucide-react';
 import {
   AttendanceRecord,
@@ -46,10 +48,20 @@ import {
   orderAssignedContentIds,
 } from '../utils/folderContentAssignments';
 import { normalizeFolderDateRecordContentIds } from '../utils/folderDateRecordContent';
+import {
+  formatStudentInactiveDate,
+  getStudentCounts,
+  getStudentInitials,
+  isStudentInactive,
+  sanitizeStudentForStorage,
+  splitStudentsByStatus,
+} from '../utils/students';
+import { isAttendanceExcluded } from '../utils/attendance';
 
 interface FolderDashboardProps {
   folder: LessonFolder;
   folders: LessonFolder[];
+  studentsById: Map<string, Student>;
   dateRecords: FolderDateRecord[];
   categories: LessonCategory[];
   contents: LessonContent[];
@@ -64,6 +76,7 @@ interface FolderDashboardProps {
 }
 
 type Tab = 'dashboard' | 'students' | 'settings';
+type StudentAction = 'add' | 'edit' | 'delete' | 'move' | 'deactivate' | 'reactivate';
 
 const FOLDER_COLORS = [
   { name: '브라운', value: '#8B5E3C', bg: '#FFF5E9' },
@@ -129,30 +142,23 @@ const getDaysInMonth = (date: Date) => {
   return days;
 };
 
-const getStudentInitials = (name: string) =>
-  name
-    .split(' ')
-    .filter(Boolean)
-    .map((part) => part[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2) || '??';
-
 const getAttendanceStats = (record?: FolderDateRecord) => {
   if (!record) {
     return { present: 0, absent: 0, late: 0, total: 0 };
   }
 
-  const total = record.attendance.length;
-  const present = record.attendance.filter((attendance) => attendance.status === 'Present').length;
-  const absent = record.attendance.filter((attendance) => attendance.status === 'Absent').length;
-  const late = record.attendance.filter((attendance) => attendance.status === 'Late').length;
+  const includedAttendance = record.attendance.filter((attendance) => !isAttendanceExcluded(attendance));
+  const total = includedAttendance.length;
+  const present = includedAttendance.filter((attendance) => attendance.status === 'Present').length;
+  const absent = includedAttendance.filter((attendance) => attendance.status === 'Absent').length;
+  const late = includedAttendance.filter((attendance) => attendance.status === 'Late').length;
   return { present, absent, late, total };
 };
 
 export const FolderDashboard: React.FC<FolderDashboardProps> = ({
   folder,
   folders,
+  studentsById: allStudentsById,
   dateRecords,
   categories,
   contents,
@@ -173,10 +179,11 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
   const [newStudentAge, setNewStudentAge] = useState('');
   const [newStudentContact, setNewStudentContact] = useState('');
   const [newStudentMemo, setNewStudentMemo] = useState('');
+  const [isStudentCreateFormOpen, setIsStudentCreateFormOpen] = useState(false);
   const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [studentSaveError, setStudentSaveError] = useState<string | null>(null);
-  const [studentAction, setStudentAction] = useState<'add' | 'edit' | 'delete' | 'move' | null>(null);
+  const [studentAction, setStudentAction] = useState<StudentAction | null>(null);
   const [studentMoveTargets, setStudentMoveTargets] = useState<Record<string, string>>({});
   const [localMemo, setLocalMemo] = useState('');
   const [viewMonth, setViewMonth] = useState(new Date());
@@ -235,6 +242,38 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
   const previewIconColor = settingsDraft.color;
   const previewIconBg =
     FOLDER_COLORS.find((color) => color.value === settingsDraft.color)?.bg || '#FFF5E9';
+  const { activeStudents, inactiveStudents } = useMemo(
+    () => splitStudentsByStatus(students),
+    [students]
+  );
+  const { activeCount, inactiveCount } = useMemo(
+    () => getStudentCounts(students),
+    [students]
+  );
+  const sortedAttendanceRecords = useMemo(() => {
+    if (!currentDateRecord) {
+      return [];
+    }
+
+    return currentDateRecord.attendance
+      .map((record, index) => {
+        const globalStudent = allStudentsById.get(record.studentId);
+
+        return {
+          record,
+          index,
+          isInactiveStudent: globalStudent ? isStudentInactive(globalStudent) : false,
+        };
+      })
+      .sort((left, right) => {
+        if (left.isInactiveStudent !== right.isInactiveStudent) {
+          return left.isInactiveStudent ? 1 : -1;
+        }
+
+        return left.index - right.index;
+      })
+      .map(({ record }) => record);
+  }, [allStudentsById, currentDateRecord]);
 
   useEffect(() => {
     setSettingsDraft({
@@ -302,11 +341,10 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
   }, [selectedDate, isCurrentDateActive]);
 
   const createInitialAttendance = (): AttendanceRecord[] =>
-    (folder.students || []).map((student) => ({
+    students.map((student) => ({
       studentId: student.id,
-      studentName: student.name,
-      initials: student.initials,
       status: 'Present',
+      isExcluded: isStudentInactive(student) ? true : undefined,
     }));
 
   const createDateRecord = (): FolderDateRecord => {
@@ -402,8 +440,37 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
     }
 
     const nextAttendance = currentDateRecord.attendance.map((attendance) =>
-      attendance.studentId === studentId ? { ...attendance, status } : attendance
+      attendance.studentId === studentId && !isAttendanceExcluded(attendance)
+        ? { ...attendance, status }
+        : attendance
     );
+
+    onSaveDateRecord({
+      ...currentDateRecord,
+      attendance: nextAttendance,
+    });
+  };
+
+  const toggleAttendanceExclusion = (studentId: string) => {
+    if (!currentDateRecord) {
+      return;
+    }
+
+    const nextAttendance = currentDateRecord.attendance.map((attendance) => {
+      if (attendance.studentId !== studentId) {
+        return attendance;
+      }
+
+      if (isAttendanceExcluded(attendance)) {
+        const { isExcluded: _isExcluded, ...includedAttendance } = attendance;
+        return includedAttendance;
+      }
+
+      return {
+        ...attendance,
+        isExcluded: true,
+      };
+    });
 
     onSaveDateRecord({
       ...currentDateRecord,
@@ -414,7 +481,7 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
   const normalizeStudent = (student: Student): Student => {
     const name = student.name.trim();
 
-    return {
+    return sanitizeStudentForStorage({
       ...student,
       name,
       initials: getStudentInitials(name),
@@ -422,12 +489,12 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
       age: student.age?.trim() || undefined,
       contact: student.contact?.trim() || undefined,
       memo: student.memo?.trim() || undefined,
-    };
+    });
   };
 
   const persistStudents = async (
     nextStudents: Student[],
-    action: 'add' | 'edit' | 'delete',
+    action: Exclude<StudentAction, 'move'>,
     errorMessage: string
   ) => {
     setStudentSaveError(null);
@@ -459,8 +526,12 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
 
     const nextStudent = normalizeStudent({
       id: `std-${Date.now()}`,
+      ownerUid: '',
+      folderId: folder.id,
       name,
       initials: '',
+      order: students.length,
+      createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       age: newStudentAge,
       contact: newStudentContact,
@@ -481,6 +552,7 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
     setNewStudentAge('');
     setNewStudentContact('');
     setNewStudentMemo('');
+    setIsStudentCreateFormOpen(false);
   };
 
   const handleRemoveStudent = async (student: Student) => {
@@ -532,6 +604,56 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
     if (saved) {
       setEditingStudent(null);
     }
+  };
+
+  const handleDeactivateStudent = async (student: Student) => {
+    if (isSavingStudentAction || isStudentInactive(student)) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `'${student.name}' 학생을 비활성 처리할까요? 앞으로 새로 생성하는 출석 체크 대상에서 제외됩니다.`
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    const nextStudent = normalizeStudent({
+      ...student,
+      inactiveAt: new Date().toISOString(),
+    });
+
+    await persistStudents(
+      students.map((currentStudent) =>
+        currentStudent.id === student.id ? nextStudent : currentStudent
+      ),
+      'deactivate',
+      '학생을 비활성 처리하지 못했습니다. 잠시 후 다시 시도해주세요.'
+    );
+  };
+
+  const handleReactivateStudent = async (student: Student) => {
+    if (isSavingStudentAction || !isStudentInactive(student)) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `'${student.name}' 학생을 다시 활성화할까요? 이후 새로 생성하는 출석 체크 대상에 다시 포함됩니다.`
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    const { inactiveAt: _inactiveAt, ...reactivatedStudent } = student;
+    const nextStudent = normalizeStudent(reactivatedStudent);
+
+    await persistStudents(
+      students.map((currentStudent) =>
+        currentStudent.id === student.id ? nextStudent : currentStudent
+      ),
+      'reactivate',
+      '학생을 다시 활성화하지 못했습니다. 잠시 후 다시 시도해주세요.'
+    );
   };
 
   const handleMoveStudentToFolder = async (student: Student) => {
@@ -858,41 +980,101 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
               </h2>
             </div>
             <p className="mb-6 text-sm text-[#8B7E74]">
-              활성화된 날짜에만 출석 상태를 저장합니다.
+              활성화된 날짜에만 출석 상태를 저장합니다. 비활성 학생은 기본적으로 오늘 제외 상태로 시작하며,
+              학생별로 오늘만 제외하거나 다시 포함할 수 있습니다.
             </p>
             <div className="custom-scrollbar max-h-[400px] space-y-2 overflow-y-auto pr-2">
-              {currentDateRecord?.attendance.map((record) => (
-                <div
-                  key={record.studentId}
-                  className="flex items-center justify-between rounded-xl border border-[#F3F2EE] bg-[#FBFBFA] p-3"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#EBD9C1] text-xs font-bold text-[#8B5E3C]">
-                      {record.initials}
-                    </div>
-                    <span className="text-sm font-bold text-[#4A3728]">{record.studentName}</span>
-                  </div>
-                  <div className="flex gap-1">
-                    {(['Present', 'Absent', 'Late'] as const).map((status) => (
-                      <button
-                        key={status}
-                        onClick={() => updateAttendance(record.studentId, status)}
-                        className={`rounded-lg px-3 py-1.5 text-[10px] font-bold transition-all ${
-                          record.status === status
-                            ? status === 'Present'
-                              ? 'bg-[#D1F3E0] text-[#2D7A4D]'
-                              : status === 'Absent'
-                                ? 'bg-[#F3D1D1] text-[#7A2D2D]'
-                                : 'bg-[#F3EBD1] text-[#7A6A2D]'
-                            : 'border border-[#E5E3DD] bg-white text-[#8B7E74] hover:bg-[#F3F2EE]'
+              {sortedAttendanceRecords.map((record) => {
+                const sourceStudent = allStudentsById.get(record.studentId);
+                const isInactiveStudent = sourceStudent ? isStudentInactive(sourceStudent) : false;
+                const isExcluded = isAttendanceExcluded(record);
+                const displayInitials = sourceStudent?.initials || '??';
+                const displayName = sourceStudent?.name || '알 수 없는 학생';
+
+                return (
+                  <div
+                    key={record.studentId}
+                    className={`flex flex-col gap-3 rounded-xl border p-3 transition-all sm:flex-row sm:items-center sm:justify-between ${
+                      isExcluded
+                        ? 'border-dashed border-[#D8D1C8] bg-[#F5F2EE] opacity-75'
+                        : isInactiveStudent
+                          ? 'border-[#E5E3DD] bg-[#F8F7F4] opacity-80'
+                          : 'border-[#F3F2EE] bg-[#FBFBFA]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${
+                          isExcluded || isInactiveStudent
+                            ? 'bg-[#E5E3DD] text-[#8B7E74]'
+                            : 'bg-[#EBD9C1] text-[#8B5E3C]'
                         }`}
                       >
-                        {status === 'Present' ? '출석' : status === 'Absent' ? '결석' : '지각'}
+                        {displayInitials}
+                      </div>
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-bold text-[#4A3728]">{displayName}</span>
+                          {isInactiveStudent && (
+                            <span className="rounded-full bg-[#E5E3DD] px-2 py-0.5 text-[10px] font-bold text-[#6B625A]">
+                              비활성
+                            </span>
+                          )}
+                          {isExcluded && (
+                            <span
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#F3EBD1] text-[#7A6A2D]"
+                              title="제외됨"
+                            >
+                              <X size={10} />
+                            </span>
+                          )}
+                        </div>
+                        {isInactiveStudent && (
+                          <p className="mt-1 text-xs text-[#8B7E74]">
+                            비활성 학생이라 새 출석 기록에서는 기본 제외됩니다.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                      <div className="flex gap-1">
+                        {(['Present', 'Absent', 'Late'] as const).map((status) => (
+                          <button
+                            key={status}
+                            onClick={() => updateAttendance(record.studentId, status)}
+                            disabled={isExcluded}
+                            className={`rounded-lg px-3 py-1.5 text-[10px] font-bold transition-all ${
+                              isExcluded
+                                ? 'cursor-not-allowed border border-[#E5E3DD] bg-[#F7F4EF] text-[#B3ABA2]'
+                                : record.status === status
+                                  ? status === 'Present'
+                                    ? 'bg-[#D1F3E0] text-[#2D7A4D]'
+                                    : status === 'Absent'
+                                      ? 'bg-[#F3D1D1] text-[#7A2D2D]'
+                                      : 'bg-[#F3EBD1] text-[#7A6A2D]'
+                                  : 'border border-[#E5E3DD] bg-white text-[#8B7E74] hover:bg-[#F3F2EE]'
+                            }`}
+                          >
+                            {status === 'Present' ? '출석' : status === 'Absent' ? '결석' : '지각'}
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => toggleAttendanceExclusion(record.studentId)}
+                        title={isExcluded ? '다시 포함' : '제외'}
+                        className={`inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-[10px] font-bold transition-all ${
+                          isExcluded
+                            ? 'bg-[#EEF7F0] text-[#2D7A4D] hover:bg-[#DDEFE2]'
+                            : 'bg-[#FDECEC] text-[#B42318] hover:bg-[#FAD4D1]'
+                        }`}
+                      >
+                        {isExcluded ? '다시 포함' : <X size={12} />}
                       </button>
-                    ))}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
 
               {(!currentDateRecord || currentDateRecord.attendance.length === 0) && (
                 <div className="py-6 text-center text-sm text-[#8B7E74]">
@@ -1009,6 +1191,271 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
     </motion.div>
   );
 
+  const renderStudentCard = (student: Student, index: number) => {
+    const inactive = isStudentInactive(student);
+    const inactiveDate = formatStudentInactiveDate(student.inactiveAt);
+
+    return (
+      <motion.div
+        key={student.id}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: index * 0.05 }}
+        className={`group overflow-hidden rounded-2xl border ${
+          inactive ? 'border-[#E5E3DD] bg-[#F8F7F4]' : 'border-[#F3F2EE] bg-[#FBFBFA]'
+        }`}
+      >
+        <div
+          className={`flex cursor-pointer items-center justify-between p-4 transition-all ${
+            inactive ? 'hover:bg-[#F1EFEA]' : 'hover:bg-[#F3F2EE]'
+          }`}
+          onClick={() => setExpandedStudent(expandedStudent === student.id ? null : student.id)}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className={`flex h-10 w-10 items-center justify-center rounded-full text-xs font-bold ${
+                inactive ? 'bg-[#E5E3DD] text-[#8B7E74]' : 'bg-[#EBD9C1] text-[#8B5E3C]'
+              }`}
+            >
+              {student.initials}
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="block font-bold text-[#4A3728]">{student.name}</span>
+                {inactive && (
+                  <span className="rounded-full bg-[#E5E3DD] px-2.5 py-1 text-[10px] font-bold text-[#6B625A]">
+                    비활성
+                  </span>
+                )}
+              </div>
+              {(student.age || student.contact || inactiveDate) && (
+                <span className="text-xs text-[#A89F94]">
+                  {[student.age, student.contact, inactiveDate ? `비활성 ${inactiveDate}` : null]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <button
+            onClick={(event) => {
+              event.stopPropagation();
+              void handleRemoveStudent(student);
+            }}
+            disabled={isSavingStudentAction}
+            className="rounded-full p-1 text-[#A89F94] opacity-0 transition-all hover:bg-red-100 hover:text-red-500 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
+            title="학생 삭제"
+          >
+            <X size={14} />
+          </button>
+        </div>
+
+        <AnimatePresence>
+          {expandedStudent === student.id && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden border-t border-[#F3F2EE] px-4 pb-4"
+            >
+              {editingStudent?.id === student.id ? (
+                <div className="space-y-2 pt-4">
+                  <input
+                    value={editingStudent.name}
+                    onChange={(event) =>
+                      setEditingStudent({ ...editingStudent, name: event.target.value })
+                    }
+                    disabled={isSavingStudentAction}
+                    placeholder="이름"
+                    className="w-full rounded-xl border border-[#E5E3DD] px-3 py-2 text-sm focus:border-[#8B5E3C] focus:outline-none"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      value={editingStudent.age || ''}
+                      onChange={(event) =>
+                        setEditingStudent({ ...editingStudent, age: event.target.value })
+                      }
+                      disabled={isSavingStudentAction}
+                      placeholder="나이"
+                      className="rounded-xl border border-[#E5E3DD] px-3 py-2 text-sm focus:border-[#8B5E3C] focus:outline-none"
+                    />
+                    <input
+                      value={editingStudent.contact || ''}
+                      onChange={(event) =>
+                        setEditingStudent({ ...editingStudent, contact: event.target.value })
+                      }
+                      disabled={isSavingStudentAction}
+                      placeholder="연락처"
+                      className="rounded-xl border border-[#E5E3DD] px-3 py-2 text-sm focus:border-[#8B5E3C] focus:outline-none"
+                    />
+                  </div>
+                  <textarea
+                    value={editingStudent.memo || ''}
+                    onChange={(event) =>
+                      setEditingStudent({ ...editingStudent, memo: event.target.value })
+                    }
+                    disabled={isSavingStudentAction}
+                    placeholder="기타 메모"
+                    rows={2}
+                    className="w-full resize-none rounded-xl border border-[#E5E3DD] px-3 py-2 text-sm focus:border-[#8B5E3C] focus:outline-none"
+                  />
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={() => void handleSaveStudentEdit(editingStudent)}
+                      disabled={isSavingStudentAction || !editingStudent.name.trim()}
+                      className="flex-1 rounded-xl bg-[#8B5E3C] py-2 text-sm font-bold text-white transition-all hover:bg-[#724D31] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {studentAction === 'edit' ? '저장 중...' : '저장'}
+                    </button>
+                    <button
+                      onClick={() => setEditingStudent(null)}
+                      disabled={isSavingStudentAction}
+                      className="rounded-xl bg-[#F3F2EE] px-4 py-2 text-sm font-bold text-[#8B7E74] transition-all hover:bg-[#E5E3DD]"
+                    >
+                      취소
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2 pt-4 text-sm">
+                  {student.age && (
+                    <div className="flex items-center gap-2 text-[#8B7E74]">
+                      <span className="w-16 text-[#A89F94]">나이</span>
+                      <span className="font-medium text-[#4A3728]">{student.age}</span>
+                    </div>
+                  )}
+                  {student.contact && (
+                    <div className="flex items-center gap-2 text-[#8B7E74]">
+                      <span className="w-16 text-[#A89F94]">연락처</span>
+                      <span className="font-medium text-[#4A3728]">{student.contact}</span>
+                    </div>
+                  )}
+                  {student.memo && (
+                    <div className="flex items-start gap-2 text-[#8B7E74]">
+                      <span className="w-16 text-[#A89F94]">메모</span>
+                      <span className="font-medium text-[#4A3728]">{student.memo}</span>
+                    </div>
+                  )}
+                  {inactiveDate && (
+                    <div className="flex items-center gap-2 text-[#8B7E74]">
+                      <span className="w-16 text-[#A89F94]">비활성일</span>
+                      <span className="font-medium text-[#4A3728]">{inactiveDate}</span>
+                    </div>
+                  )}
+                  {!student.age && !student.contact && !student.memo && !inactiveDate && (
+                    <p className="italic text-[#A89F94]">추가 정보 없음</p>
+                  )}
+
+                  <div className="mt-4 border-t border-[#F3F2EE] pt-4">
+                    <p className="mb-2 text-[11px] font-bold tracking-wide text-[#A89F94]">반 이동</p>
+                    {availableMoveFolders.length > 0 ? (
+                      <div className="flex gap-2">
+                        <select
+                          value={studentMoveTargets[student.id] || defaultMoveTargetId}
+                          onChange={(event) =>
+                            setStudentMoveTargets((currentTargets) => ({
+                              ...currentTargets,
+                              [student.id]: event.target.value,
+                            }))
+                          }
+                          disabled={isSavingStudentAction}
+                          className="flex-1 rounded-xl border border-[#E5E3DD] bg-white px-3 py-2 text-sm text-[#4A3728] outline-none focus:border-[#8B5E3C]"
+                        >
+                          {availableMoveFolders.map((targetFolder) => (
+                            <option key={targetFolder.id} value={targetFolder.id}>
+                              {targetFolder.name}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => void handleMoveStudentToFolder(student)}
+                          disabled={isSavingStudentAction || !(studentMoveTargets[student.id] || defaultMoveTargetId)}
+                          className="rounded-xl bg-[#FFF5E9] px-4 py-2 text-xs font-bold text-[#8B5E3C] transition-all hover:bg-[#EBD9C1] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {studentAction === 'move' ? '이동 중...' : '반 이동'}
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-[#A89F94]">이동 가능한 다른 반이 없습니다.</p>
+                    )}
+                  </div>
+
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      disabled={isSavingStudentAction}
+                      onClick={() => setEditingStudent({ ...student })}
+                      className="rounded-xl bg-[#F3F2EE] px-4 py-1.5 text-xs font-bold text-[#8B5E3C] transition-all hover:bg-[#EBD9C1]"
+                    >
+                      수정
+                    </button>
+                    {inactive ? (
+                      <button
+                        disabled={isSavingStudentAction}
+                        onClick={() => void handleReactivateStudent(student)}
+                        className="inline-flex items-center gap-1 rounded-xl bg-[#EEF7F0] px-4 py-1.5 text-xs font-bold text-[#2D7A4D] transition-all hover:bg-[#DDEFE2] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <Undo2 size={12} />
+                        {studentAction === 'reactivate' ? '활성화 중...' : '다시 활성화'}
+                      </button>
+                    ) : (
+                      <button
+                        disabled={isSavingStudentAction}
+                        onClick={() => void handleDeactivateStudent(student)}
+                        className="inline-flex items-center gap-1 rounded-xl bg-[#F3F2EE] px-4 py-1.5 text-xs font-bold text-[#8B7E74] transition-all hover:bg-[#E5E3DD] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <UserMinus size={12} />
+                        {studentAction === 'deactivate' ? '처리 중...' : '비활성 처리'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
+    );
+  };
+
+  const renderStudentSection = (
+    title: string,
+    description: string,
+    sectionStudents: Student[],
+    emptyMessage: string,
+    variant: 'active' | 'inactive'
+  ) => (
+    <section className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-bold text-[#4A3728]">{title}</h3>
+          <p className="mt-1 text-sm text-[#8B7E74]">{description}</p>
+        </div>
+        <span
+          className={`rounded-full px-3 py-1 text-xs font-bold ${
+            variant === 'active'
+              ? 'bg-[#FFF5E9] text-[#8B5E3C]'
+              : 'bg-[#F3F2EE] text-[#8B7E74]'
+          }`}
+        >
+          {sectionStudents.length}명
+        </span>
+      </div>
+
+      {sectionStudents.length > 0 ? (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {sectionStudents.map((student, index) => renderStudentCard(student, index))}
+        </div>
+      ) : (
+        <div className="rounded-[28px] border border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-6 py-8 text-sm text-[#8B7E74]">
+          {emptyMessage}
+        </div>
+      )}
+    </section>
+  );
+
   const renderStudentsTab = () => (
     <motion.div
       key="students"
@@ -1017,246 +1464,134 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
       exit={{ opacity: 0, y: -10 }}
       className="rounded-[40px] border border-[#E5E3DD] bg-white p-10 text-left shadow-sm"
     >
-      <div className="mb-8 flex items-center justify-between">
+      <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F3F2EE] text-[#8B5E3C]">
             <Users size={20} />
           </div>
-          <h2 className="text-2xl font-bold">학생 명단 ({students.length}명)</h2>
+          <div>
+            <h2 className="text-2xl font-bold">학생 명단 ({activeCount}명)</h2>
+            <p className="mt-1 text-sm text-[#8B7E74]">새 출석 체크에는 활성 학생만 포함됩니다.</p>
+          </div>
         </div>
+        {inactiveCount > 0 && (
+          <span className="rounded-full bg-[#F3F2EE] px-3 py-1 text-xs font-bold text-[#8B7E74]">
+            비활성 {inactiveCount}명
+          </span>
+        )}
       </div>
 
-      <div className="mb-8 flex gap-4">
-        <div className="grid flex-1 grid-cols-2 gap-3">
-          <div className="relative col-span-2">
-            <input
-              type="text"
-              value={newStudentName}
-              onChange={(event) => setNewStudentName(event.target.value)}
-              disabled={isSavingStudentAction}
-              placeholder="이름 (필수)"
-              className="w-full rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] py-3 pl-10 pr-4 text-sm transition-all focus:border-[#8B5E3C] focus:outline-none"
-            />
-            <UserPlus size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A89F94]" />
-          </div>
-          <input
-            type="text"
-            value={newStudentAge}
-            onChange={(event) => setNewStudentAge(event.target.value)}
-            disabled={isSavingStudentAction}
-            placeholder="나이"
-            className="rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] px-4 py-3 text-sm transition-all focus:border-[#8B5E3C] focus:outline-none"
-          />
-          <input
-            type="text"
-            value={newStudentContact}
-            onChange={(event) => setNewStudentContact(event.target.value)}
-            disabled={isSavingStudentAction}
-            placeholder="연락처"
-            className="rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] px-4 py-3 text-sm transition-all focus:border-[#8B5E3C] focus:outline-none"
-          />
-          <div className="col-span-2">
-            <textarea
-              value={newStudentMemo}
-              onChange={(event) => setNewStudentMemo(event.target.value)}
-              disabled={isSavingStudentAction}
-              placeholder="학생 메모"
-              rows={3}
-              className="w-full resize-none rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] px-4 py-3 text-sm transition-all focus:border-[#8B5E3C] focus:outline-none"
-            />
-          </div>
-        </div>
-        <button
-          onClick={() => void handleAddStudent()}
-          disabled={isSavingStudentAction || !newStudentName.trim()}
-          className="self-start rounded-2xl bg-[#8B5E3C] px-6 py-4 font-bold text-white shadow-md transition-all hover:bg-[#724D31] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#8B5E3C]"
-        >
-          {studentAction === 'add' ? '저장 중...' : '추가'}
-        </button>
+      <div className="mb-8">
+        {!isStudentCreateFormOpen && (
+          <button
+            type="button"
+            onClick={() => setIsStudentCreateFormOpen(true)}
+            className="inline-flex items-center gap-2 rounded-2xl bg-[#8B5E3C] px-6 py-3.5 font-bold text-white shadow-md transition-all hover:bg-[#724D31]"
+          >
+            <UserPlus size={16} />
+            신규 등록
+          </button>
+        )}
+
+        <AnimatePresence initial={false}>
+          {isStudentCreateFormOpen && (
+            <motion.div
+              key="student-create-form"
+              initial={{ opacity: 0, height: 0, y: -8 }}
+              animate={{ opacity: 1, height: 'auto', y: 0 }}
+              exit={{ opacity: 0, height: 0, y: -8 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden"
+            >
+              <div className="rounded-[28px] border border-[#E5E3DD] bg-[#FBFBFA] p-5">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-lg font-bold text-[#4A3728]">신규 학생 등록</h3>
+                    <p className="mt-1 text-sm text-[#8B7E74]">
+                      필요한 정보만 입력하고 신규 등록을 눌러 학생 명단에 추가하세요.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsStudentCreateFormOpen(false)}
+                    disabled={isSavingStudentAction}
+                    className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-[#8B7E74] transition-all hover:bg-[#F3F2EE] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    접기
+                  </button>
+                </div>
+
+                <div className="flex gap-4">
+                  <div className="grid flex-1 grid-cols-2 gap-3">
+                    <div className="relative col-span-2">
+                      <input
+                        type="text"
+                        value={newStudentName}
+                        onChange={(event) => setNewStudentName(event.target.value)}
+                        disabled={isSavingStudentAction}
+                        placeholder="이름 (필수)"
+                        className="w-full rounded-2xl border border-[#E5E3DD] bg-white py-3 pl-10 pr-4 text-sm transition-all focus:border-[#8B5E3C] focus:outline-none"
+                      />
+                      <UserPlus size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A89F94]" />
+                    </div>
+                    <input
+                      type="text"
+                      value={newStudentAge}
+                      onChange={(event) => setNewStudentAge(event.target.value)}
+                      disabled={isSavingStudentAction}
+                      placeholder="나이"
+                      className="rounded-2xl border border-[#E5E3DD] bg-white px-4 py-3 text-sm transition-all focus:border-[#8B5E3C] focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      value={newStudentContact}
+                      onChange={(event) => setNewStudentContact(event.target.value)}
+                      disabled={isSavingStudentAction}
+                      placeholder="연락처"
+                      className="rounded-2xl border border-[#E5E3DD] bg-white px-4 py-3 text-sm transition-all focus:border-[#8B5E3C] focus:outline-none"
+                    />
+                    <div className="col-span-2">
+                      <textarea
+                        value={newStudentMemo}
+                        onChange={(event) => setNewStudentMemo(event.target.value)}
+                        disabled={isSavingStudentAction}
+                        placeholder="학생 메모"
+                        rows={3}
+                        className="w-full resize-none rounded-2xl border border-[#E5E3DD] bg-white px-4 py-3 text-sm transition-all focus:border-[#8B5E3C] focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => void handleAddStudent()}
+                    disabled={isSavingStudentAction || !newStudentName.trim()}
+                    className="self-start rounded-2xl bg-[#8B5E3C] px-6 py-4 font-bold text-white shadow-md transition-all hover:bg-[#724D31] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#8B5E3C]"
+                  >
+                    {studentAction === 'add' ? '저장 중...' : '신규 등록'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {studentSaveError && <p className="mb-6 text-sm font-medium text-red-500">{studentSaveError}</p>}
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {students.map((student, index) => (
-          <motion.div
-            key={student.id}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.05 }}
-            className="group overflow-hidden rounded-2xl border border-[#F3F2EE] bg-[#FBFBFA]"
-          >
-            <div
-              className="flex cursor-pointer items-center justify-between p-4 transition-all hover:bg-[#F3F2EE]"
-              onClick={() => setExpandedStudent(expandedStudent === student.id ? null : student.id)}
-            >
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#EBD9C1] text-xs font-bold text-[#8B5E3C]">
-                  {student.initials}
-                </div>
-                <div>
-                  <span className="block font-bold text-[#4A3728]">{student.name}</span>
-                  {(student.age || student.contact) && (
-                    <span className="text-xs text-[#A89F94]">
-                      {[student.age, student.contact].filter(Boolean).join(' · ')}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <button
-                onClick={(event) => {
-                  event.stopPropagation();
-                  void handleRemoveStudent(student);
-                }}
-                disabled={isSavingStudentAction}
-                className="rounded-full p-1 text-[#A89F94] opacity-0 transition-all hover:bg-red-100 hover:text-red-500 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
-                title="학생 삭제"
-              >
-                <X size={14} />
-              </button>
-            </div>
-
-            <AnimatePresence>
-              {expandedStudent === student.id && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="overflow-hidden border-t border-[#F3F2EE] px-4 pb-4"
-                >
-                  {editingStudent?.id === student.id ? (
-                    <div className="space-y-2 pt-4">
-                      <input
-                        value={editingStudent.name}
-                        onChange={(event) =>
-                          setEditingStudent({ ...editingStudent, name: event.target.value })
-                        }
-                        disabled={isSavingStudentAction}
-                        placeholder="이름"
-                        className="w-full rounded-xl border border-[#E5E3DD] px-3 py-2 text-sm focus:border-[#8B5E3C] focus:outline-none"
-                      />
-                      <div className="grid grid-cols-2 gap-2">
-                        <input
-                          value={editingStudent.age || ''}
-                          onChange={(event) =>
-                            setEditingStudent({ ...editingStudent, age: event.target.value })
-                          }
-                          disabled={isSavingStudentAction}
-                          placeholder="나이"
-                          className="rounded-xl border border-[#E5E3DD] px-3 py-2 text-sm focus:border-[#8B5E3C] focus:outline-none"
-                        />
-                        <input
-                          value={editingStudent.contact || ''}
-                          onChange={(event) =>
-                            setEditingStudent({ ...editingStudent, contact: event.target.value })
-                          }
-                          disabled={isSavingStudentAction}
-                          placeholder="연락처"
-                          className="rounded-xl border border-[#E5E3DD] px-3 py-2 text-sm focus:border-[#8B5E3C] focus:outline-none"
-                        />
-                      </div>
-                      <textarea
-                        value={editingStudent.memo || ''}
-                        onChange={(event) =>
-                          setEditingStudent({ ...editingStudent, memo: event.target.value })
-                        }
-                        disabled={isSavingStudentAction}
-                        placeholder="기타 메모"
-                        rows={2}
-                        className="w-full resize-none rounded-xl border border-[#E5E3DD] px-3 py-2 text-sm focus:border-[#8B5E3C] focus:outline-none"
-                      />
-                      <div className="flex gap-2 pt-1">
-                        <button
-                          onClick={() => void handleSaveStudentEdit(editingStudent)}
-                          disabled={isSavingStudentAction || !editingStudent.name.trim()}
-                          className="flex-1 rounded-xl bg-[#8B5E3C] py-2 text-sm font-bold text-white transition-all hover:bg-[#724D31] disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {studentAction === 'edit' ? '저장 중...' : '저장'}
-                        </button>
-                        <button
-                          onClick={() => setEditingStudent(null)}
-                          disabled={isSavingStudentAction}
-                          className="rounded-xl bg-[#F3F2EE] px-4 py-2 text-sm font-bold text-[#8B7E74] transition-all hover:bg-[#E5E3DD]"
-                        >
-                          취소
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-2 pt-4 text-sm">
-                      {student.age && (
-                        <div className="flex items-center gap-2 text-[#8B7E74]">
-                          <span className="w-12 text-[#A89F94]">나이</span>
-                          <span className="font-medium text-[#4A3728]">{student.age}</span>
-                        </div>
-                      )}
-                      {student.contact && (
-                        <div className="flex items-center gap-2 text-[#8B7E74]">
-                          <span className="w-12 text-[#A89F94]">연락처</span>
-                          <span className="font-medium text-[#4A3728]">{student.contact}</span>
-                        </div>
-                      )}
-                      {student.memo && (
-                        <div className="flex items-start gap-2 text-[#8B7E74]">
-                          <span className="w-12 text-[#A89F94]">메모</span>
-                          <span className="font-medium text-[#4A3728]">{student.memo}</span>
-                        </div>
-                      )}
-                      {!student.age && !student.contact && !student.memo && (
-                        <p className="italic text-[#A89F94]">추가 정보 없음</p>
-                      )}
-
-                      <div className="mt-4 border-t border-[#F3F2EE] pt-4">
-                        <p className="mb-2 text-[11px] font-bold tracking-wide text-[#A89F94]">반 이동</p>
-                        {availableMoveFolders.length > 0 ? (
-                          <div className="flex gap-2">
-                            <select
-                              value={studentMoveTargets[student.id] || defaultMoveTargetId}
-                              onChange={(event) =>
-                                setStudentMoveTargets((currentTargets) => ({
-                                  ...currentTargets,
-                                  [student.id]: event.target.value,
-                                }))
-                              }
-                              disabled={isSavingStudentAction}
-                              className="flex-1 rounded-xl border border-[#E5E3DD] bg-white px-3 py-2 text-sm text-[#4A3728] outline-none focus:border-[#8B5E3C]"
-                            >
-                              {availableMoveFolders.map((targetFolder) => (
-                                <option key={targetFolder.id} value={targetFolder.id}>
-                                  {targetFolder.name}
-                                </option>
-                              ))}
-                            </select>
-                            <button
-                              type="button"
-                              onClick={() => void handleMoveStudentToFolder(student)}
-                              disabled={isSavingStudentAction || !(studentMoveTargets[student.id] || defaultMoveTargetId)}
-                              className="rounded-xl bg-[#FFF5E9] px-4 py-2 text-xs font-bold text-[#8B5E3C] transition-all hover:bg-[#EBD9C1] disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              {studentAction === 'move' ? '이동 중...' : '반 이동'}
-                            </button>
-                          </div>
-                        ) : (
-                          <p className="text-xs text-[#A89F94]">이동 가능한 다른 반이 없습니다.</p>
-                        )}
-                      </div>
-
-                      <button
-                        disabled={isSavingStudentAction}
-                        onClick={() => setEditingStudent({ ...student })}
-                        className="mt-2 rounded-xl bg-[#F3F2EE] px-4 py-1.5 text-xs font-bold text-[#8B5E3C] transition-all hover:bg-[#EBD9C1]"
-                      >
-                        수정
-                      </button>
-                    </div>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.div>
-        ))}
+      <div className="space-y-10">
+        {renderStudentSection(
+          '활성 학생',
+          '현재 출석 체크 대상에 포함되는 학생입니다.',
+          activeStudents,
+          '현재 활성 학생이 없습니다.',
+          'active'
+        )}
+        {renderStudentSection(
+          '비활성 학생',
+          '보류 중이거나 현재 출석 체크에서 제외할 학생입니다. 기존 출석 기록은 그대로 남습니다.',
+          inactiveStudents,
+          '비활성 처리된 학생이 없습니다.',
+          'inactive'
+        )}
       </div>
     </motion.div>
   );
@@ -1387,7 +1722,14 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
               <h4 className="text-lg font-bold" style={{ color: previewIconColor }}>
                 {settingsDraft.name}
               </h4>
-              <p className="text-sm text-[#A89F94]">학생 {folder.students?.length || 0}명</p>
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-[#A89F94]">
+                <span>학생 {activeCount}명</span>
+                {inactiveCount > 0 && (
+                  <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[#8B7E74]">
+                    비활성 {inactiveCount}명
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </div>

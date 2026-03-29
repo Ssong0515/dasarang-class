@@ -2,7 +2,7 @@
   "entities": {
     "User": {
       "title": "User",
-      "description": "선생님 사용자 정보",
+      "description": "Admin or teacher profile",
       "type": "object",
       "properties": {
         "email": { "type": "string", "format": "email" },
@@ -14,7 +14,7 @@
     },
     "LessonFolder": {
       "title": "Lesson Folder",
-      "description": "수업 폴더",
+      "description": "Class folder",
       "type": "object",
       "properties": {
         "name": { "type": "string" },
@@ -23,9 +23,29 @@
       },
       "required": ["name", "ownerUid"]
     },
+    "Student": {
+      "title": "Student",
+      "description": "Global student master record",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string" },
+        "folderId": { "type": "string" },
+        "name": { "type": "string" },
+        "initials": { "type": "string" },
+        "order": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "age": { "type": "string" },
+        "contact": { "type": "string" },
+        "memo": { "type": "string" },
+        "inactiveAt": { "type": "string", "format": "date-time" },
+        "deletedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "folderId", "name", "initials", "order", "createdAt", "updatedAt"]
+    },
     "Lesson": {
       "title": "Lesson",
-      "description": "개별 수업 정보",
+      "description": "Per-date class record",
       "type": "object",
       "properties": {
         "folderId": { "type": "string" },
@@ -38,9 +58,9 @@
           "items": {
             "type": "object",
             "properties": {
-              "studentName": { "type": "string" },
+              "studentId": { "type": "string" },
               "status": { "type": "string", "enum": ["Present", "Absent", "Late"] },
-              "initials": { "type": "string" }
+              "isExcluded": { "type": "boolean" }
             }
           }
         },
@@ -70,7 +90,7 @@
     },
     "Memo": {
       "title": "Memo",
-      "description": "선생님 개인 메모",
+      "description": "General memo",
       "type": "object",
       "properties": {
         "content": { "type": "string" },
@@ -82,7 +102,7 @@
     },
     "LessonCategory": {
       "title": "Lesson Category",
-      "description": "수업 콘텐츠 카테고리",
+      "description": "Content category",
       "type": "object",
       "properties": {
         "name": { "type": "string" },
@@ -92,7 +112,7 @@
     },
     "LessonContent": {
       "title": "Lesson Content",
-      "description": "수업 콘텐츠 상세",
+      "description": "Content detail",
       "type": "object",
       "properties": {
         "categoryId": { "type": "string" },
@@ -107,27 +127,31 @@
   "firestore": {
     "/users/{userId}": {
       "schema": "User",
-      "description": "사용자 프로필"
+      "description": "User profile"
     },
     "/folders/{folderId}": {
       "schema": "LessonFolder",
-      "description": "수업 폴더 목록"
+      "description": "Class folders"
     },
-    "/lessons/{lessonId}": {
+    "/students/{studentId}": {
+      "schema": "Student",
+      "description": "Global students"
+    },
+    "/folderDateRecords/{recordId}": {
       "schema": "Lesson",
-      "description": "수업 상세 정보"
+      "description": "Lesson records"
     },
     "/memos/{memoId}": {
       "schema": "Memo",
-      "description": "개인 메모 목록"
+      "description": "Memo list"
     },
     "/categories/{categoryId}": {
       "schema": "LessonCategory",
-      "description": "콘텐츠 카테고리"
+      "description": "Content categories"
     },
     "/contents/{contentId}": {
       "schema": "LessonContent",
-      "description": "콘텐츠 상세"
+      "description": "Content items"
     }
   }
 }

@@ -74,6 +74,30 @@ service cloud.firestore {
              data.ownerUid == request.auth.uid;
     }
 
+    function isValidStudent(data) {
+      return data.keys().hasAll([
+               'ownerUid',
+               'folderId',
+               'name',
+               'initials',
+               'order',
+               'createdAt',
+               'updatedAt'
+             ]) &&
+             data.ownerUid == request.auth.uid &&
+             data.folderId is string &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.initials is string && data.initials.size() < 10 &&
+             data.order is number &&
+             data.createdAt is string &&
+             data.updatedAt is string &&
+             (!('age' in data) || data.age is string) &&
+             (!('contact' in data) || data.contact is string) &&
+             (!('memo' in data) || data.memo is string) &&
+             (!('inactiveAt' in data) || data.inactiveAt is string) &&
+             (!('deletedAt' in data) || data.deletedAt is string);
+    }
+
     function isValidMemo(data) {
       return data.keys().hasAll(['content', 'date', 'ownerUid']) &&
              data.content is string && data.content.size() > 0 && data.content.size() < 5000 &&
@@ -124,6 +148,13 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isAdmin() && isValidFolderDateRecord(request.resource.data);
       allow update: if isDocOwner() || isAdmin();
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /students/{studentId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidStudent(request.resource.data);
+      allow update: if (isDocOwner() || isAdmin()) && isValidStudent(request.resource.data);
       allow delete: if isDocOwner() || isAdmin();
     }
 

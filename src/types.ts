@@ -1,18 +1,23 @@
 export interface Student {
   id: string;
+  ownerUid: string;
+  folderId: string;
   name: string;
   initials: string;
+  order: number;
+  createdAt: string;
   updatedAt: string;
   age?: string;
   contact?: string;
   memo?: string;
+  inactiveAt?: string;
+  deletedAt?: string;
 }
 
 export interface AttendanceRecord {
   studentId: string;
-  studentName: string;
   status: 'Present' | 'Absent' | 'Late';
-  initials: string;
+  isExcluded?: boolean;
 }
 
 export interface LessonResource {
@@ -62,6 +67,7 @@ export interface LessonFolder {
   order?: number;
   icon?: string;
   color?: string;
+  createdAt?: string;
 }
 
 export interface Memo {

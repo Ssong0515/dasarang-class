@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { LessonFolder } from '../types';
+import { getStudentCounts } from '../utils/students';
 
 const QuickNavCard: React.FC<{
   icon: React.ReactNode;
@@ -110,35 +111,46 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          {folders.map((folder, idx) => (
-            <motion.div
-              key={folder.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: idx * 0.1 }}
-              className="group relative flex flex-col overflow-hidden rounded-[40px] border border-[#E5E3DD] bg-white p-8 transition-all hover:border-[#8B5E3C]"
-            >
-              <div className="relative z-10 flex-1">
-                <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#F3F2EE] text-[#8B5E3C] transition-colors group-hover:bg-[#8B5E3C] group-hover:text-white">
-                  <BookOpen size={28} />
-                </div>
-                <h3 className="mb-3 text-2xl font-bold text-[#4A3728]">{folder.name}</h3>
-                <p className="mb-8 text-sm text-[#8B7E74]">
-                  현재 등록 학생: <span className="font-bold text-[#8B5E3C]">{folder.students?.length || 0}명</span>
-                </p>
-              </div>
+          {folders.map((folder, idx) => {
+            const { activeCount, inactiveCount } = getStudentCounts(folder.students || []);
 
-              <button
-                onClick={() => onManageFolder(folder)}
-                className="relative z-10 flex items-center justify-center gap-2 rounded-xl bg-[#F3F2EE] py-3 font-bold text-[#8B5E3C] transition-all hover:bg-[#EBD9C1]"
+            return (
+              <motion.div
+                key={folder.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.1 }}
+                className="group relative flex flex-col overflow-hidden rounded-[40px] border border-[#E5E3DD] bg-white p-8 transition-all hover:border-[#8B5E3C]"
               >
-                <Users size={16} />
-                반 관리 열기
-              </button>
+                <div className="relative z-10 flex-1">
+                  <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#F3F2EE] text-[#8B5E3C] transition-colors group-hover:bg-[#8B5E3C] group-hover:text-white">
+                    <BookOpen size={28} />
+                  </div>
+                  <h3 className="mb-3 text-2xl font-bold text-[#4A3728]">{folder.name}</h3>
+                  <div className="mb-8 flex flex-wrap items-center gap-2 text-sm text-[#8B7E74]">
+                    <span>
+                      현재 등록 학생: <span className="font-bold text-[#8B5E3C]">{activeCount}명</span>
+                    </span>
+                    {inactiveCount > 0 && (
+                      <span className="rounded-full bg-[#F3F2EE] px-2.5 py-1 text-[11px] font-bold text-[#8B7E74]">
+                        비활성 {inactiveCount}명
+                      </span>
+                    )}
+                  </div>
+                </div>
 
-              <div className="absolute -bottom-4 -right-4 h-32 w-32 rounded-full bg-[#F3F2EE]/50 transition-colors group-hover:bg-[#8B5E3C]/5" />
-            </motion.div>
-          ))}
+                <button
+                  onClick={() => onManageFolder(folder)}
+                  className="relative z-10 flex items-center justify-center gap-2 rounded-xl bg-[#F3F2EE] py-3 font-bold text-[#8B5E3C] transition-all hover:bg-[#EBD9C1]"
+                >
+                  <Users size={16} />
+                  반 관리 열기
+                </button>
+
+                <div className="absolute -bottom-4 -right-4 h-32 w-32 rounded-full bg-[#F3F2EE]/50 transition-colors group-hover:bg-[#8B5E3C]/5" />
+              </motion.div>
+            );
+          })}
 
           {folders.length === 0 && (
             <div className="col-span-full rounded-[32px] border border-dashed border-[#E5E3DD] bg-white p-12 text-center">
