@@ -2,7 +2,7 @@ import React from 'react';
 import {
   LayoutGrid,
   Users,
-  Paperclip,
+  StickyNote,
   HelpCircle,
   LogOut,
   Library,
@@ -251,7 +251,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           />
 
           <SidebarNavButton
-            icon={<Paperclip size={20} />}
+            icon={<StickyNote size={20} />}
             label="메모장"
             isCollapsed={isCollapsed}
             isActive={activeTab === 'memo'}

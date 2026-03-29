@@ -22,7 +22,7 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
   onDeleteMemo,
 }) => {
   const [newMemo, setNewMemo] = useState('');
-  const [activeTab, setActiveTab] = useState<Tab>('general');
+  const [activeTab, setActiveTab] = useState<Tab>('date-records');
 
   const classroomNamesById = useMemo(
     () => new Map(classrooms.map((classroom) => [classroom.id, classroom.name])),
@@ -52,13 +52,15 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!newMemo.trim()) {
+    if (activeTab !== 'general' || !newMemo.trim()) {
       return;
     }
 
     onAddMemo(newMemo);
     setNewMemo('');
   };
+
+  const isGeneralTab = activeTab === 'general';
 
   return (
     <main className="flex-1 overflow-y-auto bg-[#FBFBFA] p-8">
@@ -68,30 +70,31 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
           <p className="text-[#8B7E74]">운영 메모와 날짜별 수업 메모, 학생별 메모를 한곳에서 봅니다.</p>
         </header>
 
-        <section className="mb-10 rounded-[32px] border border-[#E5E3DD] bg-white p-8 shadow-sm">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <textarea
-              value={newMemo}
-              onChange={(event) => setNewMemo(event.target.value)}
-              placeholder="새 메모를 입력하세요."
-              className="min-h-[120px] w-full resize-none rounded-2xl border-none bg-[#F3F2EE] p-6 text-[#4A3728] outline-none transition-all placeholder:text-[#A89F94] focus:ring-2 focus:ring-[#8B5E3C]/20"
-            />
-            <div className="flex justify-end">
-              <button
-                type="submit"
-                disabled={!newMemo.trim()}
-                className="flex items-center gap-2 rounded-xl bg-[#8B5E3C] px-8 py-3 font-bold text-white shadow-lg shadow-[#8B5E3C]/20 transition-all hover:bg-[#724D31] disabled:opacity-50 disabled:shadow-none"
-              >
-                <Plus size={18} />
-                메모 저장
-              </button>
-            </div>
-          </form>
-        </section>
+        {isGeneralTab && (
+          <section className="mb-10 rounded-[32px] border border-[#E5E3DD] bg-white p-8 shadow-sm">
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <textarea
+                value={newMemo}
+                onChange={(event) => setNewMemo(event.target.value)}
+                placeholder="새 메모를 입력하세요."
+                className="min-h-[120px] w-full resize-none rounded-2xl border-none bg-[#F3F2EE] p-6 text-[#4A3728] outline-none transition-all placeholder:text-[#A89F94] focus:ring-2 focus:ring-[#8B5E3C]/20"
+              />
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  disabled={!newMemo.trim()}
+                  className="flex items-center gap-2 rounded-xl bg-[#8B5E3C] px-8 py-3 font-bold text-white shadow-lg shadow-[#8B5E3C]/20 transition-all hover:bg-[#724D31] disabled:opacity-50 disabled:shadow-none"
+                >
+                  <Plus size={18} />
+                  메모 저장
+                </button>
+              </div>
+            </form>
+          </section>
+        )}
 
         <div className="mb-8 flex gap-4 border-b border-[#E5E3DD]">
           {[
-            { id: 'general', label: '기타 메모', icon: StickyNote, count: memos.length },
             {
               id: 'date-records',
               label: '수업별 메모',
@@ -99,6 +102,7 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
               count: dateRecordMemos.length,
             },
             { id: 'students', label: '학생별 메모', icon: Users, count: studentMemos.length },
+            { id: 'general', label: '기타 메모', icon: StickyNote, count: memos.length },
           ].map((tab) => (
             <button
               key={tab.id}

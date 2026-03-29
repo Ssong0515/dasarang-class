@@ -236,16 +236,21 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     return currentDateRecord.attendance
       .map((record, index) => {
         const globalStudent = allStudentsById.get(record.studentId);
+        const isExcluded = isAttendanceExcluded(record);
 
         return {
           record,
           index,
+          isExcluded,
           isInactiveStudent: globalStudent ? isStudentInactive(globalStudent) : false,
         };
       })
       .sort((left, right) => {
-        if (left.isInactiveStudent !== right.isInactiveStudent) {
-          return left.isInactiveStudent ? 1 : -1;
+        const leftGroup = left.isExcluded ? 2 : left.isInactiveStudent ? 1 : 0;
+        const rightGroup = right.isExcluded ? 2 : right.isInactiveStudent ? 1 : 0;
+
+        if (leftGroup !== rightGroup) {
+          return leftGroup - rightGroup;
         }
 
         return left.index - right.index;
@@ -753,7 +758,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 initial={{ opacity: 0, y: -8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 8 }}
-                className="flex flex-col justify-between gap-5 rounded-[28px] border border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-6 py-6 text-sm text-[#8B7E74] lg:min-h-[272px]"
+                className="rounded-[28px] border border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-6 py-6 text-sm text-[#8B7E74]"
               >
                 <div className="flex flex-wrap gap-2">
                   {assignmentPreviewContents.length > 0 ? (
@@ -777,20 +782,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                       아직 배정된 콘텐츠가 없습니다.
                     </div>
                   )}
-                </div>
-
-                <div className="flex flex-col gap-3 border-t border-[#E5E3DD] pt-4 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-sm text-[#8B7E74]">
-                    {isCurrentDateActive
-                      ? '선택한 날짜 기록용 콘텐츠를 바로 선택할 수 있습니다.'
-                      : '학생 페이지에 보일 콘텐츠를 먼저 정리해두세요.'}
-                  </p>
-                  <button
-                    onClick={onGoToLibrary}
-                    className="inline-flex items-center justify-center rounded-xl bg-white px-4 py-2 text-sm font-bold text-[#8B5E3C] shadow-sm transition-all hover:bg-[#FFF5E9]"
-                  >
-                    라이브러리 열기
-                  </button>
                 </div>
               </motion.div>
             ) : (
