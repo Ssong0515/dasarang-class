@@ -6,9 +6,11 @@ import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import {
   getGoogleSheetsStatus,
+  syncClassroomToGoogleSheets,
   syncFolderToGoogleSheets,
   syncStudentToGoogleSheets,
   verifyAdminIdToken,
+  type ClassroomSyncPayload,
   type FolderSyncPayload,
   type StudentSyncPayload,
 } from './server/googleSheetsSync';
@@ -117,13 +119,24 @@ async function startServer() {
     }
   });
 
+  app.post(withBasePath(APP_BASE_PATH, '/api/google-sheets/sync-classroom'), requireAdmin, async (req, res) => {
+    try {
+      const result = await syncClassroomToGoogleSheets(req.body as ClassroomSyncPayload);
+      res.json({ ok: true, result });
+    } catch (error) {
+      res.status(500).json({
+        error: error instanceof Error ? error.message : 'Failed to sync classroom to Google Sheets.',
+      });
+    }
+  });
+
   app.post(withBasePath(APP_BASE_PATH, '/api/google-sheets/sync-folder'), requireAdmin, async (req, res) => {
     try {
       const result = await syncFolderToGoogleSheets(req.body as FolderSyncPayload);
       res.json({ ok: true, result });
     } catch (error) {
       res.status(500).json({
-        error: error instanceof Error ? error.message : 'Failed to sync folder to Google Sheets.',
+        error: error instanceof Error ? error.message : 'Failed to sync classroom to Google Sheets.',
       });
     }
   });

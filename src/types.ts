@@ -1,7 +1,7 @@
 export interface Student {
   id: string;
   ownerUid: string;
-  folderId: string;
+  classroomId: string;
   name: string;
   initials: string;
   order: number;
@@ -12,6 +12,8 @@ export interface Student {
   memo?: string;
   inactiveAt?: string;
   deletedAt?: string;
+  // Legacy compatibility during the classroom domain migration.
+  folderId?: string;
 }
 
 export interface AttendanceRecord {
@@ -44,20 +46,23 @@ export interface LessonContent {
   order?: number;
 }
 
-export interface FolderDateRecord {
+export interface ClassroomDateRecord {
   id: string;
-  folderId: string;
+  classroomId: string;
   ownerUid: string;
   date: string;
-  folderName: string;
+  classroomName: string;
   contentIds: string[];
   attendance: AttendanceRecord[];
   memo: string;
   createdAt: string;
   updatedAt: string;
+  // Legacy compatibility during the classroom domain migration.
+  folderId?: string;
+  folderName?: string;
 }
 
-export interface LessonFolder {
+export interface Classroom {
   id: string;
   name: string;
   ownerUid: string;
@@ -76,3 +81,6 @@ export interface Memo {
   content: string;
   date: string;
 }
+
+export type LessonFolder = Classroom;
+export type FolderDateRecord = ClassroomDateRecord;

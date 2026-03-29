@@ -45,7 +45,11 @@ export const normalizeStudentRecord = (
   return {
     id: getTrimmedString(value?.id) || getTrimmedString(fallback?.id),
     ownerUid: getTrimmedString(value?.ownerUid) || getTrimmedString(fallback?.ownerUid),
-    folderId: getTrimmedString(value?.folderId) || getTrimmedString(fallback?.folderId),
+    classroomId:
+      getTrimmedString(value?.classroomId) ||
+      getTrimmedString(value?.folderId) ||
+      getTrimmedString(fallback?.classroomId) ||
+      getTrimmedString(fallback?.folderId),
     name,
     initials,
     order:
@@ -66,17 +70,23 @@ export const normalizeStudentRecord = (
     deletedAt:
       getOptionalTrimmedString(value?.deletedAt) ??
       getOptionalTrimmedString(fallback?.deletedAt),
+    folderId:
+      getTrimmedString(value?.folderId) ||
+      getTrimmedString(value?.classroomId) ||
+      getTrimmedString(fallback?.folderId) ||
+      getTrimmedString(fallback?.classroomId),
   };
 };
 
 export const normalizeLegacyStudents = (
   value: unknown,
-  options: Pick<Student, 'folderId' | 'ownerUid'> & Partial<Pick<Student, 'createdAt' | 'updatedAt'>>
+  options: Pick<Student, 'classroomId' | 'ownerUid'> &
+    Partial<Pick<Student, 'createdAt' | 'updatedAt'>>
 ) =>
   Array.isArray(value)
     ? value.map((entry, index) =>
         normalizeStudentRecord(entry as Partial<Student>, {
-          folderId: options.folderId,
+          classroomId: options.classroomId,
           ownerUid: options.ownerUid,
           order: index,
           createdAt: options.createdAt,
@@ -96,8 +106,8 @@ export const getVisibleStudents = (students: Student[] = []) =>
 
 export const sortStudents = (students: Student[] = []) =>
   [...students].sort((left, right) => {
-    if (left.folderId !== right.folderId) {
-      return left.folderId.localeCompare(right.folderId);
+    if (left.classroomId !== right.classroomId) {
+      return left.classroomId.localeCompare(right.classroomId);
     }
 
     if (left.order !== right.order) {
@@ -162,7 +172,7 @@ export const sanitizeStudentForStorage = (student: Student): Student => {
   const nextStudent: Student = {
     id: student.id,
     ownerUid: student.ownerUid,
-    folderId: student.folderId,
+    classroomId: student.classroomId,
     name: student.name,
     initials: student.initials,
     order: student.order,

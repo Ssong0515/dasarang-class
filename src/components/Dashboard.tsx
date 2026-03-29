@@ -11,7 +11,11 @@ import {
   Library,
 } from 'lucide-react';
 import { motion } from 'motion/react';
-import { LessonFolder } from '../types';
+import { Classroom } from '../types';
+import {
+  getClassroomCardColors,
+  getClassroomIconComponent,
+} from '../utils/classroomAppearance';
 import { getStudentCounts } from '../utils/students';
 
 const QuickNavCard: React.FC<{
@@ -38,22 +42,22 @@ const QuickNavCard: React.FC<{
 );
 
 interface DashboardProps {
-  folders?: LessonFolder[];
-  onManageFolder: (folder: LessonFolder) => void;
+  classrooms?: Classroom[];
+  onManageClassroom: (classroom: Classroom) => void;
   onGoToLibrary: () => void;
   onGoToMemo: () => void;
   onSwitchToStudent: () => void;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
-  folders = [],
-  onManageFolder,
+  classrooms = [],
+  onManageClassroom,
   onGoToLibrary,
   onGoToMemo,
   onSwitchToStudent,
 }) => {
-  const firstFolder = folders[0];
-  const lastFolder = folders[folders.length - 1];
+  const firstClassroom = classrooms[0];
+  const lastClassroom = classrooms[classrooms.length - 1];
 
   return (
     <main className="flex-1 overflow-y-auto bg-[#FBFBFA] p-8">
@@ -70,7 +74,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             다사랑 <span className="italic text-[#8B5E3C]">컴퓨터 수업</span>
           </h1>
           <p className="mb-8 text-lg leading-relaxed text-[#8B7E74]">
-            콘텐츠는 반별로 배정하고, 날짜별 수업 운영 기록은 반 관리 화면에서 활성 날짜만 열어
+            콘텐츠는 클래스별로 배정하고, 날짜별 수업 운영 기록은 클래스 관리 화면에서 활성 날짜만 열어
             관리합니다.
           </p>
           <div className="flex gap-4">
@@ -104,32 +108,38 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
       <section className="mb-12">
         <div className="mb-8 flex items-center justify-between">
-          <h2 className="text-2xl font-serif font-bold text-[#4A3728]">수업 반 관리</h2>
+          <h2 className="text-2xl font-serif font-bold text-[#4A3728]">수업 클래스 관리</h2>
           <span className="rounded-full bg-[#EBD9C1]/30 px-3 py-1 text-xs font-bold text-[#8B5E3C]">
-            {folders.length}개 반 운영 중
+            {classrooms.length}개 클래스 운영 중
           </span>
         </div>
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          {folders.map((folder, idx) => {
-            const { activeCount, inactiveCount } = getStudentCounts(folder.students || []);
+          {classrooms.map((classroom, idx) => {
+            const { activeCount, inactiveCount } = getStudentCounts(classroom.students || []);
+            const { color, backgroundColor } = getClassroomCardColors(classroom.color);
+            const ClassroomIcon = getClassroomIconComponent(classroom.icon);
 
             return (
               <motion.div
-                key={folder.id}
+                key={classroom.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: idx * 0.1 }}
-                className="group relative flex flex-col overflow-hidden rounded-[40px] border border-[#E5E3DD] bg-white p-8 transition-all hover:border-[#8B5E3C]"
+                className="group relative flex flex-col overflow-hidden rounded-[40px] border border-[#E5E3DD] bg-white p-8 transition-all"
+                style={{ borderColor: `${color}20` }}
               >
                 <div className="relative z-10 flex-1">
-                  <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#F3F2EE] text-[#8B5E3C] transition-colors group-hover:bg-[#8B5E3C] group-hover:text-white">
-                    <BookOpen size={28} />
+                  <div
+                    className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl transition-colors group-hover:text-white"
+                    style={{ backgroundColor, color }}
+                  >
+                    <ClassroomIcon size={28} />
                   </div>
-                  <h3 className="mb-3 text-2xl font-bold text-[#4A3728]">{folder.name}</h3>
+                  <h3 className="mb-3 text-2xl font-bold text-[#4A3728]">{classroom.name}</h3>
                   <div className="mb-8 flex flex-wrap items-center gap-2 text-sm text-[#8B7E74]">
                     <span>
-                      현재 등록 학생: <span className="font-bold text-[#8B5E3C]">{activeCount}명</span>
+                      현재 등록 학생: <span className="font-bold" style={{ color }}>{activeCount}명</span>
                     </span>
                     {inactiveCount > 0 && (
                       <span className="rounded-full bg-[#F3F2EE] px-2.5 py-1 text-[11px] font-bold text-[#8B7E74]">
@@ -140,21 +150,25 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 </div>
 
                 <button
-                  onClick={() => onManageFolder(folder)}
-                  className="relative z-10 flex items-center justify-center gap-2 rounded-xl bg-[#F3F2EE] py-3 font-bold text-[#8B5E3C] transition-all hover:bg-[#EBD9C1]"
+                  onClick={() => onManageClassroom(classroom)}
+                  className="relative z-10 flex items-center justify-center gap-2 rounded-xl py-3 font-bold text-white transition-all"
+                  style={{ backgroundColor: color }}
                 >
                   <Users size={16} />
-                  반 관리 열기
+                  클래스 관리 열기
                 </button>
 
-                <div className="absolute -bottom-4 -right-4 h-32 w-32 rounded-full bg-[#F3F2EE]/50 transition-colors group-hover:bg-[#8B5E3C]/5" />
+                <div
+                  className="absolute -bottom-4 -right-4 h-32 w-32 rounded-full transition-colors"
+                  style={{ backgroundColor: `${color}10` }}
+                />
               </motion.div>
             );
           })}
 
-          {folders.length === 0 && (
+          {classrooms.length === 0 && (
             <div className="col-span-full rounded-[32px] border border-dashed border-[#E5E3DD] bg-white p-12 text-center">
-              <p className="text-[#8B7E74]">아직 생성된 수업 반이 없습니다.</p>
+              <p className="text-[#8B7E74]">아직 생성된 수업 클래스가 없습니다.</p>
             </div>
           )}
         </div>
@@ -168,34 +182,34 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
           <QuickNavCard
             icon={<LayoutGrid size={24} />}
-            title="첫 반 열기"
-            description="반별 콘텐츠 배정과 활성 날짜 기록 화면으로 바로 이동합니다."
+            title="첫 클래스 열기"
+            description="클래스별 콘텐츠 배정과 활성 날짜 기록 화면으로 바로 이동합니다."
             delay={0.1}
             onClick={() => {
-              if (firstFolder) {
-                onManageFolder(firstFolder);
+              if (firstClassroom) {
+                onManageClassroom(firstClassroom);
               }
             }}
           />
           <QuickNavCard
             icon={<Calendar size={24} />}
-            title="최근 반 열기"
-            description="마지막으로 만든 반 관리 화면으로 이동합니다."
+            title="최근 클래스 열기"
+            description="마지막으로 만든 클래스 관리 화면으로 이동합니다."
             delay={0.2}
             onClick={() => {
-              if (lastFolder) {
-                onManageFolder(lastFolder);
+              if (lastClassroom) {
+                onManageClassroom(lastClassroom);
               }
             }}
           />
           <QuickNavCard
             icon={<BookOpen size={24} />}
             title="콘텐츠 배정 관리"
-            description="학생 페이지에 노출할 반별 콘텐츠를 바로 편집합니다."
+            description="학생 페이지에 노출할 클래스별 콘텐츠를 바로 편집합니다."
             delay={0.3}
             onClick={() => {
-              if (firstFolder) {
-                onManageFolder(firstFolder);
+              if (firstClassroom) {
+                onManageClassroom(firstClassroom);
               }
             }}
           />
@@ -226,13 +240,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </p>
             <button
               onClick={() => {
-                if (firstFolder) {
-                  onManageFolder(firstFolder);
+                if (firstClassroom) {
+                  onManageClassroom(firstClassroom);
                 }
               }}
               className="rounded-2xl bg-white px-8 py-3.5 font-bold text-[#4A3728] shadow-sm transition-all hover:shadow-md"
             >
-              반 관리 열기
+              클래스 관리 열기
             </button>
           </div>
 
@@ -260,7 +274,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
             <h2 className="mb-4 text-2xl font-bold">관리자 팁</h2>
             <p className="text-sm leading-relaxed text-white/80">
-              반 배정은 학생 페이지 노출 기준이고, 날짜 기록은 실제로 수업을 진행한 날만 활성화해서
+              클래스 배정은 학생 페이지 노출 기준이고, 날짜 기록은 실제로 수업을 진행한 날만 활성화해서
               남겨두면 됩니다.
             </p>
           </div>

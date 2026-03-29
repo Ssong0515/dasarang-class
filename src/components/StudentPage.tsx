@@ -1,67 +1,31 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import {
-  BookOpen,
   ArrowRight,
   Languages,
   ChevronDown,
   FileText,
   ArrowLeft,
-  GraduationCap,
-  Code,
-  Music,
-  Brush,
-  Globe,
-  Cpu,
-  Heart,
-  Zap,
-  Rocket,
-  Star,
-  Lightbulb,
+  BookOpen,
 } from 'lucide-react';
-import { LessonFolder, LessonCategory, LessonContent } from '../types';
+import { Classroom, LessonCategory, LessonContent } from '../types';
 import { resolveAppPath } from '../utils/appPaths';
 import { StudentContentCard } from './StudentContentPreview';
-import { getAssignedContentIdsForFolder } from '../utils/folderContentAssignments';
-
-const studentIconMap: Record<
-  string,
-  React.FC<{ size?: number; className?: string; style?: React.CSSProperties }>
-> = {
-  BookOpen,
-  GraduationCap,
-  Code,
-  Music,
-  Brush,
-  Globe,
-  Cpu,
-  Heart,
-  Zap,
-  Rocket,
-  Star,
-  Lightbulb,
-};
-
-const FOLDER_COLORS: Record<string, string> = {
-  '#8B5E3C': '#FFF5E9',
-  '#3B82F6': '#EFF6FF',
-  '#22C55E': '#F0FDF4',
-  '#8B5CF6': '#F5F3FF',
-  '#EC4899': '#FDF2F8',
-  '#F97316': '#FFF7ED',
-  '#14B8A6': '#F0FDFA',
-  '#EF4444': '#FEF2F2',
-};
+import { getAssignedContentIdsForClassroom } from '../utils/classroomContentAssignments';
+import {
+  getClassroomCardColors,
+  getClassroomIconComponent,
+} from '../utils/classroomAppearance';
 
 const STUDENT_HOME_HISTORY_VIEW = 'student-home';
-const STUDENT_FOLDER_HISTORY_VIEW = 'student-folder';
+const STUDENT_CLASSROOM_HISTORY_VIEW = 'student-classroom';
 
 interface StudentPageProps {
   onBackToAdmin?: () => void;
   onLogin?: () => void;
   isAdmin?: boolean;
   embeddedInAdminShell?: boolean;
-  folders?: LessonFolder[];
+  classrooms?: Classroom[];
   categories?: LessonCategory[];
   contents?: LessonContent[];
 }
@@ -70,8 +34,8 @@ type Language = 'KO' | 'EN' | 'RU' | 'ZH';
 type TranslationLanguage = Exclude<Language, 'KO'>;
 
 type StudentHistoryState = {
-  studentPageView?: typeof STUDENT_HOME_HISTORY_VIEW | typeof STUDENT_FOLDER_HISTORY_VIEW;
-  studentFolderId?: string | null;
+  studentPageView?: typeof STUDENT_HOME_HISTORY_VIEW | typeof STUDENT_CLASSROOM_HISTORY_VIEW;
+  studentClassroomId?: string | null;
 };
 
 const translations = {
@@ -81,7 +45,7 @@ const translations = {
     backToAdmin: '관리자 페이지로 돌아가기',
     welcome: '환영합니다!',
     welcomeDesc:
-      '선생님이 준비하신 소중한 수업 자료와 공지사항을 여기서 확인할 수 있습니다. 본인의 반을 선택하여 수업을 확인해보세요.',
+      '선생님이 준비하신 소중한 수업 자료와 공지사항을 여기서 확인할 수 있습니다. 본인의 클래스를 선택하여 수업을 확인해보세요.',
     schedule: '수업 일정',
     resources: '학습 자료실',
     teacherNote: '선생님의 한마디',
@@ -90,9 +54,9 @@ const translations = {
     translateBtn: 'AI 스마트 번역',
     translating: '번역 중...',
     original: '원문 보기',
-    noLessons: '이 반에 등록된 수업이 아직 없습니다.',
+    noLessons: '이 클래스에 등록된 수업이 아직 없습니다.',
     noVisibleContents: '표시 가능한 콘텐츠가 없습니다.',
-    selectClass: '수업 반 선택하기',
+    selectClass: '수업 클래스 선택하기',
     pm: '오후',
     am: '오전',
   },
@@ -175,24 +139,25 @@ const getStudentHistoryState = (value: unknown): StudentHistoryState => {
   const state = value as Record<string, unknown>;
   const studentPageView =
     state.studentPageView === STUDENT_HOME_HISTORY_VIEW ||
-    state.studentPageView === STUDENT_FOLDER_HISTORY_VIEW
+    state.studentPageView === STUDENT_CLASSROOM_HISTORY_VIEW
       ? state.studentPageView
       : undefined;
 
   return {
     studentPageView,
-    studentFolderId: typeof state.studentFolderId === 'string' ? state.studentFolderId : null,
+    studentClassroomId:
+      typeof state.studentClassroomId === 'string' ? state.studentClassroomId : null,
   };
 };
 
 const getMergedStudentHistoryState = (
   nextView: StudentHistoryState['studentPageView'],
-  nextFolderId: string | null = null
+  nextClassroomId: string | null = null
 ) => {
   if (typeof window === 'undefined') {
     return {
       studentPageView: nextView,
-      studentFolderId: nextFolderId,
+      studentClassroomId: nextClassroomId,
     };
   }
 
@@ -204,28 +169,31 @@ const getMergedStudentHistoryState = (
   return {
     ...baseState,
     studentPageView: nextView,
-    studentFolderId: nextFolderId,
+    studentClassroomId: nextClassroomId,
   };
 };
 
-const getInitialActiveFolderId = () => {
+const getInitialActiveClassroomId = () => {
   if (typeof window === 'undefined') {
     return null;
   }
 
   const historyState = getStudentHistoryState(window.history.state);
-  if (historyState.studentPageView === STUDENT_FOLDER_HISTORY_VIEW && historyState.studentFolderId) {
-    return historyState.studentFolderId;
+  if (
+    historyState.studentPageView === STUDENT_CLASSROOM_HISTORY_VIEW &&
+    historyState.studentClassroomId
+  ) {
+    return historyState.studentClassroomId;
   }
 
   return null;
 };
 
-const getFolderTranslationCacheKey = (
-  folderId: string,
-  folderName: string,
+const getClassroomTranslationCacheKey = (
+  classroomId: string,
+  classroomName: string,
   language: TranslationLanguage
-) => `${folderId}::${folderName}::${language}`;
+) => `${classroomId}::${classroomName}::${language}`;
 
 const translateText = async (
   text: string,
@@ -257,16 +225,20 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   onLogin,
   isAdmin,
   embeddedInAdminShell = false,
-  folders = [],
+  classrooms = [],
   categories = [],
   contents = [],
 }) => {
   const [lang, setLang] = useState<Language>('KO');
   const [isLangOpen, setIsLangOpen] = useState(false);
-  const [activeFolderId, setActiveFolderId] = useState<string | null>(getInitialActiveFolderId);
+  const [activeClassroomId, setActiveClassroomId] = useState<string | null>(
+    getInitialActiveClassroomId
+  );
   const [selectedContent, setSelectedContent] = useState<LessonContent | null>(null);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-  const [translatedFolderNames, setTranslatedFolderNames] = useState<Record<string, string>>({});
+  const [translatedClassroomNames, setTranslatedClassroomNames] = useState<Record<string, string>>(
+    {}
+  );
 
   const homeTranslationCacheRef = useRef<Record<string, string>>({});
   const homeTranslationRequestIdRef = useRef(0);
@@ -274,13 +246,13 @@ export const StudentPage: React.FC<StudentPageProps> = ({
 
   const homeT = translations[lang];
   const detailT = translations.KO;
-  const currentT = activeFolderId ? detailT : homeT;
-  const activeFolder = folders.find((folder) => folder.id === activeFolderId);
+  const currentT = activeClassroomId ? detailT : homeT;
+  const activeClassroom = classrooms.find((classroom) => classroom.id === activeClassroomId);
 
   const categorizedContents = contents.filter((content) => content.categoryId !== null);
   const categorizedContentIds = new Set(categorizedContents.map((content) => content.id));
-  const assignedContentIds = activeFolder
-    ? getAssignedContentIdsForFolder(activeFolder)
+  const assignedContentIds = activeClassroom
+    ? getAssignedContentIdsForClassroom(activeClassroom)
     : [];
   const visibleAssignedContentIds = new Set(
     assignedContentIds.filter((id) => categorizedContentIds.has(id))
@@ -298,36 +270,36 @@ export const StudentPage: React.FC<StudentPageProps> = ({
     .filter((group) => group.items.length > 0);
 
   const applyHomeViewState = () => {
-    setActiveFolderId(null);
+    setActiveClassroomId(null);
     setSelectedContent(null);
     setOpenDropdown(null);
     setIsLangOpen(false);
   };
 
-  const applyFolderViewState = (folderId: string) => {
-    setActiveFolderId(folderId);
+  const applyClassroomViewState = (classroomId: string) => {
+    setActiveClassroomId(classroomId);
     setSelectedContent(null);
     setOpenDropdown(null);
     setIsLangOpen(false);
   };
 
-  const handleOpenFolder = (folderId: string) => {
+  const handleOpenClassroom = (classroomId: string) => {
     if (typeof window !== 'undefined') {
       window.history.pushState(
-        getMergedStudentHistoryState(STUDENT_FOLDER_HISTORY_VIEW, folderId),
+        getMergedStudentHistoryState(STUDENT_CLASSROOM_HISTORY_VIEW, classroomId),
         ''
       );
       hasManagedHistoryEntryRef.current = true;
     }
 
-    applyFolderViewState(folderId);
+    applyClassroomViewState(classroomId);
   };
 
   const handleGoHome = () => {
     if (typeof window !== 'undefined') {
       const historyState = getStudentHistoryState(window.history.state);
       if (
-        historyState.studentPageView === STUDENT_FOLDER_HISTORY_VIEW &&
+        historyState.studentPageView === STUDENT_CLASSROOM_HISTORY_VIEW &&
         hasManagedHistoryEntryRef.current
       ) {
         window.history.back();
@@ -340,12 +312,12 @@ export const StudentPage: React.FC<StudentPageProps> = ({
     applyHomeViewState();
   };
 
-  const getFolderDisplayName = (folder: LessonFolder) => {
+  const getClassroomDisplayName = (classroom: Classroom) => {
     if (lang === 'KO') {
-      return folder.name;
+      return classroom.name;
     }
 
-    return translatedFolderNames[folder.id] || folder.name;
+    return translatedClassroomNames[classroom.id] || classroom.name;
   };
 
   useEffect(() => {
@@ -354,9 +326,12 @@ export const StudentPage: React.FC<StudentPageProps> = ({
     }
 
     const historyState = getStudentHistoryState(window.history.state);
-    if (historyState.studentPageView === STUDENT_FOLDER_HISTORY_VIEW && historyState.studentFolderId) {
+    if (
+      historyState.studentPageView === STUDENT_CLASSROOM_HISTORY_VIEW &&
+      historyState.studentClassroomId
+    ) {
       hasManagedHistoryEntryRef.current = true;
-      applyFolderViewState(historyState.studentFolderId);
+      applyClassroomViewState(historyState.studentClassroomId);
     } else {
       window.history.replaceState(getMergedStudentHistoryState(STUDENT_HOME_HISTORY_VIEW), '');
       hasManagedHistoryEntryRef.current = true;
@@ -365,8 +340,11 @@ export const StudentPage: React.FC<StudentPageProps> = ({
     const handlePopState = (event: PopStateEvent) => {
       hasManagedHistoryEntryRef.current = true;
       const nextState = getStudentHistoryState(event.state);
-      if (nextState.studentPageView === STUDENT_FOLDER_HISTORY_VIEW && nextState.studentFolderId) {
-        applyFolderViewState(nextState.studentFolderId);
+      if (
+        nextState.studentPageView === STUDENT_CLASSROOM_HISTORY_VIEW &&
+        nextState.studentClassroomId
+      ) {
+        applyClassroomViewState(nextState.studentClassroomId);
         return;
       }
 
@@ -386,11 +364,11 @@ export const StudentPage: React.FC<StudentPageProps> = ({
 
   useEffect(() => {
     if (lang === 'KO') {
-      setTranslatedFolderNames({});
+      setTranslatedClassroomNames({});
       return;
     }
 
-    if (activeFolderId) {
+    if (activeClassroomId) {
       return;
     }
 
@@ -398,32 +376,47 @@ export const StudentPage: React.FC<StudentPageProps> = ({
     const requestId = ++homeTranslationRequestIdRef.current;
     const controller = new AbortController();
 
-    const cachedTranslations = folders.reduce<Record<string, string>>((accumulator, folder) => {
-      const cacheKey = getFolderTranslationCacheKey(folder.id, folder.name, targetLanguage);
-      const cachedValue = homeTranslationCacheRef.current[cacheKey];
-      if (cachedValue) {
-        accumulator[folder.id] = cachedValue;
-      }
-      return accumulator;
-    }, {});
+    const cachedTranslations = classrooms.reduce<Record<string, string>>(
+      (accumulator, classroom) => {
+        const cacheKey = getClassroomTranslationCacheKey(
+          classroom.id,
+          classroom.name,
+          targetLanguage
+        );
+        const cachedValue = homeTranslationCacheRef.current[cacheKey];
+        if (cachedValue) {
+          accumulator[classroom.id] = cachedValue;
+        }
+        return accumulator;
+      },
+      {}
+    );
 
-    setTranslatedFolderNames(cachedTranslations);
+    setTranslatedClassroomNames(cachedTranslations);
 
-    const pendingFolders = folders.filter((folder) => {
-      const cacheKey = getFolderTranslationCacheKey(folder.id, folder.name, targetLanguage);
-      return Boolean(folder.name.trim()) && !homeTranslationCacheRef.current[cacheKey];
+    const pendingClassrooms = classrooms.filter((classroom) => {
+      const cacheKey = getClassroomTranslationCacheKey(
+        classroom.id,
+        classroom.name,
+        targetLanguage
+      );
+      return Boolean(classroom.name.trim()) && !homeTranslationCacheRef.current[cacheKey];
     });
 
-    if (pendingFolders.length === 0) {
+    if (pendingClassrooms.length === 0) {
       return () => controller.abort();
     }
 
     void (async () => {
       const results = await Promise.allSettled(
-        pendingFolders.map(async (folder) => ({
-          folderId: folder.id,
-          cacheKey: getFolderTranslationCacheKey(folder.id, folder.name, targetLanguage),
-          translatedName: await translateText(folder.name, targetLanguage, controller.signal),
+        pendingClassrooms.map(async (classroom) => ({
+          classroomId: classroom.id,
+          cacheKey: getClassroomTranslationCacheKey(
+            classroom.id,
+            classroom.name,
+            targetLanguage
+          ),
+          translatedName: await translateText(classroom.name, targetLanguage, controller.signal),
         }))
       );
 
@@ -436,7 +429,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
         if (result.status !== 'fulfilled') {
           const reason = result.reason;
           if (!(reason instanceof DOMException && reason.name === 'AbortError')) {
-            console.error('Folder translation failed', reason);
+            console.error('Classroom translation failed', reason);
           }
           return;
         }
@@ -446,23 +439,23 @@ export const StudentPage: React.FC<StudentPageProps> = ({
         }
 
         homeTranslationCacheRef.current[result.value.cacheKey] = result.value.translatedName;
-        nextTranslations[result.value.folderId] = result.value.translatedName;
+        nextTranslations[result.value.classroomId] = result.value.translatedName;
       });
 
       if (Object.keys(nextTranslations).length > 0) {
-        setTranslatedFolderNames((current) => ({
+        setTranslatedClassroomNames((current) => ({
           ...current,
           ...nextTranslations,
         }));
       }
     })().catch((error) => {
       if (!(error instanceof DOMException && error.name === 'AbortError')) {
-        console.error('Folder translation batch failed', error);
+        console.error('Classroom translation batch failed', error);
       }
     });
 
     return () => controller.abort();
-  }, [activeFolderId, folders, lang]);
+  }, [activeClassroomId, classrooms, lang]);
 
   return (
     <div
@@ -470,76 +463,156 @@ export const StudentPage: React.FC<StudentPageProps> = ({
         embeddedInAdminShell ? 'flex min-h-0 flex-1 flex-col overflow-y-auto' : 'min-h-screen'
       }`}
     >
-      <header className="sticky top-0 z-50 flex items-center justify-between border-b border-[#E5E3DD] bg-white px-8 py-6">
-        <div className="flex items-center gap-4">
-          {activeFolderId && (
-            <button
-              onClick={handleGoHome}
-              className="rounded-xl p-2 text-[#8B7E74] transition-all hover:bg-[#F3F2EE] hover:text-[#4A3728]"
-            >
-              <ArrowLeft size={20} />
-            </button>
-          )}
-          <div className="flex flex-col">
-            <h1 className="font-serif text-2xl font-bold text-[#141414]">
-              {activeFolder ? activeFolder.name : currentT.title}
-            </h1>
-            <p className="text-xs font-medium text-[#8B7E74]">
-              {activeFolder ? `${visibleAssignedContentIds.size}개의 학습 콘텐츠` : currentT.subtitle}
-            </p>
-          </div>
-        </div>
+      <header className="sticky top-0 z-50 border-b border-[#E5E3DD] bg-white/95 backdrop-blur">
+        <div
+          className={`px-4 py-5 sm:px-6 lg:px-8 xl:px-10 2xl:px-12 ${
+            activeClassroomId && contentsByCategory.length > 0 ? 'space-y-5' : ''
+          }`}
+        >
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              {activeClassroomId && (
+                <button
+                  onClick={handleGoHome}
+                  className="rounded-xl p-2 text-[#8B7E74] transition-all hover:bg-[#F3F2EE] hover:text-[#4A3728]"
+                >
+                  <ArrowLeft size={20} />
+                </button>
+              )}
+              <div className="flex flex-col">
+                <h1 className="font-serif text-2xl font-bold text-[#141414]">
+                  {activeClassroom ? activeClassroom.name : currentT.title}
+                </h1>
+                <p className="text-xs font-medium text-[#8B7E74]">
+                  {activeClassroom
+                    ? `${visibleAssignedContentIds.size}개의 학습 콘텐츠`
+                    : currentT.subtitle}
+                </p>
+              </div>
+            </div>
 
-        <div className="flex items-center gap-4">
-          {!activeFolderId && (
-            <div className="relative">
-              <button
-                onClick={() => setIsLangOpen((current) => !current)}
-                className="flex items-center gap-2 rounded-xl bg-[#F3F2EE] px-4 py-2 text-sm font-bold text-[#4A3728] transition-all hover:bg-[#EAE8E2]"
-              >
-                <Languages size={18} className="text-[#8B5E3C]" />
-                <span>{languageNames[lang]}</span>
-                <ChevronDown
-                  size={14}
-                  className={`transition-transform ${isLangOpen ? 'rotate-180' : ''}`}
-                />
-              </button>
+            <div className="flex items-center gap-4">
+              {!activeClassroomId && (
+                <div className="relative">
+                  <button
+                    onClick={() => setIsLangOpen((current) => !current)}
+                    className="flex items-center gap-2 rounded-xl bg-[#F3F2EE] px-4 py-2 text-sm font-bold text-[#4A3728] transition-all hover:bg-[#EAE8E2]"
+                  >
+                    <Languages size={18} className="text-[#8B5E3C]" />
+                    <span>{languageNames[lang]}</span>
+                    <ChevronDown
+                      size={14}
+                      className={`transition-transform ${isLangOpen ? 'rotate-180' : ''}`}
+                    />
+                  </button>
 
-              {isLangOpen && (
-                <div className="absolute right-0 z-50 mt-2 w-40 overflow-hidden rounded-2xl border border-[#E5E3DD] bg-white shadow-xl">
-                  {(Object.keys(languageNames) as Language[]).map((language) => (
-                    <button
-                      key={language}
-                      onClick={() => {
-                        setLang(language);
-                        setIsLangOpen(false);
-                      }}
-                      className={`w-full px-4 py-3 text-left text-sm font-medium transition-colors hover:bg-[#FBFBFA] ${
-                        lang === language
-                          ? 'bg-[#FFF5E9] text-[#8B5E3C]'
-                          : 'text-[#4A3728]'
-                      }`}
-                    >
-                      {languageNames[language]}
-                    </button>
-                  ))}
+                  {isLangOpen && (
+                    <div className="absolute right-0 z-50 mt-2 w-40 overflow-hidden rounded-2xl border border-[#E5E3DD] bg-white shadow-xl">
+                      {(Object.keys(languageNames) as Language[]).map((language) => (
+                        <button
+                          key={language}
+                          onClick={() => {
+                            setLang(language);
+                            setIsLangOpen(false);
+                          }}
+                          className={`w-full px-4 py-3 text-left text-sm font-medium transition-colors hover:bg-[#FBFBFA] ${
+                            lang === language
+                              ? 'bg-[#FFF5E9] text-[#8B5E3C]'
+                              : 'text-[#4A3728]'
+                          }`}
+                        >
+                          {languageNames[language]}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
-          )}
 
-          {isAdmin && onBackToAdmin && (
-            <button
-              onClick={onBackToAdmin}
-              className="whitespace-nowrap rounded-xl bg-[#8B5E3C] px-4 py-2 text-sm font-bold text-white transition-all hover:bg-[#724D31]"
-            >
-              {currentT.backToAdmin}
-            </button>
+              {isAdmin && onBackToAdmin && (
+                <button
+                  onClick={onBackToAdmin}
+                  className="whitespace-nowrap rounded-xl bg-[#8B5E3C] px-4 py-2 text-sm font-bold text-white transition-all hover:bg-[#724D31]"
+                >
+                  {currentT.backToAdmin}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {activeClassroomId && contentsByCategory.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 border-t border-[#F0ECE6] pt-1">
+              {contentsByCategory.map((group) => (
+                <div key={group.category.id} className="relative max-w-full">
+                  <button
+                    onClick={() =>
+                      setOpenDropdown(openDropdown === group.category.id ? null : group.category.id)
+                    }
+                    className={`flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-bold transition-all ${
+                      openDropdown === group.category.id ||
+                      (selectedContent && group.items.some((item) => item.id === selectedContent.id))
+                        ? 'bg-[#8B5E3C] text-white shadow-md'
+                        : 'bg-[#F7F4EF] text-[#6C6258] hover:bg-[#EEE7DD] hover:text-[#4A3728]'
+                    }`}
+                  >
+                    {group.category.name}
+                    <span
+                      className={`text-xs ${
+                        openDropdown === group.category.id ||
+                        (selectedContent && group.items.some((item) => item.id === selectedContent.id))
+                          ? 'text-white/70'
+                          : 'text-[#9B8F84]'
+                      }`}
+                    >
+                      ({group.items.length})
+                    </span>
+                    <ChevronDown
+                      size={14}
+                      className={`transition-transform duration-200 ${
+                        openDropdown === group.category.id ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
+
+                  {openDropdown === group.category.id && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="absolute left-0 top-full z-[70] mt-3 w-72 overflow-hidden rounded-2xl border border-[#E5E3DD] bg-white shadow-xl"
+                    >
+                      {group.items.map((content) => {
+                        const isActive = selectedContent?.id === content.id;
+                        return (
+                          <button
+                            key={content.id}
+                            onClick={() => {
+                              setSelectedContent(content);
+                              setOpenDropdown(null);
+                            }}
+                            className={`flex w-full items-center gap-3 px-5 py-3.5 text-left transition-all ${
+                              isActive
+                                ? 'bg-[#FFF5E9] text-[#8B5E3C]'
+                                : 'text-[#4A3728] hover:bg-[#FBFBFA]'
+                            }`}
+                          >
+                            <FileText
+                              size={16}
+                              className={isActive ? 'text-[#8B5E3C]' : 'text-[#A89F94]'}
+                            />
+                            <span className="truncate text-sm font-medium">{content.title}</span>
+                          </button>
+                        );
+                      })}
+                    </motion.div>
+                  )}
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </header>
 
-      {!activeFolderId ? (
+      {!activeClassroomId ? (
         <main className="mx-auto max-w-5xl p-8">
           <motion.section
             initial={{ opacity: 0, y: 20 }}
@@ -557,43 +630,42 @@ export const StudentPage: React.FC<StudentPageProps> = ({
           </motion.section>
 
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {folders.map((folder, index) => {
-              const folderContentIds = new Set(
-                getAssignedContentIdsForFolder(folder).filter((id) =>
+            {classrooms.map((classroom, index) => {
+              const classroomContentIds = new Set(
+                getAssignedContentIdsForClassroom(classroom).filter((id) =>
                   categorizedContentIds.has(id)
                 )
               );
 
-              const folderColor = folder.color || '#8B5E3C';
-              const folderBg = FOLDER_COLORS[folderColor] || '#FFF5E9';
-              const IconComp = studentIconMap[folder.icon || 'BookOpen'] || BookOpen;
+              const { color, backgroundColor } = getClassroomCardColors(classroom.color);
+              const ClassroomIcon = getClassroomIconComponent(classroom.icon);
 
               return (
                 <motion.button
-                  key={folder.id}
+                  key={classroom.id}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.1 }}
-                  onClick={() => handleOpenFolder(folder.id)}
+                  onClick={() => handleOpenClassroom(classroom.id)}
                   className="group rounded-[32px] border border-[#E5E3DD] bg-white p-8 text-left shadow-sm transition-all hover:shadow-lg"
                 >
                   <div className="mb-4 flex items-center justify-between">
                     <div
                       className="flex h-12 w-12 items-center justify-center rounded-2xl transition-all"
-                      style={{ backgroundColor: folderBg, color: folderColor }}
+                      style={{ backgroundColor, color }}
                     >
-                      <IconComp size={24} />
+                      <ClassroomIcon size={24} />
                     </div>
                     <ArrowRight
                       size={20}
                       className="text-[#E5E3DD] transition-all group-hover:translate-x-1"
                     />
                   </div>
-                  <h3 className="mb-1 text-xl font-bold" style={{ color: folderColor }}>
-                    {getFolderDisplayName(folder)}
+                  <h3 className="mb-1 text-xl font-bold" style={{ color }}>
+                    {getClassroomDisplayName(classroom)}
                   </h3>
                   <p className="text-sm text-[#A89F94]">
-                    {folderContentIds.size}개 콘텐츠 · {folder.students?.length || 0}명 학생
+                    {classroomContentIds.size}개 콘텐츠 · {classroom.students?.length || 0}명 학생
                   </p>
                 </motion.button>
               );
@@ -601,79 +673,9 @@ export const StudentPage: React.FC<StudentPageProps> = ({
           </div>
         </main>
       ) : (
-        <main className="w-full px-4 py-8 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
+        <main className="w-full px-4 pb-8 pt-6 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
           {contentsByCategory.length > 0 ? (
             <>
-              <div className="relative mb-8 flex w-full max-w-none flex-wrap gap-1 rounded-2xl border border-[#E5E3DD] bg-white p-2 shadow-sm">
-                {contentsByCategory.map((group) => (
-                  <div key={group.category.id} className="relative max-w-full">
-                    <button
-                      onClick={() =>
-                        setOpenDropdown(
-                          openDropdown === group.category.id ? null : group.category.id
-                        )
-                      }
-                      className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold transition-all ${
-                        openDropdown === group.category.id ||
-                        (selectedContent && group.items.some((item) => item.id === selectedContent.id))
-                          ? 'bg-[#8B5E3C] text-white shadow-md'
-                          : 'text-[#8B7E74] hover:bg-[#F3F2EE] hover:text-[#4A3728]'
-                      }`}
-                    >
-                      {group.category.name}
-                      <span
-                        className={`text-xs ${
-                          openDropdown === group.category.id ||
-                          (selectedContent && group.items.some((item) => item.id === selectedContent.id))
-                            ? 'text-white/60'
-                            : 'text-[#A89F94]'
-                        }`}
-                      >
-                        ({group.items.length})
-                      </span>
-                      <ChevronDown
-                        size={14}
-                        className={`transition-transform duration-200 ${
-                          openDropdown === group.category.id ? 'rotate-180' : ''
-                        }`}
-                      />
-                    </button>
-
-                    {openDropdown === group.category.id && (
-                      <motion.div
-                        initial={{ opacity: 0, y: -4 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="absolute left-0 top-full z-50 mt-2 w-72 overflow-hidden rounded-2xl border border-[#E5E3DD] bg-white shadow-xl"
-                      >
-                        {group.items.map((content) => {
-                          const isActive = selectedContent?.id === content.id;
-                          return (
-                            <button
-                              key={content.id}
-                              onClick={() => {
-                                setSelectedContent(content);
-                                setOpenDropdown(null);
-                              }}
-                              className={`flex w-full items-center gap-3 px-5 py-3.5 text-left transition-all ${
-                                isActive
-                                  ? 'bg-[#FFF5E9] text-[#8B5E3C]'
-                                  : 'text-[#4A3728] hover:bg-[#FBFBFA]'
-                              }`}
-                            >
-                              <FileText
-                                size={16}
-                                className={isActive ? 'text-[#8B5E3C]' : 'text-[#A89F94]'}
-                              />
-                              <span className="truncate text-sm font-medium">{content.title}</span>
-                            </button>
-                          );
-                        })}
-                      </motion.div>
-                    )}
-                  </div>
-                ))}
-              </div>
-
               {selectedContent ? (
                 <motion.div
                   key={selectedContent.id}

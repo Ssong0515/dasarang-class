@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import type { DocumentData, QuerySnapshot } from 'firebase/firestore';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { Dashboard } from './components/Dashboard';
@@ -6,8 +7,8 @@ import { MemoSection } from './components/MemoSection';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { StudentPage } from './components/StudentPage';
 import {
-  FolderDateRecord,
-  LessonFolder,
+  ClassroomDateRecord,
+  Classroom,
   Memo,
   Student,
   LessonCategory,
@@ -34,15 +35,26 @@ import {
   OperationType
 } from './firebase';
 
-import { FolderDashboard } from './components/FolderDashboard';
+import { ClassroomDashboard } from './components/ClassroomDashboard';
 import { ContentLibrary, CONTENT_EDIT_DISCARD_WARNING } from './components/ContentLibrary';
 import { resolveAppPath } from './utils/appPaths';
 import {
   normalizeAttendanceRecords,
   sanitizeAttendanceRecordsForStorage,
 } from './utils/attendance';
-import { normalizeAssignedContentIds } from './utils/folderContentAssignments';
-import { normalizeFolderDateRecordContentIds } from './utils/folderDateRecordContent';
+import { normalizeAssignedContentIds } from './utils/classroomContentAssignments';
+import { normalizeClassroomDateRecordContentIds } from './utils/classroomDateRecordContent';
+import {
+  CLASSROOMS_COLLECTION,
+  LEGACY_CLASSROOMS_COLLECTION,
+  CLASSROOM_DATE_RECORDS_COLLECTION,
+  LEGACY_CLASSROOM_DATE_RECORDS_COLLECTION,
+  getClassroomId,
+  getClassroomName,
+  mergeClassroomCollections,
+  toDualWriteClassroomDateRecordData,
+  toDualWriteStudentData,
+} from './utils/classroomDomain';
 import {
   getVisibleStudents,
   isStudentDeleted,
@@ -53,10 +65,10 @@ import {
 } from './utils/students';
 
 type GoogleSheetsSyncRequest = {
-  folderId: string;
+  classroomId: string;
   mode?: 'upsert' | 'delete';
   previousName?: string;
-  folderName?: string;
+  classroomName?: string;
 };
 
 type GoogleSheetsSyncErrorState = {
@@ -70,7 +82,7 @@ type ContentReorderUpdate = {
   order: number;
 };
 
-type AdminTab = 'home' | 'memo' | 'folder-management' | 'content-library';
+type AdminTab = 'home' | 'memo' | 'classroom-management' | 'content-library';
 
 const UNCATEGORIZED_CATEGORY_ID = null;
 const MISC_CATEGORY_NAME = '기타';
@@ -102,6 +114,9 @@ const sortCategories = (items: LessonCategory[]) =>
 
 const compareCreatedAt = (left: LessonContent, right: LessonContent) =>
   new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+
+const sortClassrooms = (items: Classroom[]) =>
+  [...items].sort((left, right) => (left.order || 0) - (right.order || 0));
 
 const sortContents = (items: LessonContent[]) =>
   [...items].sort((left, right) => {
@@ -148,33 +163,33 @@ const mergeStudentsWithLegacy = (students: Student[], legacyStudents: Student[])
   return sortStudents([...mergedStudentsById.values()]);
 };
 
-const getStudentsByFolderId = (students: Student[]) => {
-  const studentsByFolderId = new Map<string, Student[]>();
+const getStudentsByClassroomId = (students: Student[]) => {
+  const studentsByClassroomId = new Map<string, Student[]>();
 
   for (const student of sortStudents(getVisibleStudents(students))) {
-    const folderStudents = studentsByFolderId.get(student.folderId);
-    if (folderStudents) {
-      folderStudents.push(student);
+    const classroomStudents = studentsByClassroomId.get(student.classroomId);
+    if (classroomStudents) {
+      classroomStudents.push(student);
     } else {
-      studentsByFolderId.set(student.folderId, [student]);
+      studentsByClassroomId.set(student.classroomId, [student]);
     }
   }
 
-  return studentsByFolderId;
+  return studentsByClassroomId;
 };
 
 export default function App() {
   const [user, setUser] = useState<any>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
-  const [folders, setFolders] = useState<LessonFolder[]>([]);
+  const [classrooms, setClassrooms] = useState<Classroom[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [memos, setMemos] = useState<Memo[]>([]);
-  const [folderDateRecords, setFolderDateRecords] = useState<FolderDateRecord[]>([]);
+  const [classroomDateRecords, setClassroomDateRecords] = useState<ClassroomDateRecord[]>([]);
   const [categories, setCategories] = useState<LessonCategory[]>([]);
   const [contents, setContents] = useState<LessonContent[]>([]);
   const [activeTab, setActiveTab] = useState<AdminTab>('home');
   const [viewMode, setViewMode] = useState<'admin' | 'student'>('student');
-  const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
+  const [activeClassroomId, setActiveClassroomId] = useState<string | null>(null);
   const [isContentLibraryDirty, setIsContentLibraryDirty] = useState(false);
   const [googleSheetsSyncError, setGoogleSheetsSyncError] = useState<GoogleSheetsSyncErrorState | null>(null);
   const [isRetryingGoogleSheetsSync, setIsRetryingGoogleSheetsSync] = useState(false);
@@ -190,16 +205,16 @@ export default function App() {
   const legacyStudents = useMemo(
     () =>
       sortStudents(
-        folders.flatMap((folder) =>
-          normalizeLegacyStudents(folder.students, {
-            folderId: folder.id,
-            ownerUid: folder.ownerUid,
-            createdAt: folder.createdAt,
-            updatedAt: folder.createdAt,
+        classrooms.flatMap((classroom) =>
+          normalizeLegacyStudents(classroom.students, {
+            classroomId: classroom.id,
+            ownerUid: classroom.ownerUid,
+            createdAt: classroom.createdAt,
+            updatedAt: classroom.createdAt,
           })
         )
       ),
-    [folders]
+    [classrooms]
   );
   const mergedStudents = useMemo(
     () => mergeStudentsWithLegacy(students, legacyStudents),
@@ -209,21 +224,21 @@ export default function App() {
     () => new Map(mergedStudents.map((student) => [student.id, student])),
     [mergedStudents]
   );
-  const studentsByFolderId = useMemo(
-    () => getStudentsByFolderId(mergedStudents),
+  const studentsByClassroomId = useMemo(
+    () => getStudentsByClassroomId(mergedStudents),
     [mergedStudents]
   );
-  const foldersWithStudents = useMemo(
+  const classroomsWithStudents = useMemo(
     () =>
-      folders.map((folder) => ({
-        ...folder,
-        students: studentsByFolderId.get(folder.id) || [],
+      classrooms.map((classroom) => ({
+        ...classroom,
+        students: studentsByClassroomId.get(classroom.id) || [],
       })),
-    [folders, studentsByFolderId]
+    [classrooms, studentsByClassroomId]
   );
-  const activeFolder = useMemo(
-    () => foldersWithStudents.find((folder) => folder.id === activeFolderId) || null,
-    [foldersWithStudents, activeFolderId]
+  const activeClassroom = useMemo(
+    () => classroomsWithStudents.find((classroom) => classroom.id === activeClassroomId) || null,
+    [classroomsWithStudents, activeClassroomId]
   );
 
   const confirmContentLibraryNavigation = () => {
@@ -276,7 +291,7 @@ export default function App() {
     }
   };
 
-  const syncFoldersWithGoogleSheets = async (
+  const syncClassroomsWithGoogleSheets = async (
     requests: GoogleSheetsSyncRequest[],
     options?: { isRetry?: boolean }
   ) => {
@@ -288,7 +303,9 @@ export default function App() {
 
     try {
       await Promise.all(
-        requests.map((request) => postGoogleSheetsRequest('api/google-sheets/sync-folder', request))
+        requests.map((request) =>
+          postGoogleSheetsRequest('api/google-sheets/sync-classroom', request)
+        )
       );
       setGoogleSheetsSyncError(null);
     } catch (error) {
@@ -304,12 +321,12 @@ export default function App() {
   };
 
   const triggerGoogleSheetsSync = (requests: GoogleSheetsSyncRequest[]) => {
-    void syncFoldersWithGoogleSheets(requests);
+    void syncClassroomsWithGoogleSheets(requests);
   };
 
   const handleRetryGoogleSheetsSync = async () => {
     if (!googleSheetsSyncError) return;
-    await syncFoldersWithGoogleSheets(googleSheetsSyncError.requests, { isRetry: true });
+    await syncClassroomsWithGoogleSheets(googleSheetsSyncError.requests, { isRetry: true });
   };
 
   // Auth Listener
@@ -345,17 +362,15 @@ export default function App() {
 
   // Data Listeners
   useEffect(() => {
-    // Folders Listener
-    const foldersQuery = query(collection(db, 'folders'));
-    const unsubscribeFolders = onSnapshot(foldersQuery, (snapshot) => {
-      const foldersData = snapshot.docs.map((folderDoc) => {
-        const data = folderDoc.data() as Partial<LessonFolder> & { students?: unknown };
+    const normalizeClassroomSnapshot = (snapshot: QuerySnapshot<DocumentData>) =>
+      snapshot.docs.map((classroomDoc) => {
+        const data = classroomDoc.data() as Partial<Classroom> & { students?: unknown };
         return {
-          id: folderDoc.id,
+          id: classroomDoc.id,
           name: data.name ?? '',
           ownerUid: data.ownerUid ?? '',
           students: normalizeLegacyStudents(data.students, {
-            folderId: folderDoc.id,
+            classroomId: classroomDoc.id,
             ownerUid: data.ownerUid ?? '',
             createdAt: data.createdAt,
             updatedAt: data.createdAt,
@@ -368,11 +383,35 @@ export default function App() {
           icon: typeof data.icon === 'string' ? data.icon : undefined,
           color: typeof data.color === 'string' ? data.color : undefined,
           createdAt: typeof data.createdAt === 'string' ? data.createdAt : undefined,
-        };
-      }) as LessonFolder[];
-      foldersData.sort((a, b) => (a.order || 0) - (b.order || 0));
-      setFolders(foldersData);
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'folders'));
+        } satisfies Classroom;
+      });
+
+    let legacyClassrooms: Classroom[] = [];
+    let nextClassrooms: Classroom[] = [];
+
+    const updateMergedClassrooms = () => {
+      setClassrooms(sortClassrooms(mergeClassroomCollections(nextClassrooms, legacyClassrooms)));
+    };
+
+    const classroomsQuery = query(collection(db, CLASSROOMS_COLLECTION));
+    const unsubscribeClassrooms = onSnapshot(
+      classroomsQuery,
+      (snapshot) => {
+        nextClassrooms = normalizeClassroomSnapshot(snapshot);
+        updateMergedClassrooms();
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, CLASSROOMS_COLLECTION)
+    );
+
+    const legacyClassroomsQuery = query(collection(db, LEGACY_CLASSROOMS_COLLECTION));
+    const unsubscribeLegacyClassrooms = onSnapshot(
+      legacyClassroomsQuery,
+      (snapshot) => {
+        legacyClassrooms = normalizeClassroomSnapshot(snapshot);
+        updateMergedClassrooms();
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, LEGACY_CLASSROOMS_COLLECTION)
+    );
 
     const studentsQuery = query(collection(db, 'students'));
     const unsubscribeStudents = onSnapshot(
@@ -409,37 +448,64 @@ export default function App() {
       setMemos([]);
     }
 
-    let unsubscribeFolderDateRecords = () => {};
+    let unsubscribeClassroomDateRecords = () => {};
+    let unsubscribeLegacyClassroomDateRecords = () => {};
     if (user) {
-      const folderDateRecordsQuery = query(
-        collection(db, 'folderDateRecords'),
+      let nextClassroomDateRecords: ClassroomDateRecord[] = [];
+      let legacyClassroomDateRecords: ClassroomDateRecord[] = [];
+      const updateMergedClassroomDateRecords = () => {
+        const mergedRecords = mergeClassroomCollections(
+          nextClassroomDateRecords,
+          legacyClassroomDateRecords
+        ).sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime());
+        setClassroomDateRecords(mergedRecords);
+      };
+
+      const normalizeClassroomDateRecordSnapshot = (snapshot: QuerySnapshot<DocumentData>) =>
+        snapshot.docs.map((recordDoc) => {
+          const data = recordDoc.data() as Partial<ClassroomDateRecord>;
+          return {
+            id: recordDoc.id,
+            classroomId: getClassroomId(data),
+            classroomName: getClassroomName(data),
+            ownerUid: data.ownerUid ?? '',
+            date: data.date ?? '',
+            contentIds: normalizeClassroomDateRecordContentIds(data),
+            attendance: normalizeAttendanceRecords(data.attendance),
+            memo: data.memo ?? '',
+            createdAt: data.createdAt ?? '',
+            updatedAt: data.updatedAt ?? '',
+          } satisfies ClassroomDateRecord;
+        });
+
+      const classroomDateRecordsQuery = query(
+        collection(db, CLASSROOM_DATE_RECORDS_COLLECTION),
         orderBy('date', 'desc')
       );
-      unsubscribeFolderDateRecords = onSnapshot(
-        folderDateRecordsQuery,
+      unsubscribeClassroomDateRecords = onSnapshot(
+        classroomDateRecordsQuery,
         (snapshot) => {
-          const nextFolderDateRecords = snapshot.docs.map((recordDoc) => {
-            const data = recordDoc.data() as Partial<FolderDateRecord>;
-            return {
-              id: recordDoc.id,
-              folderId: data.folderId ?? '',
-              folderName: data.folderName ?? '',
-              ownerUid: data.ownerUid ?? '',
-              date: data.date ?? '',
-              contentIds: normalizeFolderDateRecordContentIds(data),
-              attendance: normalizeAttendanceRecords(data.attendance),
-              memo: data.memo ?? '',
-              createdAt: data.createdAt ?? '',
-              updatedAt: data.updatedAt ?? '',
-            } satisfies FolderDateRecord;
-          });
-
-          setFolderDateRecords(nextFolderDateRecords);
+          nextClassroomDateRecords = normalizeClassroomDateRecordSnapshot(snapshot);
+          updateMergedClassroomDateRecords();
         },
-        (error) => handleFirestoreError(error, OperationType.LIST, 'folderDateRecords')
+        (error) => handleFirestoreError(error, OperationType.LIST, CLASSROOM_DATE_RECORDS_COLLECTION)
+      );
+
+      const legacyClassroomDateRecordsQuery = query(
+        collection(db, LEGACY_CLASSROOM_DATE_RECORDS_COLLECTION),
+        orderBy('date', 'desc')
+      );
+      unsubscribeLegacyClassroomDateRecords = onSnapshot(
+        legacyClassroomDateRecordsQuery,
+        (snapshot) => {
+          legacyClassroomDateRecords = normalizeClassroomDateRecordSnapshot(snapshot);
+          updateMergedClassroomDateRecords();
+        },
+        (error) =>
+          handleFirestoreError(error, OperationType.LIST, LEGACY_CLASSROOM_DATE_RECORDS_COLLECTION)
       );
     } else {
-      setFolderDateRecords([]);
+      setClassroomDateRecords([]);
     }
 
     // Categories Listener
@@ -483,10 +549,12 @@ export default function App() {
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'contents'));
 
     return () => {
-      unsubscribeFolders();
+      unsubscribeClassrooms();
+      unsubscribeLegacyClassrooms();
       unsubscribeStudents();
       unsubscribeMemos();
-      unsubscribeFolderDateRecords();
+      unsubscribeClassroomDateRecords();
+      unsubscribeLegacyClassroomDateRecords();
       unsubscribeCategories();
       unsubscribeContents();
     };
@@ -565,10 +633,10 @@ export default function App() {
     }
   };
 
-  const handleSaveStudents = async (folderId: string, students: Student[]): Promise<void> => {
+  const handleSaveStudents = async (classroomId: string, students: Student[]): Promise<void> => {
     if (!user) return;
     try {
-      const previousStudents = studentsByFolderId.get(folderId) || [];
+      const previousStudents = studentsByClassroomId.get(classroomId) || [];
       const previousStudentsById = new Map(
         previousStudents.map((student) => [student.id, student])
       );
@@ -587,14 +655,16 @@ export default function App() {
             ...previousWithoutDeletedAt,
             ...student,
             ownerUid: user.uid,
-            folderId,
+            classroomId,
             order: index,
             createdAt: student.createdAt || previousWithoutDeletedAt?.createdAt || timestamp,
             updatedAt: timestamp,
           })
         );
 
-        batch.set(doc(db, 'students', nextStudent.id), nextStudent, { merge: true });
+        batch.set(doc(db, 'students', nextStudent.id), toDualWriteStudentData(nextStudent), {
+          merge: true,
+        });
       });
 
       previousStudents
@@ -604,46 +674,52 @@ export default function App() {
             normalizeStudentRecord({
               ...student,
               ownerUid: student.ownerUid || user.uid,
-              folderId: student.folderId || folderId,
+              classroomId: student.classroomId || classroomId,
               createdAt: student.createdAt || timestamp,
               updatedAt: timestamp,
               deletedAt: timestamp,
             })
           );
 
-          batch.set(doc(db, 'students', student.id), deletedStudent, { merge: true });
+          batch.set(doc(db, 'students', student.id), toDualWriteStudentData(deletedStudent), {
+            merge: true,
+          });
         });
 
       if (students.length > 0 || previousStudents.length > 0) {
         await batch.commit();
       }
 
-      triggerGoogleSheetsSync([{ folderId, mode: 'upsert' }]);
+      triggerGoogleSheetsSync([{ classroomId, mode: 'upsert' }]);
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `students/${folderId}`);
+      handleFirestoreError(error, OperationType.UPDATE, `students/${classroomId}`);
     }
   };
 
-  const handleMoveStudent = async (sourceFolderId: string, targetFolderId: string, studentId: string): Promise<void> => {
+  const handleMoveStudent = async (
+    sourceClassroomId: string,
+    targetClassroomId: string,
+    studentId: string
+  ): Promise<void> => {
     if (!user) return;
 
-    if (!targetFolderId) {
-      throw new Error('이동할 반을 선택해 주세요.');
+    if (!targetClassroomId) {
+      throw new Error('이동할 클래스를 선택해 주세요.');
     }
 
-    if (sourceFolderId === targetFolderId) {
-      throw new Error('같은 반으로는 이동할 수 없습니다.');
+    if (sourceClassroomId === targetClassroomId) {
+      throw new Error('같은 클래스로는 이동할 수 없습니다.');
     }
 
-    const sourceFolder = folders.find(folder => folder.id === sourceFolderId);
-    const targetFolder = folders.find(folder => folder.id === targetFolderId);
+    const sourceClassroom = classrooms.find((classroom) => classroom.id === sourceClassroomId);
+    const targetClassroom = classrooms.find((classroom) => classroom.id === targetClassroomId);
 
-    if (!sourceFolder || !targetFolder) {
-      throw new Error('이동할 반 정보를 찾을 수 없습니다.');
+    if (!sourceClassroom || !targetClassroom) {
+      throw new Error('이동할 클래스 정보를 찾을 수 없습니다.');
     }
 
     const studentToMove = studentsById.get(studentId);
-    const targetStudents = studentsByFolderId.get(targetFolderId) || [];
+    const targetStudents = studentsByClassroomId.get(targetClassroomId) || [];
 
     if (!studentToMove || isStudentDeleted(studentToMove)) {
       throw new Error('이동할 학생 정보를 찾을 수 없습니다.');
@@ -655,92 +731,111 @@ export default function App() {
         normalizeStudentRecord({
           ...studentWithoutDeletedAt,
           ownerUid: studentToMove.ownerUid || user.uid,
-          folderId: targetFolderId,
+          classroomId: targetClassroomId,
           order: targetStudents.length,
           createdAt: studentToMove.createdAt || new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         })
       );
-      await setDoc(doc(db, 'students', studentId), movedStudent, { merge: true });
+      await setDoc(doc(db, 'students', studentId), toDualWriteStudentData(movedStudent), {
+        merge: true,
+      });
       triggerGoogleSheetsSync([
-        { folderId: sourceFolderId, mode: 'upsert' },
-        { folderId: targetFolderId, mode: 'upsert' },
+        { classroomId: sourceClassroomId, mode: 'upsert' },
+        { classroomId: targetClassroomId, mode: 'upsert' },
       ]);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `students/${studentId}`);
     }
   };
 
-  const handleUpdateFolder = async (folderId: string, data: Partial<LessonFolder>) => {
+  const handleUpdateClassroom = async (classroomId: string, data: Partial<Classroom>) => {
     if (!user) return;
     try {
-      const previousFolder = folders.find(folder => folder.id === folderId);
-      const folderRef = doc(db, 'folders', folderId);
-      await setDoc(folderRef, data, { merge: true });
+      const previousClassroom = classrooms.find((classroom) => classroom.id === classroomId);
+      const batch = writeBatch(db);
+      batch.set(doc(db, CLASSROOMS_COLLECTION, classroomId), data, { merge: true });
+      batch.set(doc(db, LEGACY_CLASSROOMS_COLLECTION, classroomId), data, { merge: true });
+      await batch.commit();
       triggerGoogleSheetsSync([{
-        folderId,
+        classroomId,
         mode: 'upsert',
-        previousName: previousFolder?.name,
+        previousName: previousClassroom?.name,
       }]);
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `folders/${folderId}`);
+      handleFirestoreError(error, OperationType.UPDATE, `${CLASSROOMS_COLLECTION}/${classroomId}`);
     }
   };
 
-  const handleSaveFolderContents = async (folderId: string, contentIds: string[]) => {
+  const handleSaveClassroomContents = async (classroomId: string, contentIds: string[]) => {
     if (!user) return;
 
     try {
-      await setDoc(
-        doc(db, 'folders', folderId),
-        { assignedContentIds: normalizeAssignedContentIds(contentIds) },
-        { merge: true }
-      );
+      const nextData = { assignedContentIds: normalizeAssignedContentIds(contentIds) };
+      const batch = writeBatch(db);
+      batch.set(doc(db, CLASSROOMS_COLLECTION, classroomId), nextData, { merge: true });
+      batch.set(doc(db, LEGACY_CLASSROOMS_COLLECTION, classroomId), nextData, { merge: true });
+      await batch.commit();
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `folders/${folderId}/assignedContentIds`);
+      handleFirestoreError(
+        error,
+        OperationType.UPDATE,
+        `${CLASSROOMS_COLLECTION}/${classroomId}/assignedContentIds`
+      );
       throw error;
     }
   };
 
-  const handleCreateFolder = async () => {
+  const handleCreateClassroom = async () => {
     if (!user) return;
     try {
-      const newOrder = folders.length;
-      const folderRef = await addDoc(collection(db, 'folders'), {
+      const newOrder = classrooms.length;
+      const classroomRef = doc(collection(db, CLASSROOMS_COLLECTION));
+      const classroomData = {
         name: '새로운 클래스',
         ownerUid: user.uid,
         assignedContentIds: [],
         order: newOrder,
-        createdAt: new Date().toISOString()
-      });
-      triggerGoogleSheetsSync([{ folderId: folderRef.id, mode: 'upsert' }]);
+        createdAt: new Date().toISOString(),
+      };
+      const batch = writeBatch(db);
+      batch.set(classroomRef, classroomData);
+      batch.set(doc(db, LEGACY_CLASSROOMS_COLLECTION, classroomRef.id), classroomData);
+      await batch.commit();
+      triggerGoogleSheetsSync([{ classroomId: classroomRef.id, mode: 'upsert' }]);
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'folders');
+      handleFirestoreError(error, OperationType.CREATE, CLASSROOMS_COLLECTION);
     }
   };
 
-  const handleDeleteFolder = async (folderId: string) => {
+  const handleDeleteClassroom = async (classroomId: string) => {
     if (!user) return;
     try {
-      const folderToDelete = folders.find(folder => folder.id === folderId);
-      const recordsToDelete = folderDateRecords.filter((record) => record.folderId === folderId);
-      const studentsToDelete = mergedStudents.filter((student) => student.folderId === folderId);
+      const classroomToDelete = classrooms.find((classroom) => classroom.id === classroomId);
+      const recordsToDelete = classroomDateRecords.filter(
+        (record) => record.classroomId === classroomId
+      );
+      const studentsToDelete = mergedStudents.filter(
+        (student) => student.classroomId === classroomId
+      );
       for (const record of recordsToDelete) {
-        await deleteDoc(doc(db, 'folderDateRecords', record.id));
+        await deleteDoc(doc(db, CLASSROOM_DATE_RECORDS_COLLECTION, record.id));
+        await deleteDoc(doc(db, LEGACY_CLASSROOM_DATE_RECORDS_COLLECTION, record.id));
       }
       for (const student of studentsToDelete) {
         await deleteDoc(doc(db, 'students', student.id));
       }
-      await deleteDoc(doc(db, 'folders', folderId));
-      setActiveFolderId(null);
+      await deleteDoc(doc(db, CLASSROOMS_COLLECTION, classroomId));
+      await deleteDoc(doc(db, LEGACY_CLASSROOMS_COLLECTION, classroomId));
+      setActiveClassroomId(null);
       setActiveTab('home');
       triggerGoogleSheetsSync([{
-        folderId,
+        classroomId,
         mode: 'delete',
-        folderName: folderToDelete?.name,
+        classroomName: classroomToDelete?.name,
       }]);
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, 'folders/' + folderId);
+      handleFirestoreError(error, OperationType.DELETE, `${CLASSROOMS_COLLECTION}/${classroomId}`);
     }
   };
 
@@ -879,49 +974,55 @@ export default function App() {
     }
   };
 
-  const handleSaveFolderDateRecord = async (record: FolderDateRecord) => {
+  const handleSaveClassroomDateRecord = async (record: ClassroomDateRecord) => {
     if (!user) return;
 
     try {
-      const folder = folders.find((candidate) => candidate.id === record.folderId);
-      const recordId = record.id || `${record.folderId}_${record.date}`;
-      const existingRecord = folderDateRecords.find((candidate) => candidate.id === recordId);
+      const classroom = classrooms.find((candidate) => candidate.id === record.classroomId);
+      const recordId = record.id || `${record.classroomId}_${record.date}`;
+      const existingRecord = classroomDateRecords.find((candidate) => candidate.id === recordId);
+      const nextRecord: ClassroomDateRecord = {
+        ...record,
+        classroomId: record.classroomId,
+        classroomName: classroom?.name || record.classroomName,
+        createdAt: existingRecord?.createdAt || record.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
 
-      await setDoc(
-        doc(db, 'folderDateRecords', recordId),
-        {
-          folderId: record.folderId,
-          folderName: folder?.name || record.folderName,
-          date: record.date,
-          contentIds: normalizeFolderDateRecordContentIds(record),
-          attendance: sanitizeAttendanceRecordsForStorage(record.attendance),
-          memo: record.memo ?? '',
-          ownerUid: user.uid,
-          createdAt: existingRecord?.createdAt || record.createdAt || new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-        { merge: true }
-      );
+      const batch = writeBatch(db);
+      const recordData = toDualWriteClassroomDateRecordData({
+        ...nextRecord,
+        contentIds: normalizeClassroomDateRecordContentIds(record),
+        attendance: sanitizeAttendanceRecordsForStorage(record.attendance),
+        memo: record.memo ?? '',
+        ownerUid: user.uid,
+      });
+      batch.set(doc(db, CLASSROOM_DATE_RECORDS_COLLECTION, recordId), recordData, { merge: true });
+      batch.set(doc(db, LEGACY_CLASSROOM_DATE_RECORDS_COLLECTION, recordId), recordData, {
+        merge: true,
+      });
+      await batch.commit();
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `folderDateRecords/${record.id}`);
+      handleFirestoreError(error, OperationType.UPDATE, `classroomDateRecords/${record.id}`);
     }
   };
 
-  const handleDeleteFolderDateRecord = async (recordId: string) => {
+  const handleDeleteClassroomDateRecord = async (recordId: string) => {
     if (!user) return;
 
     try {
-      await deleteDoc(doc(db, 'folderDateRecords', recordId));
+      await deleteDoc(doc(db, CLASSROOM_DATE_RECORDS_COLLECTION, recordId));
+      await deleteDoc(doc(db, LEGACY_CLASSROOM_DATE_RECORDS_COLLECTION, recordId));
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `folderDateRecords/${recordId}`);
+      handleFirestoreError(error, OperationType.DELETE, `classroomDateRecords/${recordId}`);
     }
   };
 
-  const handleManageFolder = (folder: LessonFolder) => {
+  const handleManageClassroom = (classroom: Classroom) => {
     runWithContentLibraryNavigationGuard(() => {
       setViewMode('admin');
-      setActiveFolderId(folder.id);
-      setActiveTab('folder-management');
+      setActiveClassroomId(classroom.id);
+      setActiveTab('classroom-management');
     });
   };
 
@@ -940,7 +1041,7 @@ export default function App() {
           isAdmin={isAdmin} 
           onBackToAdmin={user ? () => setViewMode('admin') : undefined} 
           onLogin={handleLogin}
-          folders={foldersWithStudents}
+          classrooms={classroomsWithStudents}
           categories={categories}
           contents={contents}
         />
@@ -975,22 +1076,25 @@ export default function App() {
     return (
       <div className="flex h-screen bg-[#FBFBFA] font-sans text-[#4A3728]">
         <Sidebar 
-          folders={foldersWithStudents} 
-          activeFolderId={activeFolderId || undefined}
+          classrooms={classroomsWithStudents} 
+          activeClassroomId={activeClassroomId || undefined}
           activeTab={activeTab} 
           isStudentView={viewMode === 'student'}
           onTabChange={handleTabChange} 
-          onManageFolder={handleManageFolder}
+          onManageClassroom={handleManageClassroom}
           onLogout={handleLogout}
           onSwitchToStudent={handleSwitchToStudent}
-          onCreateFolder={handleCreateFolder}
-          onReorderFolders={async (newOrder) => {
+          onCreateClassroom={handleCreateClassroom}
+          onReorderClassrooms={async (newOrder) => {
             try {
-              await Promise.all(newOrder.map((folder, index) => 
-                setDoc(doc(db, 'folders', folder.id), { order: index }, { merge: true })
-              ));
+              await Promise.all(
+                newOrder.flatMap((classroom, index) => [
+                  setDoc(doc(db, CLASSROOMS_COLLECTION, classroom.id), { order: index }, { merge: true }),
+                  setDoc(doc(db, LEGACY_CLASSROOMS_COLLECTION, classroom.id), { order: index }, { merge: true }),
+                ])
+              );
             } catch (error) {
-              console.error("Failed to reorder folders", error);
+              console.error('Failed to reorder classrooms', error);
             }
           }}
         />
@@ -1000,7 +1104,7 @@ export default function App() {
               embeddedInAdminShell
               isAdmin={isAdmin}
               onBackToAdmin={() => setViewMode('admin')}
-              folders={foldersWithStudents}
+              classrooms={classroomsWithStudents}
               categories={categories}
               contents={contents}
             />
@@ -1024,8 +1128,8 @@ export default function App() {
           )}
           {activeTab === 'home' && (
             <Dashboard 
-              folders={foldersWithStudents}
-              onManageFolder={handleManageFolder}
+              classrooms={classroomsWithStudents}
+              onManageClassroom={handleManageClassroom}
               onGoToLibrary={() => handleTabChange('content-library')}
               onGoToMemo={() => handleTabChange('memo')}
               onSwitchToStudent={handleSwitchToStudent}
@@ -1034,29 +1138,29 @@ export default function App() {
           {activeTab === 'memo' && (
             <MemoSection 
               memos={memos}
-              folders={foldersWithStudents}
-              dateRecords={folderDateRecords}
+              classrooms={classroomsWithStudents}
+              classroomDateRecords={classroomDateRecords}
               onAddMemo={handleAddMemo} 
               onDeleteMemo={handleDeleteMemo} 
             />
           )}
-          {activeTab === 'folder-management' && activeFolder && (
-            <FolderDashboard 
-              key={activeFolder.id}
-              folder={activeFolder}
-              folders={foldersWithStudents}
+          {activeTab === 'classroom-management' && activeClassroom && (
+            <ClassroomDashboard 
+              key={activeClassroom.id}
+              classroom={activeClassroom}
+              classrooms={classroomsWithStudents}
               studentsById={studentsById}
-              dateRecords={folderDateRecords}
+              dateRecords={classroomDateRecords}
               categories={categories}
               contents={contents}
               onSaveStudents={handleSaveStudents}
               onMoveStudent={handleMoveStudent}
-              onSaveDateRecord={handleSaveFolderDateRecord}
-              onDeleteDateRecord={handleDeleteFolderDateRecord}
-              onSaveFolderContents={handleSaveFolderContents}
+              onSaveDateRecord={handleSaveClassroomDateRecord}
+              onDeleteDateRecord={handleDeleteClassroomDateRecord}
+              onSaveClassroomContents={handleSaveClassroomContents}
               onGoToLibrary={() => handleTabChange('content-library')}
-              onUpdateFolder={handleUpdateFolder}
-              onDeleteFolder={handleDeleteFolder}
+              onUpdateClassroom={handleUpdateClassroom}
+              onDeleteClassroom={handleDeleteClassroom}
             />
           )}
           {activeTab === 'content-library' && (

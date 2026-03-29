@@ -1,13 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { Plus, Trash2, Calendar, StickyNote, Users, BookOpen } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { FolderDateRecord, Memo, LessonFolder } from '../types';
-import { normalizeFolderDateRecordContentIds } from '../utils/folderDateRecordContent';
+import { ClassroomDateRecord, Memo, Classroom } from '../types';
+import { normalizeClassroomDateRecordContentIds } from '../utils/classroomDateRecordContent';
 
 interface MemoSectionProps {
   memos: Memo[];
-  folders?: LessonFolder[];
-  dateRecords?: FolderDateRecord[];
+  classrooms?: Classroom[];
+  classroomDateRecords?: ClassroomDateRecord[];
   onAddMemo: (content: string) => void;
   onDeleteMemo: (id: string) => void;
 }
@@ -16,38 +16,38 @@ type Tab = 'general' | 'date-records' | 'students';
 
 export const MemoSection: React.FC<MemoSectionProps> = ({
   memos,
-  folders = [],
-  dateRecords = [],
+  classrooms = [],
+  classroomDateRecords = [],
   onAddMemo,
   onDeleteMemo,
 }) => {
   const [newMemo, setNewMemo] = useState('');
   const [activeTab, setActiveTab] = useState<Tab>('general');
 
-  const folderNamesById = useMemo(
-    () => new Map(folders.map((folder) => [folder.id, folder.name])),
-    [folders]
+  const classroomNamesById = useMemo(
+    () => new Map(classrooms.map((classroom) => [classroom.id, classroom.name])),
+    [classrooms]
   );
 
   const dateRecordMemos = useMemo(
     () =>
-      dateRecords
+      classroomDateRecords
         .filter((record) => record.memo.trim())
         .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime()),
-    [dateRecords]
+    [classroomDateRecords]
   );
 
   const studentMemos = useMemo(
     () =>
-      folders.flatMap((folder) =>
-        (folder.students || [])
+      classrooms.flatMap((classroom) =>
+        (classroom.students || [])
           .filter((student) => student.memo?.trim())
           .map((student) => ({
             ...student,
-            folderName: folder.name,
+            classroomName: classroom.name,
           }))
       ),
-    [folders]
+    [classrooms]
   );
 
   const handleSubmit = (event: React.FormEvent) => {
@@ -183,7 +183,7 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
                 className="grid grid-cols-1 gap-6 md:grid-cols-2"
               >
                 {dateRecordMemos.map((record) => {
-                  const recordedContentIds = normalizeFolderDateRecordContentIds(record);
+                  const recordedContentIds = normalizeClassroomDateRecordContentIds(record);
                   const recordTitle =
                     recordedContentIds.length > 0
                       ? `${recordedContentIds.length}개 수업 콘텐츠`
@@ -198,7 +198,7 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
                         <div>
                           <div className="mb-1 flex items-center gap-2">
                             <span className="rounded-full bg-[#FFF5E9] px-2 py-0.5 text-[10px] font-bold text-[#8B5E3C]">
-                              {folderNamesById.get(record.folderId) || record.folderName}
+                              {classroomNamesById.get(record.classroomId) || record.classroomName}
                             </span>
                             <span className="flex items-center gap-1 text-[11px] font-bold text-[#A89F94]">
                               <Calendar size={12} />
@@ -239,14 +239,14 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
               >
                 {studentMemos.map((student) => (
                   <div
-                    key={`${student.id}-${student.folderName}`}
+                    key={`${student.id}-${student.classroomName}`}
                     className="relative rounded-[24px] border border-[#E5E3DD] bg-white p-6 shadow-sm"
                   >
                     <div className="mb-4 flex items-start justify-between">
                       <div>
                         <div className="mb-1 flex items-center gap-2">
                           <span className="rounded-full bg-[#EFF6FF] px-2 py-0.5 text-[10px] font-bold text-[#3B82F6]">
-                            {student.folderName}
+                            {student.classroomName}
                           </span>
                         </div>
                         <h4 className="text-sm font-bold text-[#4A3728]">

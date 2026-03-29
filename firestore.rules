@@ -1,36 +1,42 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
+
     // ===============================================================
     // Helper Functions
     // ===============================================================
     function isAuthenticated() {
       return request.auth != null;
     }
-    
+
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
-    
+
     function isDocOwner() {
       return isAuthenticated() && request.auth.uid == resource.data.ownerUid;
     }
 
-    function isRequestOwner() {
-      return isAuthenticated() && request.auth.uid == request.resource.data.ownerUid;
-    }
-
     function isAdmin() {
-      return isAuthenticated() && 
+      return isAuthenticated() &&
         (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
          request.auth.token.email == "songes0515@gmail.com");
+    }
+
+    function hasClassroomReference(data) {
+      return (('classroomId' in data) && data.classroomId is string) ||
+             (('folderId' in data) && data.folderId is string);
+    }
+
+    function hasOptionalClassroomNames(data) {
+      return (!('classroomName' in data) || data.classroomName is string) &&
+             (!('folderName' in data) || data.folderName is string);
     }
 
     // ===============================================================
     // Domain Validators
     // ===============================================================
-    
+
     function isValidUser(data) {
       return data.keys().hasAll(['email']) &&
              data.email is string &&
@@ -38,23 +44,32 @@ service cloud.firestore {
              (!('role' in data) || data.role in ['admin', 'teacher']);
     }
 
-    function isValidFolder(data) {
+    function isValidClassroom(data) {
       return data.keys().hasAll(['name', 'ownerUid']) &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             data.ownerUid == request.auth.uid;
+             data.ownerUid == request.auth.uid &&
+             (!('students' in data) || data.students is list) &&
+             (!('assignedContentIds' in data) || data.assignedContentIds is list) &&
+             (!('isOpen' in data) || data.isOpen is bool) &&
+             (!('order' in data) || data.order is number) &&
+             (!('icon' in data) || data.icon is string) &&
+             (!('color' in data) || data.color is string) &&
+             (!('createdAt' in data) || data.createdAt is string);
+    }
+
+    function isValidFolder(data) {
+      return isValidClassroom(data);
     }
 
     function isValidLesson(data) {
-      return data.keys().hasAll(['folderId', 'date', 'ownerUid']) &&
-             data.folderId is string &&
+      return data.keys().hasAll(['date', 'ownerUid']) &&
+             hasClassroomReference(data) &&
              data.date is string &&
              data.ownerUid == request.auth.uid;
     }
 
-    function isValidFolderDateRecord(data) {
+    function isValidClassroomDateRecord(data) {
       return data.keys().hasAll([
-               'folderId',
-               'folderName',
                'date',
                'ownerUid',
                'contentIds',
@@ -63,8 +78,8 @@ service cloud.firestore {
                'createdAt',
                'updatedAt'
              ]) &&
-             data.folderId is string &&
-             data.folderName is string &&
+             hasClassroomReference(data) &&
+             hasOptionalClassroomNames(data) &&
              data.date is string &&
              data.contentIds is list &&
              data.attendance is list &&
@@ -74,18 +89,21 @@ service cloud.firestore {
              data.ownerUid == request.auth.uid;
     }
 
+    function isValidFolderDateRecord(data) {
+      return isValidClassroomDateRecord(data);
+    }
+
     function isValidStudent(data) {
       return data.keys().hasAll([
                'ownerUid',
-               'folderId',
                'name',
                'initials',
                'order',
                'createdAt',
                'updatedAt'
              ]) &&
+             hasClassroomReference(data) &&
              data.ownerUid == request.auth.uid &&
-             data.folderId is string &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              data.initials is string && data.initials.size() < 10 &&
              data.order is number &&
@@ -130,6 +148,13 @@ service cloud.firestore {
       allow create, update: if isOwner(userId) && isValidUser(request.resource.data);
     }
 
+    match /classrooms/{classroomId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidClassroom(request.resource.data);
+      allow update: if isDocOwner() || isAdmin();
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
     match /folders/{folderId} {
       allow read: if true;
       allow create: if isAdmin() && isValidFolder(request.resource.data);
@@ -144,10 +169,17 @@ service cloud.firestore {
       allow delete: if isDocOwner() || isAdmin();
     }
 
+    match /classroomDateRecords/{recordId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidClassroomDateRecord(request.resource.data);
+      allow update: if (isDocOwner() || isAdmin()) && isValidClassroomDateRecord(request.resource.data);
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
     match /folderDateRecords/{recordId} {
       allow read: if true;
       allow create: if isAdmin() && isValidFolderDateRecord(request.resource.data);
-      allow update: if isDocOwner() || isAdmin();
+      allow update: if (isDocOwner() || isAdmin()) && isValidFolderDateRecord(request.resource.data);
       allow delete: if isDocOwner() || isAdmin();
     }
 

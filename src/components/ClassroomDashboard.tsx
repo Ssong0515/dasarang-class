@@ -19,18 +19,7 @@ import {
   X,
   Settings,
   Palette,
-  BookOpen,
-  GraduationCap,
-  Code,
-  Music,
-  Brush,
-  Globe,
-  Cpu,
-  Heart,
-  Zap,
-  Rocket,
   Star,
-  Lightbulb,
   Power,
   UserMinus,
   Undo2,
@@ -38,17 +27,25 @@ import {
 } from 'lucide-react';
 import {
   AttendanceRecord,
-  FolderDateRecord,
+  ClassroomDateRecord,
   LessonCategory,
   LessonContent,
-  LessonFolder,
+  Classroom,
   Student,
 } from '../types';
 import {
-  getAssignedContentIdsForFolder,
+  getAssignedContentIdsForClassroom,
   orderAssignedContentIds,
-} from '../utils/folderContentAssignments';
-import { normalizeFolderDateRecordContentIds } from '../utils/folderDateRecordContent';
+} from '../utils/classroomContentAssignments';
+import { normalizeClassroomDateRecordContentIds } from '../utils/classroomDateRecordContent';
+import {
+  CLASSROOM_COLOR_OPTIONS,
+  CLASSROOM_ICON_OPTIONS,
+  DEFAULT_CLASSROOM_COLOR,
+  DEFAULT_CLASSROOM_ICON,
+  getClassroomColorMeta,
+  getClassroomIconComponent,
+} from '../utils/classroomAppearance';
 import {
   formatStudentInactiveDate,
   getStudentCounts,
@@ -59,66 +56,25 @@ import {
 } from '../utils/students';
 import { isAttendanceExcluded } from '../utils/attendance';
 
-interface FolderDashboardProps {
-  folder: LessonFolder;
-  folders: LessonFolder[];
+interface ClassroomDashboardProps {
+  classroom: Classroom;
+  classrooms: Classroom[];
   studentsById: Map<string, Student>;
-  dateRecords: FolderDateRecord[];
+  dateRecords: ClassroomDateRecord[];
   categories: LessonCategory[];
   contents: LessonContent[];
-  onSaveStudents: (folderId: string, students: Student[]) => Promise<void>;
-  onMoveStudent: (sourceFolderId: string, targetFolderId: string, studentId: string) => Promise<void>;
-  onSaveDateRecord: (record: FolderDateRecord) => void;
+  onSaveStudents: (classroomId: string, students: Student[]) => Promise<void>;
+  onMoveStudent: (sourceClassroomId: string, targetClassroomId: string, studentId: string) => Promise<void>;
+  onSaveDateRecord: (record: ClassroomDateRecord) => void;
   onDeleteDateRecord: (recordId: string) => void;
-  onSaveFolderContents: (folderId: string, contentIds: string[]) => Promise<void>;
+  onSaveClassroomContents: (classroomId: string, contentIds: string[]) => Promise<void>;
   onGoToLibrary: () => void;
-  onUpdateFolder?: (folderId: string, data: Partial<LessonFolder>) => void;
-  onDeleteFolder?: (folderId: string) => void;
+  onUpdateClassroom?: (classroomId: string, data: Partial<Classroom>) => void;
+  onDeleteClassroom?: (classroomId: string) => void;
 }
 
 type Tab = 'dashboard' | 'students' | 'settings';
 type StudentAction = 'add' | 'edit' | 'delete' | 'move' | 'deactivate' | 'reactivate';
-
-const FOLDER_COLORS = [
-  { name: '브라운', value: '#8B5E3C', bg: '#FFF5E9' },
-  { name: '파랑', value: '#3B82F6', bg: '#EFF6FF' },
-  { name: '초록', value: '#22C55E', bg: '#F0FDF4' },
-  { name: '보라', value: '#8B5CF6', bg: '#F5F3FF' },
-  { name: '핑크', value: '#EC4899', bg: '#FDF2F8' },
-  { name: '주황', value: '#F97316', bg: '#FFF7ED' },
-  { name: '민트', value: '#14B8A6', bg: '#F0FDFA' },
-  { name: '레드', value: '#EF4444', bg: '#FEF2F2' },
-];
-
-const FOLDER_ICONS = [
-  { name: '책', icon: 'BookOpen' },
-  { name: '학습', icon: 'GraduationCap' },
-  { name: '코드', icon: 'Code' },
-  { name: '음악', icon: 'Music' },
-  { name: '미술', icon: 'Brush' },
-  { name: '지구', icon: 'Globe' },
-  { name: '컴퓨터', icon: 'Cpu' },
-  { name: '하트', icon: 'Heart' },
-  { name: '번개', icon: 'Zap' },
-  { name: '로켓', icon: 'Rocket' },
-  { name: '별', icon: 'Star' },
-  { name: '아이디어', icon: 'Lightbulb' },
-];
-
-const iconMap: Record<string, React.FC<{ size?: number; className?: string; style?: React.CSSProperties }>> = {
-  BookOpen,
-  GraduationCap,
-  Code,
-  Music,
-  Brush,
-  Globe,
-  Cpu,
-  Heart,
-  Zap,
-  Rocket,
-  Star,
-  Lightbulb,
-};
 
 const getLocalDateString = (date: Date) => {
   const year = date.getFullYear();
@@ -143,7 +99,7 @@ const getDaysInMonth = (date: Date) => {
   return days;
 };
 
-const getAttendanceStats = (record?: FolderDateRecord) => {
+const getAttendanceStats = (record?: ClassroomDateRecord) => {
   if (!record) {
     return { present: 0, absent: 0, late: 0, total: 0 };
   }
@@ -177,9 +133,9 @@ const DashboardInfoTooltip: React.FC<{
   </div>
 );
 
-export const FolderDashboard: React.FC<FolderDashboardProps> = ({
-  folder,
-  folders,
+export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
+  classroom,
+  classrooms,
   studentsById: allStudentsById,
   dateRecords,
   categories,
@@ -188,15 +144,15 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
   onMoveStudent,
   onSaveDateRecord,
   onDeleteDateRecord,
-  onSaveFolderContents,
+  onSaveClassroomContents,
   onGoToLibrary,
-  onUpdateFolder,
-  onDeleteFolder,
+  onUpdateClassroom,
+  onDeleteClassroom,
 }) => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [selectedCategory, setSelectedCategory] = useState<string>(categories[0]?.id || '');
   const [selectedDate, setSelectedDate] = useState(getLocalDateString(new Date()));
-  const [students, setStudents] = useState<Student[]>(folder.students || []);
+  const [students, setStudents] = useState<Student[]>(classroom.students || []);
   const [newStudentName, setNewStudentName] = useState('');
   const [newStudentAge, setNewStudentAge] = useState('');
   const [newStudentContact, setNewStudentContact] = useState('');
@@ -210,29 +166,29 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
   const [localMemo, setLocalMemo] = useState('');
   const [viewMonth, setViewMonth] = useState(new Date());
   const [settingsDraft, setSettingsDraft] = useState({
-    name: folder.name,
-    color: folder.color || '#8B5E3C',
-    icon: folder.icon || 'BookOpen',
+    name: classroom.name,
+    color: classroom.color || DEFAULT_CLASSROOM_COLOR,
+    icon: classroom.icon || DEFAULT_CLASSROOM_ICON,
   });
 
   const isSavingStudentAction = studentAction !== null;
-  const availableMoveFolders = folders.filter((candidate) => candidate.id !== folder.id);
-  const defaultMoveTargetId = availableMoveFolders[0]?.id || '';
-  const folderDateRecords = useMemo(
-    () => dateRecords.filter((record) => record.folderId === folder.id),
-    [dateRecords, folder.id]
+  const availableMoveClassrooms = classrooms.filter((candidate) => candidate.id !== classroom.id);
+  const defaultMoveTargetClassroomId = availableMoveClassrooms[0]?.id || '';
+  const classroomDateRecords = useMemo(
+    () => dateRecords.filter((record) => record.classroomId === classroom.id),
+    [dateRecords, classroom.id]
   );
   const currentDateRecord = useMemo(
-    () => folderDateRecords.find((record) => record.date === selectedDate),
-    [folderDateRecords, selectedDate]
+    () => classroomDateRecords.find((record) => record.date === selectedDate),
+    [classroomDateRecords, selectedDate]
   );
   const isCurrentDateActive = Boolean(currentDateRecord);
   const [isAssignmentCardCollapsed, setIsAssignmentCardCollapsed] = useState(true);
   const activeDateSet = useMemo(
-    () => new Set(folderDateRecords.map((record) => record.date)),
-    [folderDateRecords]
+    () => new Set(classroomDateRecords.map((record) => record.date)),
+    [classroomDateRecords]
   );
-  const assignedContentIds = getAssignedContentIdsForFolder(folder);
+  const assignedContentIds = getAssignedContentIdsForClassroom(classroom);
   const assignedContentIdSet = useMemo(() => new Set(assignedContentIds), [assignedContentIds]);
   const assignedContents = useMemo(
     () => contents.filter((content) => assignedContentIdSet.has(content.id)),
@@ -243,7 +199,7 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
     [assignedContents]
   );
   const currentDateRecordContentIds = currentDateRecord
-    ? normalizeFolderDateRecordContentIds(currentDateRecord)
+    ? normalizeClassroomDateRecordContentIds(currentDateRecord)
     : [];
   const currentDateRecordedContents = currentDateRecordContentIds
     .map((contentId) => assignedContentsById.get(contentId))
@@ -257,9 +213,9 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
   );
   const calendarDays = getDaysInMonth(viewMonth);
   const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
-  const previewIconColor = settingsDraft.color;
-  const previewIconBg =
-    FOLDER_COLORS.find((color) => color.value === settingsDraft.color)?.bg || '#FFF5E9';
+  const previewColorMeta = getClassroomColorMeta(settingsDraft.color);
+  const previewIconColor = previewColorMeta.value;
+  const previewIconBg = previewColorMeta.bg;
   const { activeStudents, inactiveStudents } = useMemo(
     () => splitStudentsByStatus(students),
     [students]
@@ -299,15 +255,15 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
 
   useEffect(() => {
     setSettingsDraft({
-      name: folder.name,
-      color: folder.color || '#8B5E3C',
-      icon: folder.icon || 'BookOpen',
+      name: classroom.name,
+      color: classroom.color || DEFAULT_CLASSROOM_COLOR,
+      icon: classroom.icon || DEFAULT_CLASSROOM_ICON,
     });
-  }, [folder.color, folder.icon, folder.name]);
+  }, [classroom.color, classroom.icon, classroom.name]);
 
   useEffect(() => {
-    setStudents(folder.students || []);
-  }, [folder.students]);
+    setStudents(classroom.students || []);
+  }, [classroom.students]);
 
   useEffect(() => {
     setStudentMoveTargets((previousTargets) => {
@@ -317,18 +273,18 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
         const previousTarget = previousTargets[student.id];
         if (
           previousTarget &&
-          previousTarget !== folder.id &&
-          folders.some((candidate) => candidate.id === previousTarget && candidate.id !== folder.id)
+          previousTarget !== classroom.id &&
+          classrooms.some((candidate) => candidate.id === previousTarget && candidate.id !== classroom.id)
         ) {
           nextTargets[student.id] = previousTarget;
         } else {
-          nextTargets[student.id] = defaultMoveTargetId;
+          nextTargets[student.id] = defaultMoveTargetClassroomId;
         }
       }
 
       return nextTargets;
     });
-  }, [students, folders, folder.id, defaultMoveTargetId]);
+  }, [students, classrooms, classroom.id, defaultMoveTargetClassroomId]);
 
   useEffect(() => {
     if (categories.length === 0) {
@@ -349,7 +305,7 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
 
   useEffect(() => {
     setIsAssignmentCardCollapsed(true);
-  }, [folder.id]);
+  }, [classroom.id]);
 
   const createInitialAttendance = (): AttendanceRecord[] =>
     students.map((student) => ({
@@ -358,12 +314,12 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
       isExcluded: isStudentInactive(student) ? true : undefined,
     }));
 
-  const createDateRecord = (): FolderDateRecord => {
+  const createDateRecord = (): ClassroomDateRecord => {
     const timestamp = new Date().toISOString();
     return {
-      id: `${folder.id}_${selectedDate}`,
-      folderId: folder.id,
-      folderName: folder.name,
+      id: `${classroom.id}_${selectedDate}`,
+      classroomId: classroom.id,
+      classroomName: classroom.name,
       ownerUid: '',
       date: selectedDate,
       contentIds: [],
@@ -407,8 +363,8 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
       ? assignedContentIds.filter((contentId) => contentId !== content.id)
       : [...assignedContentIds, content.id];
 
-    void onSaveFolderContents(folder.id, orderAssignedContentIds(nextIds, contents)).catch((error) => {
-      console.error('Failed to save folder content assignments', error);
+    void onSaveClassroomContents(classroom.id, orderAssignedContentIds(nextIds, contents)).catch((error) => {
+      console.error('Failed to save classroom content assignments', error);
     });
   };
 
@@ -417,7 +373,7 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
       return;
     }
 
-    const currentIds = normalizeFolderDateRecordContentIds(currentDateRecord).filter((contentId) =>
+    const currentIds = normalizeClassroomDateRecordContentIds(currentDateRecord).filter((contentId) =>
       assignedContentsById.has(contentId)
     );
     const nextIds = currentIds.includes(content.id)
@@ -512,7 +468,7 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
     setStudentAction(action);
 
     try {
-      await onSaveStudents(folder.id, nextStudents);
+      await onSaveStudents(classroom.id, nextStudents);
       setStudents(nextStudents);
       return true;
     } catch {
@@ -538,7 +494,7 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
     const nextStudent = normalizeStudent({
       id: `std-${Date.now()}`,
       ownerUid: '',
-      folderId: folder.id,
+      classroomId: classroom.id,
       name,
       initials: '',
       order: students.length,
@@ -667,35 +623,35 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
     );
   };
 
-  const handleMoveStudentToFolder = async (student: Student) => {
+  const handleMoveStudentToClassroom = async (student: Student) => {
     if (isSavingStudentAction) {
       return;
     }
 
-    const targetFolderId = studentMoveTargets[student.id] || defaultMoveTargetId;
-    if (!targetFolderId) {
-      setStudentSaveError('이동할 반을 선택해주세요.');
+    const targetClassroomId = studentMoveTargets[student.id] || defaultMoveTargetClassroomId;
+    if (!targetClassroomId) {
+      setStudentSaveError('이동할 클래스를 선택해주세요.');
       return;
     }
-    if (targetFolderId === folder.id) {
-      setStudentSaveError('같은 반으로는 이동할 수 없습니다.');
-      return;
-    }
-
-    const targetFolder = availableMoveFolders.find((candidate) => candidate.id === targetFolderId);
-    if (!targetFolder) {
-      setStudentSaveError('이동할 반 정보를 찾을 수 없습니다.');
+    if (targetClassroomId === classroom.id) {
+      setStudentSaveError('같은 클래스로는 이동할 수 없습니다.');
       return;
     }
 
-    if (!window.confirm(`'${student.name}' 학생을 '${targetFolder.name}' 반으로 이동할까요?`)) {
+    const targetClassroom = availableMoveClassrooms.find((candidate) => candidate.id === targetClassroomId);
+    if (!targetClassroom) {
+      setStudentSaveError('이동할 클래스 정보를 찾을 수 없습니다.');
+      return;
+    }
+
+    if (!window.confirm(`'${student.name}' 학생을 '${targetClassroom.name}' 클래스로 이동할까요?`)) {
       return;
     }
 
     setStudentSaveError(null);
     setStudentAction('move');
     try {
-      await onMoveStudent(folder.id, targetFolderId, student.id);
+      await onMoveStudent(classroom.id, targetClassroomId, student.id);
       setStudents((currentStudents) =>
         currentStudents.filter((currentStudent) => currentStudent.id !== student.id)
       );
@@ -756,10 +712,10 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
             <div className="space-y-3">
               <h2 className="flex items-center gap-2 text-xl font-bold text-[#4A3728]">
                 <FileText className="text-[#8B5E3C]" size={20} />
-                반별 콘텐츠 배정
+                클래스별 콘텐츠 배정
                 <DashboardInfoTooltip
                   content={assignmentTooltipText}
-                  label="반별 콘텐츠 배정 설명 보기"
+                  label="클래스별 콘텐츠 배정 설명 보기"
                 />
               </h2>
               <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-[#8B7E74]">
@@ -1051,7 +1007,7 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
               </div>
             ) : (
               <div className="rounded-[28px] border border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-6 py-8 text-sm text-[#8B7E74]">
-                먼저 반에 학생 페이지용 콘텐츠를 배정해주세요.
+                먼저 클래스에 학생 페이지용 콘텐츠를 배정해주세요.
               </div>
             )}
           </div>
@@ -1504,11 +1460,11 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
                   )}
 
                   <div className="mt-4 border-t border-[#F3F2EE] pt-4">
-                    <p className="mb-2 text-[11px] font-bold tracking-wide text-[#A89F94]">반 이동</p>
-                    {availableMoveFolders.length > 0 ? (
+                    <p className="mb-2 text-[11px] font-bold tracking-wide text-[#A89F94]">클래스 이동</p>
+                    {availableMoveClassrooms.length > 0 ? (
                       <div className="flex gap-2">
                         <select
-                          value={studentMoveTargets[student.id] || defaultMoveTargetId}
+                          value={studentMoveTargets[student.id] || defaultMoveTargetClassroomId}
                           onChange={(event) =>
                             setStudentMoveTargets((currentTargets) => ({
                               ...currentTargets,
@@ -1518,23 +1474,23 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
                           disabled={isSavingStudentAction}
                           className="flex-1 rounded-xl border border-[#E5E3DD] bg-white px-3 py-2 text-sm text-[#4A3728] outline-none focus:border-[#8B5E3C]"
                         >
-                          {availableMoveFolders.map((targetFolder) => (
-                            <option key={targetFolder.id} value={targetFolder.id}>
-                              {targetFolder.name}
+                          {availableMoveClassrooms.map((targetClassroom) => (
+                            <option key={targetClassroom.id} value={targetClassroom.id}>
+                              {targetClassroom.name}
                             </option>
                           ))}
                         </select>
                         <button
                           type="button"
-                          onClick={() => void handleMoveStudentToFolder(student)}
-                          disabled={isSavingStudentAction || !(studentMoveTargets[student.id] || defaultMoveTargetId)}
+                          onClick={() => void handleMoveStudentToClassroom(student)}
+                          disabled={isSavingStudentAction || !(studentMoveTargets[student.id] || defaultMoveTargetClassroomId)}
                           className="rounded-xl bg-[#FFF5E9] px-4 py-2 text-xs font-bold text-[#8B5E3C] transition-all hover:bg-[#EBD9C1] disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {studentAction === 'move' ? '이동 중...' : '반 이동'}
+                          {studentAction === 'move' ? '이동 중...' : '클래스 이동'}
                         </button>
                       </div>
                     ) : (
-                      <p className="text-xs text-[#A89F94]">이동 가능한 다른 반이 없습니다.</p>
+                      <p className="text-xs text-[#A89F94]">이동 가능한 다른 클래스가 없습니다.</p>
                     )}
                   </div>
 
@@ -1752,7 +1708,7 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
   );
 
   const renderSettingsTab = () => {
-    const PreviewIcon = iconMap[settingsDraft.icon] || BookOpen;
+    const PreviewIcon = getClassroomIconComponent(settingsDraft.icon);
 
     return (
       <motion.div
@@ -1767,12 +1723,12 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F3F2EE] text-[#8B5E3C]">
               <Settings size={20} />
             </div>
-            <h2 className="text-2xl font-bold">반 설정</h2>
+            <h2 className="text-2xl font-bold">클래스 설정</h2>
           </div>
           <button
             onClick={() => {
-              onUpdateFolder?.(folder.id, settingsDraft);
-              window.alert('반 설정이 저장되었습니다.');
+              onUpdateClassroom?.(classroom.id, settingsDraft);
+              window.alert('클래스 설정이 저장되었습니다.');
             }}
             className="flex items-center gap-2 rounded-xl bg-[#8B5E3C] px-5 py-2.5 text-sm font-bold text-white transition-all hover:bg-[#724D31]"
           >
@@ -1784,14 +1740,14 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
         <div className="mb-10">
           <div className="mb-4 flex items-center gap-2">
             <Edit3 size={18} className="text-[#8B5E3C]" />
-            <h3 className="text-lg font-bold text-[#4A3728]">반 이름</h3>
+            <h3 className="text-lg font-bold text-[#4A3728]">클래스 이름</h3>
           </div>
           <input
             type="text"
             value={settingsDraft.name}
             onChange={(event) => setSettingsDraft({ ...settingsDraft, name: event.target.value })}
             className="w-full rounded-2xl border-2 border-[#E5E3DD] px-5 py-3.5 text-lg font-bold text-[#4A3728] transition-all focus:border-[#8B5E3C] focus:outline-none"
-            placeholder="반 이름을 입력하세요."
+            placeholder="클래스 이름을 입력하세요."
           />
         </div>
 
@@ -1801,7 +1757,7 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
             <h3 className="text-lg font-bold text-[#4A3728]">대표 컬러</h3>
           </div>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            {FOLDER_COLORS.map((color) => {
+            {CLASSROOM_COLOR_OPTIONS.map((color) => {
               const isSelected = settingsDraft.color === color.value;
               return (
                 <button
@@ -1830,8 +1786,8 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
             <h3 className="text-lg font-bold text-[#4A3728]">아이콘</h3>
           </div>
           <div className="grid grid-cols-3 gap-3 md:grid-cols-6">
-            {FOLDER_ICONS.map((iconInfo) => {
-              const IconComp = iconMap[iconInfo.icon];
+            {CLASSROOM_ICON_OPTIONS.map((iconInfo) => {
+              const IconComp = getClassroomIconComponent(iconInfo.icon);
               const isSelected = settingsDraft.icon === iconInfo.icon;
               return (
                 <button
@@ -1895,18 +1851,18 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
             <h3 className="text-lg font-bold text-red-600">위험 영역</h3>
           </div>
           <p className="mb-4 text-sm text-red-400">
-            반을 삭제하면 활성 날짜 기록과 학생 명단이 함께 삭제됩니다.
+            클래스를 삭제하면 활성 날짜 기록과 학생 명단이 함께 삭제됩니다.
           </p>
           <button
             onClick={() => {
-              const message = `'${folder.name}' 반을 정말 삭제할까요? 이 작업은 되돌릴 수 없습니다.`;
+              const message = `'${classroom.name}' 클래스를 정말 삭제할까요? 이 작업은 되돌릴 수 없습니다.`;
               if (window.confirm(message)) {
-                onDeleteFolder?.(folder.id);
+                onDeleteClassroom?.(classroom.id);
               }
             }}
             className="rounded-xl bg-red-500 px-6 py-3 text-sm font-bold text-white transition-all hover:bg-red-600"
           >
-            반 삭제
+            클래스 삭제
           </button>
         </div>
       </motion.div>
@@ -1919,12 +1875,12 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
         <div className="mb-8">
           <div className="mb-2 flex items-center gap-3">
             <span className="rounded-full bg-[#FFF5E9] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#8B5E3C]">
-              반 관리
+              클래스 관리
             </span>
           </div>
-          <h1 className="mb-4 text-5xl font-serif font-bold text-[#4A3728]">{folder.name}</h1>
+          <h1 className="mb-4 text-5xl font-serif font-bold text-[#4A3728]">{classroom.name}</h1>
           <p className="max-w-md text-[#8B7E74]">
-            반별 콘텐츠 배정과 날짜별 운영 기록을 한 화면에서 관리합니다.
+            클래스별 콘텐츠 배정과 날짜별 운영 기록을 한 화면에서 관리합니다.
           </p>
           <p className="mt-3 max-w-2xl text-sm text-[#8B7E74]">
             콘텐츠는 학생 페이지 노출 기준이고, 날짜 기록은 활성화한 날에만 별도로 저장됩니다.
@@ -1935,7 +1891,7 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
           {[
             { id: 'dashboard', label: '수업 대시보드', icon: ClipboardList },
             { id: 'students', label: '학생 명단 관리', icon: Users },
-            { id: 'settings', label: '반 설정', icon: Settings },
+            { id: 'settings', label: '클래스 설정', icon: Settings },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -1948,7 +1904,7 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
               {tab.label}
               {activeTab === tab.id && (
                 <motion.div
-                  layoutId="activeFolderTab"
+                  layoutId="activeClassroomTab"
                   className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#8B5E3C]"
                 />
               )}

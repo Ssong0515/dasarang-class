@@ -1,9 +1,15 @@
 import { google } from 'googleapis';
-import { applicationDefault, cert, getApps, initializeApp, type ServiceAccount } from 'firebase-admin/app';
+import {
+  applicationDefault,
+  cert,
+  getApps,
+  initializeApp,
+  type ServiceAccount,
+} from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
-import type { LessonFolder, Student } from '../src/types';
+import type { Classroom, Student } from '../src/types';
 import {
   getVisibleStudents,
   normalizeLegacyStudents,
@@ -14,18 +20,34 @@ import {
 const ADMIN_EMAIL = 'songes0515@gmail.com';
 const INTEGRATIONS_COLLECTION = 'integrations';
 const GOOGLE_SHEETS_DOC_ID = 'googleSheets';
-const SHEET_HEADERS = ['studentId', 'name', 'initials', 'age', 'contact', 'memo', 'classId', 'className', 'updatedAt'] as const;
+const CLASSROOMS_COLLECTION = 'classrooms';
+const LEGACY_CLASSROOMS_COLLECTION = 'folders';
+const STUDENTS_COLLECTION = 'students';
+const SHEET_HEADERS = [
+  'studentId',
+  'name',
+  'initials',
+  'age',
+  'contact',
+  'memo',
+  'classId',
+  'className',
+  'updatedAt',
+] as const;
 
 type SyncMode = 'upsert' | 'delete';
 
-interface FolderSheetMapping {
+interface ClassroomSheetMapping {
   sheetId: number;
   title: string;
 }
 
 interface GoogleSheetsSyncMeta {
   spreadsheetId: string;
-  folders?: Record<string, FolderSheetMapping>;
+  classrooms?: Record<string, ClassroomSheetMapping>;
+  folders?: Record<string, ClassroomSheetMapping>;
+  classroomCount?: number;
+  folderCount?: number;
   lastSyncAt?: string;
   lastError?: string | null;
   updatedAt?: string;
@@ -37,17 +59,31 @@ interface ServiceAccountConfig {
   privateKey: string;
 }
 
+export interface ClassroomSyncPayload {
+  classroomId: string;
+  mode?: SyncMode;
+  previousName?: string;
+  classroomName?: string;
+  folderId?: string;
+  folderName?: string;
+}
+
 export interface FolderSyncPayload {
   folderId: string;
   mode?: SyncMode;
   previousName?: string;
   folderName?: string;
+  classroomId?: string;
+  classroomName?: string;
 }
 
 export interface StudentSyncPayload {
+  classroomId?: string;
   folderId?: string;
   studentId?: string;
   mode?: 'upsert' | 'delete' | 'move';
+  sourceClassroomId?: string;
+  targetClassroomId?: string;
   sourceFolderId?: string;
   targetFolderId?: string;
 }
@@ -101,10 +137,13 @@ const getServiceAccountFromEnv = (prefix: 'GOOGLE' | 'FIREBASE'): ServiceAccount
   };
 };
 
-const getFirebaseServiceAccount = () => getServiceAccountFromEnv('FIREBASE') || getServiceAccountFromEnv('GOOGLE');
-const getGoogleServiceAccount = () => getServiceAccountFromEnv('GOOGLE') || getServiceAccountFromEnv('FIREBASE');
+const getFirebaseServiceAccount = () =>
+  getServiceAccountFromEnv('FIREBASE') || getServiceAccountFromEnv('GOOGLE');
+const getGoogleServiceAccount = () =>
+  getServiceAccountFromEnv('GOOGLE') || getServiceAccountFromEnv('FIREBASE');
 
-const hasGoogleSheetsConfig = () => Boolean(process.env.GOOGLE_SPREADSHEET_ID && getGoogleServiceAccount());
+const hasGoogleSheetsConfig = () =>
+  Boolean(process.env.GOOGLE_SPREADSHEET_ID && getGoogleServiceAccount());
 
 const getSpreadsheetId = () => {
   const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID;
@@ -164,15 +203,43 @@ const getGoogleSheetsClient = () => {
 
 const getMetaRef = () => getAdminDb().collection(INTEGRATIONS_COLLECTION).doc(GOOGLE_SHEETS_DOC_ID);
 
+const getClassroomMappings = (
+  meta: Pick<GoogleSheetsSyncMeta, 'classrooms' | 'folders'>
+) => meta.classrooms || meta.folders || {};
+
+const normalizeClassroomSyncPayload = (
+  payload: Partial<ClassroomSyncPayload> & Partial<FolderSyncPayload>
+): ClassroomSyncPayload => {
+  const classroomId = (payload.classroomId || payload.folderId || '').trim();
+
+  if (!classroomId) {
+    throw new Error('classroomId is required for Google Sheets sync.');
+  }
+
+  return {
+    classroomId,
+    folderId: payload.folderId || classroomId,
+    mode: payload.mode,
+    previousName: payload.previousName,
+    classroomName: payload.classroomName || payload.folderName,
+    folderName: payload.folderName || payload.classroomName,
+  };
+};
+
 const readMeta = async (): Promise<GoogleSheetsSyncMeta> => {
   const snapshot = await getMetaRef().get();
   const data: Partial<GoogleSheetsSyncMeta> = snapshot.exists
     ? (snapshot.data() as GoogleSheetsSyncMeta)
     : {};
+  const classroomMappings = data.classrooms || data.folders || {};
+  const classroomCount = Object.keys(classroomMappings).length;
 
   return {
     spreadsheetId: getSpreadsheetId(),
-    folders: data.folders || {},
+    classrooms: classroomMappings,
+    folders: classroomMappings,
+    classroomCount: data.classroomCount ?? classroomCount,
+    folderCount: data.folderCount ?? classroomCount,
     lastSyncAt: data.lastSyncAt,
     lastError: data.lastError,
     updatedAt: data.updatedAt,
@@ -185,19 +252,32 @@ const stripUndefined = <T extends Record<string, unknown>>(value: T) => {
 };
 
 const writeMeta = async (meta: GoogleSheetsSyncMeta) => {
-  await getMetaRef().set(stripUndefined({
-    ...meta,
-    spreadsheetId: getSpreadsheetId(),
-    updatedAt: nowIso(),
-  }), { merge: true });
+  const classroomMappings = getClassroomMappings(meta);
+  const classroomCount = Object.keys(classroomMappings).length;
+
+  await getMetaRef().set(
+    stripUndefined({
+      ...meta,
+      spreadsheetId: getSpreadsheetId(),
+      classrooms: classroomMappings,
+      folders: classroomMappings,
+      classroomCount,
+      folderCount: classroomCount,
+      updatedAt: nowIso(),
+    }),
+    { merge: true }
+  );
 };
 
 const setMetaError = async (message: string) => {
-  await getMetaRef().set({
-    spreadsheetId: getSpreadsheetId(),
-    lastError: message,
-    updatedAt: nowIso(),
-  }, { merge: true });
+  await getMetaRef().set(
+    {
+      spreadsheetId: getSpreadsheetId(),
+      lastError: message,
+      updatedAt: nowIso(),
+    },
+    { merge: true }
+  );
 };
 
 const getSpreadsheet = async () => {
@@ -255,43 +335,46 @@ const getUniqueSheetTitle = (
 
 const quoteSheetTitle = (title: string) => `'${title.replace(/'/g, "''")}'`;
 
-const buildSheetValues = (folder: LessonFolder, students: Student[]) => {
+const buildSheetValues = (classroom: Classroom, students: Student[]) => {
   return [
     [...SHEET_HEADERS],
-    ...students.map((student: Student) => [
+    ...students.map((student) => [
       student.id,
       student.name,
       student.initials,
       student.age || '',
       student.contact || '',
       student.memo || '',
-      folder.id,
-      folder.name,
+      classroom.id,
+      classroom.name,
       student.updatedAt || '',
     ]),
   ];
 };
 
-const getFolderDoc = async (folderId: string) => {
-  const snapshot = await getAdminDb().collection('folders').doc(folderId).get();
-  if (!snapshot.exists) {
-    throw new Error(`Folder '${folderId}' was not found in Firestore.`);
+const getClassroomDoc = async (classroomId: string) => {
+  for (const collectionName of [CLASSROOMS_COLLECTION, LEGACY_CLASSROOMS_COLLECTION]) {
+    const snapshot = await getAdminDb().collection(collectionName).doc(classroomId).get();
+
+    if (snapshot.exists) {
+      return {
+        id: snapshot.id,
+        ...(snapshot.data() as Omit<Classroom, 'id'>),
+      } as Classroom;
+    }
   }
 
-  return {
-    id: snapshot.id,
-    ...(snapshot.data() as Omit<LessonFolder, 'id'>),
-  } as LessonFolder;
+  throw new Error(`Classroom '${classroomId}' was not found in Firestore.`);
 };
 
-const getStudentsForFolder = async (folder: LessonFolder) => {
-  const legacyStudents = normalizeLegacyStudents(folder.students, {
-    folderId: folder.id,
-    ownerUid: folder.ownerUid,
-    createdAt: folder.createdAt,
-    updatedAt: folder.createdAt,
+const getStudentsForClassroom = async (classroom: Classroom) => {
+  const legacyStudents = normalizeLegacyStudents(classroom.students, {
+    classroomId: classroom.id,
+    ownerUid: classroom.ownerUid,
+    createdAt: classroom.createdAt,
+    updatedAt: classroom.createdAt,
   });
-  const snapshot = await getAdminDb().collection('students').get();
+  const snapshot = await getAdminDb().collection(STUDENTS_COLLECTION).get();
   const globalStudents = snapshot.docs.map((studentDoc) =>
     normalizeStudentRecord({
       id: studentDoc.id,
@@ -313,21 +396,26 @@ const getStudentsForFolder = async (folder: LessonFolder) => {
   });
 
   return getVisibleStudents(sortStudents([...mergedStudentsById.values()])).filter(
-    (student) => student.folderId === folder.id
+    (student) => student.classroomId === classroom.id
   );
 };
 
-const persistFolderSheet = async (folder: LessonFolder, payload?: FolderSyncPayload) => {
+const persistClassroomSheet = async (
+  classroom: Classroom,
+  rawPayload?: ClassroomSyncPayload | FolderSyncPayload
+) => {
+  const payload = rawPayload ? normalizeClassroomSyncPayload(rawPayload) : undefined;
   const meta = await readMeta();
   const { sheets, spreadsheetId, spreadsheet } = await getSpreadsheet();
-  const students = await getStudentsForFolder(folder);
+  const students = await getStudentsForClassroom(classroom);
+  const classroomMappings = getClassroomMappings(meta);
   const otherMappedSheetIds = new Set(
-    Object.entries(meta.folders || {})
-      .filter(([mappedFolderId]) => mappedFolderId !== folder.id)
+    Object.entries(classroomMappings)
+      .filter(([mappedClassroomId]) => mappedClassroomId !== classroom.id)
       .map(([, mapping]) => mapping.sheetId)
   );
 
-  const mapping = meta.folders?.[folder.id];
+  const mapping = classroomMappings[classroom.id];
   let targetSheet = (spreadsheet.sheets || []).find(
     (sheet) => sheet.properties?.sheetId === mapping?.sheetId
   );
@@ -341,25 +429,29 @@ const persistFolderSheet = async (folder: LessonFolder, payload?: FolderSyncPayl
   if (!targetSheet && payload?.previousName) {
     const previousTitle = sanitizeSheetTitle(payload.previousName);
     targetSheet = (spreadsheet.sheets || []).find(
-      (sheet) => sheet.properties?.title === previousTitle && !otherMappedSheetIds.has(sheet.properties?.sheetId || -1)
+      (sheet) =>
+        sheet.properties?.title === previousTitle &&
+        !otherMappedSheetIds.has(sheet.properties?.sheetId || -1)
     );
   }
 
   if (!targetSheet) {
-    const currentTitle = sanitizeSheetTitle(folder.name);
+    const currentTitle = sanitizeSheetTitle(classroom.name);
     targetSheet = (spreadsheet.sheets || []).find(
-      (sheet) => sheet.properties?.title === currentTitle && !otherMappedSheetIds.has(sheet.properties?.sheetId || -1)
+      (sheet) =>
+        sheet.properties?.title === currentTitle &&
+        !otherMappedSheetIds.has(sheet.properties?.sheetId || -1)
     );
   }
 
   const desiredTitle = getUniqueSheetTitle(
     spreadsheet,
-    sanitizeSheetTitle(folder.name),
+    sanitizeSheetTitle(classroom.name),
     targetSheet?.properties?.sheetId
   );
 
   let sheetId = targetSheet?.properties?.sheetId;
-  let sheetTitle = desiredTitle;
+  const sheetTitle = desiredTitle;
 
   if (sheetId == null) {
     const addSheetResponse = await sheets.spreadsheets.batchUpdate({
@@ -382,7 +474,7 @@ const persistFolderSheet = async (folder: LessonFolder, payload?: FolderSyncPayl
 
     sheetId = addSheetResponse.data.replies?.[0]?.addSheet?.properties?.sheetId ?? undefined;
     if (sheetId == null) {
-      throw new Error(`Failed to create a Google Sheets tab for folder '${folder.id}'.`);
+      throw new Error(`Failed to create a Google Sheets tab for classroom '${classroom.id}'.`);
     }
   } else if (targetSheet?.properties?.title !== desiredTitle) {
     await sheets.spreadsheets.batchUpdate({
@@ -406,13 +498,14 @@ const persistFolderSheet = async (folder: LessonFolder, payload?: FolderSyncPayl
     });
   }
 
-  meta.folders = {
-    ...(meta.folders || {}),
-    [folder.id]: {
+  meta.classrooms = {
+    ...classroomMappings,
+    [classroom.id]: {
       sheetId,
       title: sheetTitle,
     },
   };
+  meta.folders = meta.classrooms;
   await writeMeta(meta);
 
   const range = `${quoteSheetTitle(sheetTitle)}!A:I`;
@@ -425,7 +518,7 @@ const persistFolderSheet = async (folder: LessonFolder, payload?: FolderSyncPayl
     range,
     valueInputOption: 'RAW',
     requestBody: {
-      values: buildSheetValues(folder, students),
+      values: buildSheetValues(classroom, students),
     },
   });
 
@@ -434,17 +527,20 @@ const persistFolderSheet = async (folder: LessonFolder, payload?: FolderSyncPayl
   await writeMeta(meta);
 
   return {
-    folderId: folder.id,
+    classroomId: classroom.id,
+    folderId: classroom.id,
     sheetId,
     title: sheetTitle,
     syncedStudentCount: students.length,
   };
 };
 
-const deleteFolderSheet = async (payload: FolderSyncPayload) => {
+const deleteClassroomSheet = async (rawPayload: ClassroomSyncPayload | FolderSyncPayload) => {
+  const payload = normalizeClassroomSyncPayload(rawPayload);
   const meta = await readMeta();
   const { sheets, spreadsheetId, spreadsheet } = await getSpreadsheet();
-  const mapping = meta.folders?.[payload.folderId];
+  const classroomMappings = getClassroomMappings(meta);
+  const mapping = classroomMappings[payload.classroomId];
   const allSheets = spreadsheet.sheets || [];
 
   let targetSheet = allSheets.find((sheet) => sheet.properties?.sheetId === mapping?.sheetId);
@@ -453,8 +549,8 @@ const deleteFolderSheet = async (payload: FolderSyncPayload) => {
     targetSheet = allSheets.find((sheet) => sheet.properties?.title === mapping.title);
   }
 
-  if (!targetSheet && payload.folderName) {
-    const fallbackTitle = sanitizeSheetTitle(payload.folderName);
+  if (!targetSheet && payload.classroomName) {
+    const fallbackTitle = sanitizeSheetTitle(payload.classroomName);
     targetSheet = allSheets.find((sheet) => sheet.properties?.title === fallbackTitle);
   }
 
@@ -474,7 +570,7 @@ const deleteFolderSheet = async (payload: FolderSyncPayload) => {
   } else if (targetSheet?.properties?.title) {
     const archiveTitle = getUniqueSheetTitle(
       spreadsheet,
-      sanitizeSheetTitle(`Archived ${payload.folderName || payload.folderId}`),
+      sanitizeSheetTitle(`Archived ${payload.classroomName || payload.classroomId}`),
       targetSheet.properties.sheetId || undefined
     );
     const range = `${quoteSheetTitle(targetSheet.properties.title)}!A:I`;
@@ -512,16 +608,18 @@ const deleteFolderSheet = async (payload: FolderSyncPayload) => {
     });
   }
 
-  if (meta.folders) {
-    delete meta.folders[payload.folderId];
+  if (meta.classrooms) {
+    delete meta.classrooms[payload.classroomId];
   }
+  meta.folders = meta.classrooms;
 
   meta.lastSyncAt = nowIso();
   meta.lastError = null;
   await writeMeta(meta);
 
   return {
-    folderId: payload.folderId,
+    classroomId: payload.classroomId,
+    folderId: payload.classroomId,
     removed: true,
   };
 };
@@ -536,56 +634,73 @@ export const verifyAdminIdToken = async (idToken: string) => {
   return decodedToken;
 };
 
-export const syncFolderToGoogleSheets = async (payload: FolderSyncPayload) => {
+export const syncClassroomToGoogleSheets = async (
+  rawPayload: ClassroomSyncPayload | FolderSyncPayload
+) => {
+  const payload = normalizeClassroomSyncPayload(rawPayload);
+
   try {
     if (!hasGoogleSheetsConfig()) {
-      console.warn('Google Sheets sync skipped: GOOGLE_SPREADSHEET_ID or credentials not configured.');
+      console.warn(
+        'Google Sheets sync skipped: GOOGLE_SPREADSHEET_ID or credentials not configured.'
+      );
       return { skipped: true, reason: 'Not configured' };
     }
 
     if ((payload.mode || 'upsert') === 'delete') {
-      return await deleteFolderSheet(payload);
+      return await deleteClassroomSheet(payload);
     }
 
-    const folder = await getFolderDoc(payload.folderId);
-    return await persistFolderSheet(folder, payload);
+    const classroom = await getClassroomDoc(payload.classroomId);
+    return await persistClassroomSheet(classroom, payload);
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Google Sheets folder sync failed.';
+    const message =
+      error instanceof Error ? error.message : 'Google Sheets classroom sync failed.';
     await setMetaError(message);
     throw error;
   }
 };
 
+export const syncFolderToGoogleSheets = async (payload: FolderSyncPayload) =>
+  syncClassroomToGoogleSheets(payload);
+
 export const syncStudentToGoogleSheets = async (payload: StudentSyncPayload) => {
+  const sourceClassroomId = payload.sourceClassroomId || payload.sourceFolderId;
+  const targetClassroomId = payload.targetClassroomId || payload.targetFolderId;
+
   if (payload.mode === 'move') {
-    if (!payload.sourceFolderId || !payload.targetFolderId) {
-      throw new Error('sourceFolderId and targetFolderId are required for move sync.');
+    if (!sourceClassroomId || !targetClassroomId) {
+      throw new Error('sourceClassroomId and targetClassroomId are required for move sync.');
     }
 
     return Promise.all([
-      syncFolderToGoogleSheets({ folderId: payload.sourceFolderId, mode: 'upsert' }),
-      syncFolderToGoogleSheets({ folderId: payload.targetFolderId, mode: 'upsert' }),
+      syncClassroomToGoogleSheets({ classroomId: sourceClassroomId, mode: 'upsert' }),
+      syncClassroomToGoogleSheets({ classroomId: targetClassroomId, mode: 'upsert' }),
     ]);
   }
 
-  if (!payload.folderId) {
-    throw new Error('folderId is required for student sync.');
+  const classroomId = payload.classroomId || payload.folderId;
+  if (!classroomId) {
+    throw new Error('classroomId is required for student sync.');
   }
 
-  return syncFolderToGoogleSheets({
-    folderId: payload.folderId,
-    mode: payload.mode === 'delete' ? 'upsert' : 'upsert',
+  return syncClassroomToGoogleSheets({
+    classroomId,
+    mode: 'upsert',
   });
 };
 
 export const getGoogleSheetsStatus = async () => {
   const meta = await readMeta();
+  const classroomMappings = getClassroomMappings(meta);
+  const classroomCount = Object.keys(classroomMappings).length;
 
   return {
     configured: hasGoogleSheetsConfig(),
     spreadsheetId: meta.spreadsheetId,
     lastSyncAt: meta.lastSyncAt || null,
     lastError: meta.lastError || null,
-    folderCount: Object.keys(meta.folders || {}).length,
+    classroomCount,
+    folderCount: classroomCount,
   };
 };

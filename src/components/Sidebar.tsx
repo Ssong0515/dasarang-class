@@ -1,7 +1,6 @@
 import React from 'react';
 import {
   LayoutGrid,
-  BookOpen,
   Users,
   Paperclip,
   HelpCircle,
@@ -9,45 +8,17 @@ import {
   Library,
   Plus,
   GripVertical,
-  GraduationCap,
-  Code,
-  Music,
-  Brush,
-  Globe,
-  Cpu,
-  Heart,
-  Zap,
-  Rocket,
-  Star,
-  Lightbulb,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
 import { Reorder } from 'motion/react';
-import { LessonFolder } from '../types';
+import { Classroom } from '../types';
+import { getClassroomIconComponent } from '../utils/classroomAppearance';
 
 const MOBILE_MEDIA_QUERY = '(max-width: 768px)';
 const WIDE_MEDIA_QUERY = '(min-width: 1280px)';
 
 type ViewportMode = 'mobile' | 'compactDesktop' | 'wideDesktop';
-
-const sidebarIconMap: Record<
-  string,
-  React.FC<{ size?: number; className?: string; style?: React.CSSProperties }>
-> = {
-  BookOpen,
-  GraduationCap,
-  Code,
-  Music,
-  Brush,
-  Globe,
-  Cpu,
-  Heart,
-  Zap,
-  Rocket,
-  Star,
-  Lightbulb,
-};
 
 const getViewportMode = (): ViewportMode => {
   if (typeof window === 'undefined') {
@@ -70,15 +41,15 @@ const getDefaultDesktopCollapsed = (viewportMode: ViewportMode) => {
 };
 
 interface SidebarProps {
-  folders: LessonFolder[];
-  activeFolderId?: string;
-  activeTab: 'home' | 'memo' | 'folder-management' | 'content-library';
-  onTabChange: (tab: 'home' | 'memo' | 'folder-management' | 'content-library') => void;
-  onManageFolder: (folder: LessonFolder) => void;
+  classrooms: Classroom[];
+  activeClassroomId?: string;
+  activeTab: 'home' | 'memo' | 'classroom-management' | 'content-library';
+  onTabChange: (tab: 'home' | 'memo' | 'classroom-management' | 'content-library') => void;
+  onManageClassroom: (classroom: Classroom) => void;
   onLogout: () => void;
   onSwitchToStudent: () => void;
-  onReorderFolders?: (folders: LessonFolder[]) => void;
-  onCreateFolder?: () => void;
+  onReorderClassrooms?: (classrooms: Classroom[]) => void;
+  onCreateClassroom?: () => void;
   isStudentView?: boolean;
 }
 
@@ -140,18 +111,18 @@ const SidebarFooterButton: React.FC<SidebarNavButtonProps> = ({
 );
 
 export const Sidebar: React.FC<SidebarProps> = ({
-  folders,
-  activeFolderId,
+  classrooms,
+  activeClassroomId,
   activeTab,
   onTabChange,
-  onManageFolder,
+  onManageClassroom,
   onLogout,
   onSwitchToStudent,
-  onReorderFolders,
-  onCreateFolder,
+  onReorderClassrooms,
+  onCreateClassroom,
   isStudentView = false,
 }) => {
-  const [localFolders, setLocalFolders] = React.useState(folders);
+  const [localClassrooms, setLocalClassrooms] = React.useState(classrooms);
   const [viewportMode, setViewportMode] = React.useState<ViewportMode>(getViewportMode);
   const [isDesktopCollapsed, setIsDesktopCollapsed] = React.useState(() =>
     getDefaultDesktopCollapsed(getViewportMode())
@@ -164,22 +135,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   React.useEffect(() => {
     const hasChanges =
-      folders.length !== localFolders.length ||
-      folders.some((folder, index) => {
-        const localFolder = localFolders[index];
+      classrooms.length !== localClassrooms.length ||
+      classrooms.some((classroom, index) => {
+        const localClassroom = localClassrooms[index];
         return (
-          !localFolder ||
-          folder.id !== localFolder.id ||
-          folder.name !== localFolder.name ||
-          folder.icon !== localFolder.icon ||
-          folder.color !== localFolder.color
+          !localClassroom ||
+          classroom.id !== localClassroom.id ||
+          classroom.name !== localClassroom.name ||
+          classroom.icon !== localClassroom.icon ||
+          classroom.color !== localClassroom.color
         );
       });
 
     if (hasChanges) {
-      setLocalFolders(folders);
+      setLocalClassrooms(classrooms);
     }
-  }, [folders, localFolders]);
+  }, [classrooms, localClassrooms]);
 
   React.useEffect(() => {
     if (typeof window === 'undefined') {
@@ -218,9 +189,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setIsDesktopCollapsed(getDefaultDesktopCollapsed(viewportMode));
   }, [viewportMode]);
 
-  const handleReorder = (newOrder: LessonFolder[]) => {
-    setLocalFolders(newOrder);
-    onReorderFolders?.(newOrder);
+  const handleReorder = (newOrder: Classroom[]) => {
+    setLocalClassrooms(newOrder);
+    onReorderClassrooms?.(newOrder);
   };
 
   const handleToggleSidebar = () => {
@@ -299,15 +270,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         <div className={`border-t border-[#E5E3DD] ${isCollapsed ? 'mt-5 pt-5' : 'mt-6 pt-8'} flex-1`}>
-          <Reorder.Group axis="y" values={localFolders} onReorder={handleReorder} className="space-y-1">
-            {localFolders.map((folder) => {
-              const SideIcon = sidebarIconMap[folder.icon || 'BookOpen'] || BookOpen;
-              const isActive = activeTab === 'folder-management' && folder.id === activeFolderId;
+          <Reorder.Group axis="y" values={localClassrooms} onReorder={handleReorder} className="space-y-1">
+            {localClassrooms.map((classroom) => {
+              const SideIcon = getClassroomIconComponent(classroom.icon);
+              const isActive =
+                activeTab === 'classroom-management' && classroom.id === activeClassroomId;
 
               return (
                 <Reorder.Item
-                  key={folder.id}
-                  value={folder}
+                  key={classroom.id}
+                  value={classroom}
                   dragListener={!isCollapsed}
                   className="relative group/reorder w-full"
                 >
@@ -323,9 +295,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
                     <button
                       type="button"
-                      onClick={() => onManageFolder(folder)}
-                      title={folder.name}
-                      aria-label={folder.name}
+                      onClick={() => onManageClassroom(classroom)}
+                      title={classroom.name}
+                      aria-label={classroom.name}
                       className={`flex w-full items-center rounded-xl font-bold transition-all ${
                         isCollapsed ? 'justify-center px-3 py-3.5' : 'gap-3 px-4 py-2.5'
                       } ${
@@ -335,9 +307,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       <SideIcon
                         size={18}
                         className="shrink-0 group-hover:text-[#8B5E3C]"
-                        style={folder.color ? { color: folder.color } : undefined}
+                        style={classroom.color ? { color: classroom.color } : undefined}
                       />
-                      {!isCollapsed && <span className="truncate max-w-[120px]">{folder.name}</span>}
+                      {!isCollapsed && <span className="truncate max-w-[120px]">{classroom.name}</span>}
                     </button>
                   </div>
                 </Reorder.Item>
@@ -345,18 +317,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
             })}
           </Reorder.Group>
 
-          {onCreateFolder && (
+          {onCreateClassroom && (
             <button
               type="button"
-              onClick={onCreateFolder}
-              title="폴더 생성"
-              aria-label="폴더 생성"
+              onClick={onCreateClassroom}
+              title="클래스 생성"
+              aria-label="클래스 생성"
               className={`mt-4 flex w-full items-center rounded-xl border border-dashed border-[#8B5E3C]/30 bg-[#FFF5E9] font-bold text-[#8B5E3C] shadow-sm transition-all hover:bg-[#F3E8DB] ${
                 isCollapsed ? 'justify-center px-3 py-3.5' : 'justify-center gap-2 py-3 text-sm'
               }`}
             >
               <Plus size={16} />
-              {!isCollapsed && <span>폴더 생성</span>}
+              {!isCollapsed && <span>클래스 생성</span>}
             </button>
           )}
         </div>

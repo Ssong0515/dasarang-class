@@ -1,61 +1,95 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, getDocs, getFirestore, query, where } from 'firebase/firestore';
 import firebaseConfig from './firebase-applet-config.json' assert { type: 'json' };
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
-async function debugLesson() {
-  // 1. Find the folder ID for "디지털 기초반"
-  const foldersRef = collection(db, 'folders');
-  const foldersSnap = await getDocs(foldersRef);
-  let targetFolderId = null;
-  
-  foldersSnap.forEach(doc => {
-    if (doc.data().name === '디지털 기초반') {
-      targetFolderId = doc.id;
-      console.log('Found Folder:', doc.id, doc.data());
-    }
-  });
+const TARGET_CLASSROOM_NAME = '디지털 기초반';
+const TARGET_DATE = '2026-03-21';
 
-  if (!targetFolderId) {
-    console.log('Folder "디지털 기초반" not found.');
+async function findClassroomByName() {
+  for (const collectionName of ['classrooms', 'folders']) {
+    const snapshot = await getDocs(collection(db, collectionName));
+
+    for (const classroomDoc of snapshot.docs) {
+      if (classroomDoc.data().name === TARGET_CLASSROOM_NAME) {
+        return {
+          collectionName,
+          id: classroomDoc.id,
+          data: classroomDoc.data(),
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+async function findDateRecords(classroomId) {
+  const results = [];
+
+  for (const [collectionName, fieldName] of [
+    ['classroomDateRecords', 'classroomId'],
+    ['folderDateRecords', 'folderId'],
+  ]) {
+    const snapshot = await getDocs(
+      query(collection(db, collectionName), where(fieldName, '==', classroomId), where('date', '==', TARGET_DATE))
+    );
+
+    snapshot.forEach((recordDoc) => {
+      results.push({
+        collectionName,
+        id: recordDoc.id,
+        data: recordDoc.data(),
+      });
+    });
+  }
+
+  return results;
+}
+
+async function debugLesson() {
+  const classroom = await findClassroomByName();
+
+  if (!classroom) {
+    console.log(`Classroom "${TARGET_CLASSROOM_NAME}" not found in classrooms or folders.`);
     return;
   }
 
-  // 2. Find the lesson for March 21, 2026
-  const lessonsRef = collection(db, 'lessons');
-  const lessonsQuery = query(
-    lessonsRef, 
-    where('folderId', '==', targetFolderId),
-    where('date', '==', '2026-03-21')
-  );
-  
-  const lessonsSnap = await getDocs(lessonsQuery);
-  if (lessonsSnap.empty) {
-    console.log('No lesson found for 2026-03-21.');
-  } else {
-    lessonsSnap.forEach(async (lessonDoc) => {
-      console.log('Lesson Data:', lessonDoc.id, lessonDoc.data());
-      
-      const contentId = lessonDoc.data().contentId;
-      if (contentId) {
-        const contentsRef = collection(db, 'contents');
-        const contentsSnap = await getDocs(contentsRef);
-        let contentExists = false;
-        contentsSnap.forEach(cDoc => {
-          if (cDoc.id === contentId) {
-            contentExists = true;
-            console.log('Content Found:', cDoc.id, cDoc.data());
-          }
-        });
-        if (!contentExists) {
-          console.log('Warning: Content ID', contentId, 'does not exist in contents collection!');
-        }
+  console.log('Found Classroom:', classroom.collectionName, classroom.id, classroom.data);
+
+  const dateRecords = await findDateRecords(classroom.id);
+  if (dateRecords.length === 0) {
+    console.log(`No classroom record found for ${TARGET_DATE}.`);
+    return;
+  }
+
+  const contentSnapshot = await getDocs(collection(db, 'contents'));
+  const contentsById = new Map(contentSnapshot.docs.map((contentDoc) => [contentDoc.id, contentDoc.data()]));
+
+  for (const record of dateRecords) {
+    console.log('Classroom Record:', record.collectionName, record.id, record.data);
+
+    const contentIds = Array.isArray(record.data.contentIds)
+      ? record.data.contentIds
+      : record.data.contentId
+        ? [record.data.contentId]
+        : [];
+
+    if (contentIds.length === 0) {
+      console.log('Record has no linked content IDs.');
+      continue;
+    }
+
+    for (const contentId of contentIds) {
+      const content = contentsById.get(contentId);
+      if (content) {
+        console.log('Content Found:', contentId, content);
       } else {
-        console.log('Lesson has no contentId.');
+        console.log('Warning: Content ID', contentId, 'does not exist in contents collection.');
       }
-    });
+    }
   }
 }
 

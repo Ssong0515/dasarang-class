@@ -12,13 +12,25 @@
       },
       "required": ["email"]
     },
-    "LessonFolder": {
-      "title": "Lesson Folder",
-      "description": "Class folder",
+    "Classroom": {
+      "title": "Classroom",
+      "description": "Classroom configuration and assigned content",
       "type": "object",
       "properties": {
         "name": { "type": "string" },
         "ownerUid": { "type": "string" },
+        "students": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "assignedContentIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "isOpen": { "type": "boolean" },
+        "order": { "type": "number" },
+        "icon": { "type": "string" },
+        "color": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["name", "ownerUid"]
@@ -29,6 +41,7 @@
       "type": "object",
       "properties": {
         "ownerUid": { "type": "string" },
+        "classroomId": { "type": "string" },
         "folderId": { "type": "string" },
         "name": { "type": "string" },
         "initials": { "type": "string" },
@@ -41,18 +54,23 @@
         "inactiveAt": { "type": "string", "format": "date-time" },
         "deletedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["ownerUid", "folderId", "name", "initials", "order", "createdAt", "updatedAt"]
+      "required": ["ownerUid", "classroomId", "name", "initials", "order", "createdAt", "updatedAt"]
     },
-    "Lesson": {
-      "title": "Lesson",
-      "description": "Per-date class record",
+    "ClassroomDateRecord": {
+      "title": "Classroom Date Record",
+      "description": "Per-date classroom record",
       "type": "object",
       "properties": {
+        "classroomId": { "type": "string" },
+        "classroomName": { "type": "string" },
         "folderId": { "type": "string" },
         "folderName": { "type": "string" },
         "date": { "type": "string" },
-        "title": { "type": "string" },
         "ownerUid": { "type": "string" },
+        "contentIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
         "attendance": {
           "type": "array",
           "items": {
@@ -64,29 +82,11 @@
             }
           }
         },
-        "resources": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "name": { "type": "string" },
-              "type": { "type": "string", "enum": ["pdf", "link"] },
-              "info": { "type": "string" }
-            }
-          }
-        },
         "memo": { "type": "string" },
-        "summary": {
-          "type": "object",
-          "properties": {
-            "text": { "type": "string" },
-            "attendanceRate": { "type": "string" },
-            "engagement": { "type": "string" },
-            "resourceCount": { "type": "string" }
-          }
-        }
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["folderId", "date", "ownerUid"]
+      "required": ["classroomId", "date", "ownerUid", "contentIds", "attendance", "memo", "createdAt", "updatedAt"]
     },
     "Memo": {
       "title": "Memo",
@@ -106,7 +106,8 @@
       "type": "object",
       "properties": {
         "name": { "type": "string" },
-        "ownerUid": { "type": "string" }
+        "ownerUid": { "type": "string" },
+        "order": { "type": "number" }
       },
       "required": ["name", "ownerUid"]
     },
@@ -115,13 +116,15 @@
       "description": "Content detail",
       "type": "object",
       "properties": {
-        "categoryId": { "type": "string" },
+        "categoryId": { "type": ["string", "null"] },
         "title": { "type": "string" },
+        "description": { "type": "string" },
         "html": { "type": "string" },
         "ownerUid": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "createdAt": { "type": "string", "format": "date-time" },
+        "order": { "type": "number" }
       },
-      "required": ["categoryId", "title", "ownerUid"]
+      "required": ["title", "ownerUid"]
     }
   },
   "firestore": {
@@ -129,17 +132,25 @@
       "schema": "User",
       "description": "User profile"
     },
+    "/classrooms/{classroomId}": {
+      "schema": "Classroom",
+      "description": "Primary classroom documents"
+    },
     "/folders/{folderId}": {
-      "schema": "LessonFolder",
-      "description": "Class folders"
+      "schema": "Classroom",
+      "description": "Legacy classroom documents kept during migration"
     },
     "/students/{studentId}": {
       "schema": "Student",
       "description": "Global students"
     },
+    "/classroomDateRecords/{recordId}": {
+      "schema": "ClassroomDateRecord",
+      "description": "Primary classroom date records"
+    },
     "/folderDateRecords/{recordId}": {
-      "schema": "Lesson",
-      "description": "Lesson records"
+      "schema": "ClassroomDateRecord",
+      "description": "Legacy classroom date records kept during migration"
     },
     "/memos/{memoId}": {
       "schema": "Memo",
