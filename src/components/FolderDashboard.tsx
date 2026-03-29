@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Users,
@@ -34,6 +34,7 @@ import {
   Power,
   UserMinus,
   Undo2,
+  HelpCircle,
 } from 'lucide-react';
 import {
   AttendanceRecord,
@@ -155,6 +156,27 @@ const getAttendanceStats = (record?: FolderDateRecord) => {
   return { present, absent, late, total };
 };
 
+const DashboardInfoTooltip: React.FC<{
+  content: string;
+  label?: string;
+}> = ({ content, label = '설명 보기' }) => (
+  <div className="group/tooltip relative flex shrink-0 items-center">
+    <button
+      type="button"
+      aria-label={label}
+      className="flex h-6 w-6 items-center justify-center rounded-full border border-[#E5E3DD] bg-[#FBFBFA] text-[#8B7E74] transition-all hover:border-[#D8D2C8] hover:bg-white hover:text-[#4A3728] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EBD9C1]"
+    >
+      <HelpCircle size={14} />
+    </button>
+    <div
+      role="tooltip"
+      className="pointer-events-none absolute left-0 top-full z-30 mt-3 w-64 -translate-y-1 rounded-2xl bg-[#4A3728] px-4 py-3 text-xs leading-relaxed text-white opacity-0 shadow-xl transition-all duration-150 group-hover/tooltip:translate-y-0 group-hover/tooltip:opacity-100 group-focus-within/tooltip:translate-y-0 group-focus-within/tooltip:opacity-100"
+    >
+      {content}
+    </div>
+  </div>
+);
+
 export const FolderDashboard: React.FC<FolderDashboardProps> = ({
   folder,
   folders,
@@ -205,11 +227,7 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
     [folderDateRecords, selectedDate]
   );
   const isCurrentDateActive = Boolean(currentDateRecord);
-  const [isAssignmentCardCollapsed, setIsAssignmentCardCollapsed] = useState(isCurrentDateActive);
-  const previousDateSelectionRef = useRef<{
-    selectedDate: string;
-    isActive: boolean;
-  } | null>(null);
+  const [isAssignmentCardCollapsed, setIsAssignmentCardCollapsed] = useState(true);
   const activeDateSet = useMemo(
     () => new Set(folderDateRecords.map((record) => record.date)),
     [folderDateRecords]
@@ -249,6 +267,10 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
   const { activeCount, inactiveCount } = useMemo(
     () => getStudentCounts(students),
     [students]
+  );
+  const attendanceStats = useMemo(
+    () => getAttendanceStats(currentDateRecord),
+    [currentDateRecord]
   );
   const sortedAttendanceRecords = useMemo(() => {
     if (!currentDateRecord) {
@@ -326,19 +348,8 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
   }, [currentDateRecord?.id, currentDateRecord?.updatedAt, selectedDate]);
 
   useEffect(() => {
-    const previousSelection = previousDateSelectionRef.current;
-
-    if (!isCurrentDateActive) {
-      setIsAssignmentCardCollapsed(false);
-    } else if (!previousSelection || !previousSelection.isActive) {
-      setIsAssignmentCardCollapsed(true);
-    }
-
-    previousDateSelectionRef.current = {
-      selectedDate,
-      isActive: isCurrentDateActive,
-    };
-  }, [selectedDate, isCurrentDateActive]);
+    setIsAssignmentCardCollapsed(true);
+  }, [folder.id]);
 
   const createInitialAttendance = (): AttendanceRecord[] =>
     students.map((student) => ({
@@ -710,31 +721,57 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
     }
   };
 
-  const renderDashboardTab = () => (
-    <motion.div
-      key="dashboard"
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -10 }}
-      className="grid grid-cols-1 gap-8 lg:grid-cols-3"
-    >
-      <div className="space-y-8 lg:col-span-2">
-        <div className="rounded-[40px] border border-[#E5E3DD] bg-white p-10 shadow-sm">
-          <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
-            <div className="space-y-2">
+  const renderDashboardTab = () => {
+    const assignmentTooltipText =
+      '학생 페이지에는 여기에서 배정한 콘텐츠만 보입니다. 날짜를 바꿔도 이 목록은 달라지지 않습니다.';
+    const dateStatusTooltipText =
+      '날짜를 활성화해야 수업기록, 수업메모, 출석체크를 남길 수 있습니다.';
+    const lessonRecordTooltipText =
+      '학생 페이지 노출과는 별개로, 이 날짜에 실제 진행한 콘텐츠만 기록합니다.';
+    const attendanceTooltipText =
+      '활성화된 날짜에만 출석 상태를 저장합니다. 비활성 학생은 기본적으로 오늘 제외 상태로 시작하며, 학생별로 오늘만 제외하거나 다시 포함할 수 있습니다.';
+    const calendarTooltipText = '날짜를 선택한 뒤 활성화하면 아래 기록 영역이 열립니다.';
+    const memoTooltipText = '활성화된 날짜에만 메모가 저장됩니다.';
+    const waitingTooltipText =
+      '이 날짜는 아직 비활성 상태입니다. 활성화 버튼을 누르면 수업기록, 수업메모, 출석체크가 열리고 캘린더에도 표시됩니다.';
+    const assignmentPreviewContents = assignedContents.slice(0, 3);
+    const remainingAssignedContentCount = Math.max(
+      assignedContents.length - assignmentPreviewContents.length,
+      0
+    );
+    const excludedAttendanceCount =
+      currentDateRecord?.attendance.filter((attendance) => isAttendanceExcluded(attendance)).length || 0;
+
+    return (
+      <motion.div
+        key="dashboard"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10 }}
+        className="grid grid-cols-1 gap-8 lg:grid-cols-3"
+      >
+        <div className="space-y-6 lg:col-span-2">
+          <div className="rounded-[40px] border border-[#E5E3DD] bg-white p-8 shadow-sm sm:p-10">
+          <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+            <div className="space-y-3">
               <h2 className="flex items-center gap-2 text-xl font-bold text-[#4A3728]">
-              <FileText className="text-[#8B5E3C]" size={20} />
-              반별 콘텐츠 배정
+                <FileText className="text-[#8B5E3C]" size={20} />
+                반별 콘텐츠 배정
+                <DashboardInfoTooltip
+                  content={assignmentTooltipText}
+                  label="반별 콘텐츠 배정 설명 보기"
+                />
               </h2>
               <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-[#8B7E74]">
                 <span className="rounded-full bg-[#F3F2EE] px-3 py-1.5 text-[#8B5E3C]">
                   {assignedContents.length}개 배정
                 </span>
-                {isCurrentDateActive && (
-                  <span className="rounded-full bg-[#FFF5E9] px-3 py-1.5 text-[#8B5E3C]">
-                    활성 날짜에서는 자동으로 접힙니다
-                  </span>
-                )}
+                <span className="rounded-full bg-[#FBF4EA] px-3 py-1.5 text-[#8B5E3C]">
+                  학생 페이지 노출 기준
+                </span>
+                <span className="rounded-full bg-[#EEF7F0] px-3 py-1.5 text-[#2D7A4D]">
+                  {isCurrentDateActive ? '날짜 기록 선택 가능' : '날짜 활성화 후 기록 가능'}
+                </span>
               </div>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
@@ -746,12 +783,12 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
                 {isAssignmentCardCollapsed ? '펼치기' : '접기'}
               </button>
               <button
-              onClick={onGoToLibrary}
-              className="rounded-xl border border-[#E5E3DD] px-4 py-2 text-sm font-bold text-[#8B5E3C] transition-all hover:bg-[#FFF5E9]"
-            >
-              라이브러리 열기
-            </button>
-          </div>
+                onClick={onGoToLibrary}
+                className="rounded-xl border border-[#E5E3DD] px-4 py-2 text-sm font-bold text-[#8B5E3C] transition-all hover:bg-[#FFF5E9]"
+              >
+                라이브러리 열기
+              </button>
+            </div>
           </div>
           <AnimatePresence initial={false} mode="wait">
             {isAssignmentCardCollapsed ? (
@@ -760,11 +797,45 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
                 initial={{ opacity: 0, y: -8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 8 }}
-                className="rounded-[28px] border border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-6 py-6 text-sm text-[#8B7E74]"
+                className="flex flex-col justify-between gap-5 rounded-[28px] border border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-6 py-6 text-sm text-[#8B7E74] lg:min-h-[272px]"
               >
-                {isCurrentDateActive
-                  ? '현재 날짜가 활성화되어 있어 콘텐츠 배정 카드를 접어두었습니다. 필요하면 펼쳐서 반 배정을 바로 수정할 수 있습니다.'
-                  : '콘텐츠 배정 카드를 접어두었습니다. 필요하면 다시 펼쳐서 반별 학생 노출 콘텐츠를 수정할 수 있습니다.'}
+                <div className="flex flex-wrap gap-2">
+                  {assignmentPreviewContents.length > 0 ? (
+                    <>
+                      {assignmentPreviewContents.map((content) => (
+                        <span
+                          key={content.id}
+                          className="rounded-full bg-white px-4 py-2 text-sm font-bold text-[#4A3728] shadow-sm"
+                        >
+                          {content.title}
+                        </span>
+                      ))}
+                      {remainingAssignedContentCount > 0 && (
+                        <span className="rounded-full bg-[#F3F2EE] px-4 py-2 text-sm font-bold text-[#8B7E74]">
+                          +{remainingAssignedContentCount}개 더
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <div className="w-full rounded-2xl border border-dashed border-[#E5E3DD] bg-white px-4 py-6 text-center text-sm text-[#8B7E74]">
+                      아직 배정된 콘텐츠가 없습니다.
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-3 border-t border-[#E5E3DD] pt-4 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm text-[#8B7E74]">
+                    {isCurrentDateActive
+                      ? '선택한 날짜 기록용 콘텐츠를 바로 선택할 수 있습니다.'
+                      : '학생 페이지에 보일 콘텐츠를 먼저 정리해두세요.'}
+                  </p>
+                  <button
+                    onClick={onGoToLibrary}
+                    className="inline-flex items-center justify-center rounded-xl bg-white px-4 py-2 text-sm font-bold text-[#8B5E3C] shadow-sm transition-all hover:bg-[#FFF5E9]"
+                  >
+                    라이브러리 열기
+                  </button>
+                </div>
               </motion.div>
             ) : (
               <motion.div
@@ -774,111 +845,115 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
                 exit={{ opacity: 0, height: 0 }}
                 className="overflow-hidden"
               >
-          <p className="mb-8 text-sm text-[#8B7E74]">
-            학생 페이지에는 여기에서 배정한 콘텐츠만 보입니다. 날짜를 바꿔도 이 목록은 달라지지 않습니다.
-          </p>
-
-          {assignedContents.length > 0 && (
-            <div className="mb-8 flex flex-wrap items-center gap-2 border-b border-[#E5E3DD] pb-8">
-              {assignedContents.map((content) => (
-                <div key={content.id} className="group relative inline-flex">
-                  <button className="cursor-default rounded-full bg-[#8B5E3C] px-5 py-3 pr-10 text-left text-sm font-bold text-white shadow-md">
-                    {content.title}
-                  </button>
-                  <button
-                    onClick={() => handleToggleContent(content)}
-                    className="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-white/20 text-white/80 opacity-0 transition-all hover:bg-[#D9534F] hover:text-white group-hover:opacity-100"
-                    title="콘텐츠 배정 해제"
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {categories.length > 0 ? (
-            <>
-              <div className="mb-6 flex flex-wrap gap-2 border-b border-[#E5E3DD] pb-4">
-                {categories.map((category) => (
-                  <button
-                    key={category.id}
-                    onClick={() => setSelectedCategory(category.id)}
-                    className={`rounded-xl px-4 py-2 text-sm font-bold transition-all ${
-                      selectedCategory === category.id
-                        ? 'bg-[#8B5E3C] text-white shadow-md'
-                        : 'bg-[#F3F2EE] text-[#8B7E74] hover:bg-[#EBD9C1] hover:text-[#8B5E3C]'
-                    }`}
-                  >
-                    {category.name}
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex flex-wrap gap-3">
-                {contents
-                  .filter((content) => content.categoryId !== null && content.categoryId === selectedCategory)
-                  .map((content) => {
-                    const isSelected = assignedContentIds.includes(content.id);
-                    return (
-                      <button
-                        key={content.id}
-                        onClick={() => handleToggleContent(content)}
-                        disabled={isSelected}
-                        className={`rounded-full px-5 py-3 text-left text-sm font-bold transition-all ${
-                          isSelected
-                            ? 'cursor-default border border-transparent bg-[#F3F2EE] text-[#D0C9C0] shadow-inner opacity-80'
-                            : 'border border-[#EBD9C1] bg-[#FFF5E9] text-[#8B5E3C] hover:-translate-y-0.5 hover:bg-[#EBD9C1] hover:shadow-md'
-                        }`}
-                      >
-                        {content.title}
-                      </button>
-                    );
-                  })}
-
-                {contents.filter(
-                  (content) => content.categoryId !== null && content.categoryId === selectedCategory
-                ).length === 0 && (
-                  <p className="py-4 text-sm text-[#8B7E74]">이 카테고리에 등록된 콘텐츠가 없습니다.</p>
+                {assignedContents.length > 0 && (
+                  <div className="mb-8 flex flex-wrap items-center gap-2 border-b border-[#E5E3DD] pb-8">
+                    {assignedContents.map((content) => (
+                      <div key={content.id} className="group relative inline-flex">
+                        <button className="cursor-default rounded-full bg-[#8B5E3C] px-5 py-3 pr-10 text-left text-sm font-bold text-white shadow-md">
+                          {content.title}
+                        </button>
+                        <button
+                          onClick={() => handleToggleContent(content)}
+                          className="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-white/20 text-white/80 opacity-0 transition-all hover:bg-[#D9534F] hover:text-white group-hover:opacity-100"
+                          title="콘텐츠 배정 해제"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 )}
-              </div>
-            </>
-          ) : (
-            <div className="rounded-[28px] border border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-6 py-8 text-sm text-[#8B7E74]">
-              먼저 콘텐츠 라이브러리에서 카테고리와 콘텐츠를 만들어주세요.
-            </div>
-          )}
+
+                {categories.length > 0 ? (
+                  <>
+                    <div className="mb-6 flex flex-wrap gap-2 border-b border-[#E5E3DD] pb-4">
+                      {categories.map((category) => (
+                        <button
+                          key={category.id}
+                          onClick={() => setSelectedCategory(category.id)}
+                          className={`rounded-xl px-4 py-2 text-sm font-bold transition-all ${
+                            selectedCategory === category.id
+                              ? 'bg-[#8B5E3C] text-white shadow-md'
+                              : 'bg-[#F3F2EE] text-[#8B7E74] hover:bg-[#EBD9C1] hover:text-[#8B5E3C]'
+                          }`}
+                        >
+                          {category.name}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="flex flex-wrap gap-3">
+                      {contents
+                        .filter(
+                          (content) =>
+                            content.categoryId !== null && content.categoryId === selectedCategory
+                        )
+                        .map((content) => {
+                          const isSelected = assignedContentIds.includes(content.id);
+                          return (
+                            <button
+                              key={content.id}
+                              onClick={() => handleToggleContent(content)}
+                              disabled={isSelected}
+                              className={`rounded-full px-5 py-3 text-left text-sm font-bold transition-all ${
+                                isSelected
+                                  ? 'cursor-default border border-transparent bg-[#F3F2EE] text-[#D0C9C0] shadow-inner opacity-80'
+                                  : 'border border-[#EBD9C1] bg-[#FFF5E9] text-[#8B5E3C] hover:-translate-y-0.5 hover:bg-[#EBD9C1] hover:shadow-md'
+                              }`}
+                            >
+                              {content.title}
+                            </button>
+                          );
+                        })}
+
+                      {contents.filter(
+                        (content) =>
+                          content.categoryId !== null && content.categoryId === selectedCategory
+                      ).length === 0 && (
+                        <p className="py-4 text-sm text-[#8B7E74]">이 카테고리에 등록된 콘텐츠가 없습니다.</p>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="rounded-[28px] border border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-6 py-8 text-sm text-[#8B7E74]">
+                    먼저 콘텐츠 라이브러리에서 카테고리와 콘텐츠를 만들어주세요.
+                  </div>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
         </div>
 
-        <div className="rounded-[40px] border border-[#E5E3DD] bg-white p-10 shadow-sm">
-          <div className="mb-6 flex items-center justify-between gap-4">
-            <div>
+        <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-6 shadow-sm sm:p-8">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-3">
               <h2 className="flex items-center gap-2 text-xl font-bold text-[#4A3728]">
                 <Clock className="text-[#8B5E3C]" size={20} />
                 날짜 상태
+                <DashboardInfoTooltip
+                  content={dateStatusTooltipText}
+                  label="날짜 상태 설명 보기"
+                />
               </h2>
-              <p className="mt-2 text-sm text-[#8B7E74]">
-                날짜를 활성화해야 수업기록, 수업메모, 출석체크를 남길 수 있습니다.
-              </p>
-            </div>
-            <span className="rounded-full bg-[#FFF5E9] px-4 py-2 text-xs font-bold text-[#8B5E3C]">
-              {selectedDate}
-            </span>
-          </div>
-
-          <div className="flex flex-col gap-4 rounded-[28px] border border-[#E5E3DD] bg-[#FBFBFA] p-6 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-sm font-bold text-[#4A3728]">
-                {isCurrentDateActive ? '활성 날짜입니다.' : '비활성 날짜입니다.'}
-              </p>
-              <p className="mt-2 text-sm text-[#8B7E74]">
-                {isCurrentDateActive
-                  ? '아래에서 실제 진행한 콘텐츠와 메모, 출석 상태를 기록할 수 있습니다.'
-                  : '활성화하면 해당 날짜에만 수업기록, 수업메모, 출석체크 영역이 열립니다.'}
-              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-[#FFF5E9] px-4 py-2 text-xs font-bold text-[#8B5E3C]">
+                  {selectedDate}
+                </span>
+                <span
+                  className={`rounded-full px-4 py-2 text-xs font-bold ${
+                    isCurrentDateActive
+                      ? 'bg-[#EEF7F0] text-[#2D7A4D]'
+                      : 'bg-[#F3F2EE] text-[#8B7E74]'
+                  }`}
+                >
+                  {isCurrentDateActive ? '활성' : '비활성'}
+                </span>
+                <span className="text-sm text-[#8B7E74]">
+                  {isCurrentDateActive
+                    ? '수업기록, 메모, 출석 체크가 열려 있습니다.'
+                    : '활성화 전에는 기록 영역이 열리지 않습니다.'}
+                </span>
+              </div>
             </div>
             <button
               onClick={isCurrentDateActive ? handleDeactivateDate : handleActivateDate}
@@ -895,19 +970,30 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
         </div>
 
         {isCurrentDateActive && (
-          <div className="rounded-[40px] border border-[#E5E3DD] bg-white p-10 shadow-sm">
-            <div className="mb-8 flex items-center justify-between gap-4">
-              <h2 className="flex items-center gap-2 text-xl font-bold text-[#4A3728]">
-                <Clock className="text-[#8B5E3C]" size={20} />
-                날짜별 수업기록
-              </h2>
-              <span className="rounded-full bg-[#FFF5E9] px-4 py-2 text-xs font-bold text-[#8B5E3C]">
-                {selectedDate}
-              </span>
+          <div className="rounded-[40px] border border-[#E5E3DD] bg-white p-8 shadow-sm sm:p-10">
+            <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+              <div className="space-y-3">
+                <h2 className="flex items-center gap-2 text-xl font-bold text-[#4A3728]">
+                  <Clock className="text-[#8B5E3C]" size={20} />
+                  날짜별 수업기록
+                  <DashboardInfoTooltip
+                    content={lessonRecordTooltipText}
+                    label="날짜별 수업기록 설명 보기"
+                  />
+                </h2>
+                <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
+                  <span className="rounded-full bg-[#EAF2FF] px-3 py-1.5 text-[#2F5EA8]">
+                    기록됨
+                  </span>
+                  <span className="rounded-full bg-[#F2FBF3] px-3 py-1.5 text-[#2F7A4D]">
+                    선택 가능
+                  </span>
+                  <span className="rounded-full bg-[#FFF5E9] px-3 py-1.5 text-[#8B5E3C]">
+                    {selectedDate}
+                  </span>
+                </div>
+              </div>
             </div>
-            <p className="mb-8 text-sm text-[#8B7E74]">
-              학생 페이지 노출과는 별개로, 이 날짜에 실제 진행한 콘텐츠만 기록합니다.
-            </p>
 
             {missingCurrentDateContentCount > 0 && (
               <div className="mb-8 flex items-center gap-3 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-amber-800">
@@ -924,13 +1010,13 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
             {currentDateRecordedContents.length > 0 ? (
               <div className="mb-8 flex flex-wrap items-center gap-2 border-b border-[#E5E3DD] pb-8">
                 {currentDateRecordedContents.map((content) => (
-                  <div key={content.id} className="relative inline-flex">
-                    <button className="cursor-default rounded-full bg-[#4A3728] px-5 py-3 pr-10 text-left text-sm font-bold text-white shadow-md">
+                  <div key={content.id} className="group relative inline-flex">
+                    <button className="cursor-default rounded-full border border-[#CFE0FF] bg-[#EAF2FF] px-5 py-3 pr-10 text-left text-sm font-bold text-[#2F5EA8] shadow-sm">
                       {content.title}
                     </button>
                     <button
                       onClick={() => handleToggleDateRecordContent(content)}
-                      className="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-white/20 text-white/80 transition-all hover:bg-[#D9534F] hover:text-white"
+                      className="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-white/70 text-[#2F5EA8] opacity-0 transition-all hover:bg-[#D9534F] hover:text-white group-hover:opacity-100"
                       title="기록에서 제거"
                     >
                       <X size={14} />
@@ -952,10 +1038,10 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
                     <button
                       key={content.id}
                       onClick={() => handleToggleDateRecordContent(content)}
-                      className={`rounded-full px-5 py-3 text-left text-sm font-bold transition-all ${
+                      className={`rounded-full border px-5 py-3 text-left text-sm font-bold transition-all ${
                         isRecorded
-                          ? 'bg-[#4A3728] text-white shadow-md'
-                          : 'border border-transparent bg-[#F3F2EE] text-[#4A3728] hover:bg-[#E5E3DD]'
+                          ? 'border-[#CFE0FF] bg-[#EAF2FF] text-[#2F5EA8] shadow-sm'
+                          : 'border-[#D7EBD9] bg-[#F2FBF3] text-[#2F7A4D] hover:-translate-y-0.5 hover:bg-[#E3F6E6] hover:shadow-sm'
                       }`}
                     >
                       {content.title}
@@ -973,16 +1059,38 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
 
         {isCurrentDateActive && (
           <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-8 text-left shadow-sm">
-            <div className="mb-6 flex items-center justify-between">
-              <h2 className="flex items-center gap-2 text-xl font-bold text-[#4A3728]">
-                <CheckCircle2 className="text-[#8B5E3C]" size={20} />
-                출석 체크 ({getAttendanceStats(currentDateRecord).present}명 출석)
-              </h2>
+            <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+              <div className="space-y-3">
+                <h2 className="flex items-center gap-2 text-xl font-bold text-[#4A3728]">
+                  <CheckCircle2 className="text-[#8B5E3C]" size={20} />
+                  출석 체크 ({attendanceStats.present}명 출석)
+                  <DashboardInfoTooltip
+                    content={attendanceTooltipText}
+                    label="출석 체크 설명 보기"
+                  />
+                </h2>
+                <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
+                  <span className="rounded-full bg-[#F3F2EE] px-3 py-1.5 text-[#8B7E74]">
+                    대상 {attendanceStats.total}명
+                  </span>
+                  {attendanceStats.absent > 0 && (
+                    <span className="rounded-full bg-[#FDECEC] px-3 py-1.5 text-[#B42318]">
+                      결 {attendanceStats.absent}
+                    </span>
+                  )}
+                  {attendanceStats.late > 0 && (
+                    <span className="rounded-full bg-[#FFF4D9] px-3 py-1.5 text-[#7A6A2D]">
+                      지 {attendanceStats.late}
+                    </span>
+                  )}
+                  {excludedAttendanceCount > 0 && (
+                    <span className="rounded-full bg-[#F3F2EE] px-3 py-1.5 text-[#8B7E74]">
+                      제외 {excludedAttendanceCount}
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
-            <p className="mb-6 text-sm text-[#8B7E74]">
-              활성화된 날짜에만 출석 상태를 저장합니다. 비활성 학생은 기본적으로 오늘 제외 상태로 시작하며,
-              학생별로 오늘만 제외하거나 다시 포함할 수 있습니다.
-            </p>
             <div className="custom-scrollbar max-h-[400px] space-y-2 overflow-y-auto pr-2">
               {sortedAttendanceRecords.map((record) => {
                 const sourceStudent = allStudentsById.get(record.studentId);
@@ -990,21 +1098,29 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
                 const isExcluded = isAttendanceExcluded(record);
                 const displayInitials = sourceStudent?.initials || '??';
                 const displayName = sourceStudent?.name || '알 수 없는 학생';
+                const helperText =
+                  isInactiveStudent && isExcluded
+                    ? '비활성 학생, 출석 제외'
+                    : isInactiveStudent
+                      ? '비활성 학생'
+                      : isExcluded
+                        ? '출석 제외'
+                        : null;
 
                 return (
                   <div
                     key={record.studentId}
-                    className={`flex flex-col gap-3 rounded-xl border p-3 transition-all sm:flex-row sm:items-center sm:justify-between ${
+                    className={`flex flex-col gap-3 rounded-2xl border p-3.5 transition-all sm:flex-row sm:items-center sm:gap-4 ${
                       isExcluded
-                        ? 'border-dashed border-[#D8D1C8] bg-[#F5F2EE] opacity-75'
+                        ? 'border-dashed border-[#D8D1C8] bg-[#F5F2EE] opacity-80'
                         : isInactiveStudent
-                          ? 'border-[#E5E3DD] bg-[#F8F7F4] opacity-80'
+                          ? 'border-[#E5E3DD] bg-[#F8F7F4] opacity-85'
                           : 'border-[#F3F2EE] bg-[#FBFBFA]'
                     }`}
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
                       <div
-                        className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${
+                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
                           isExcluded || isInactiveStudent
                             ? 'bg-[#E5E3DD] text-[#8B7E74]'
                             : 'bg-[#EBD9C1] text-[#8B5E3C]'
@@ -1012,57 +1128,62 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
                       >
                         {displayInitials}
                       </div>
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-bold text-[#4A3728]">{displayName}</span>
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <span className="max-w-full text-sm font-bold text-[#4A3728]">
+                            {displayName}
+                          </span>
                           {isInactiveStudent && (
-                            <span className="rounded-full bg-[#E5E3DD] px-2 py-0.5 text-[10px] font-bold text-[#6B625A]">
+                            <span className="rounded-full bg-[#E5E3DD] px-2.5 py-1 text-[10px] font-bold text-[#6B625A]">
                               비활성
                             </span>
                           )}
                           {isExcluded && (
-                            <span
-                              className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#F3EBD1] text-[#7A6A2D]"
-                              title="제외됨"
-                            >
-                              <X size={10} />
+                            <span className="rounded-full bg-[#FFF4D9] px-2.5 py-1 text-[10px] font-bold text-[#7A6A2D]">
+                              제외
                             </span>
                           )}
                         </div>
-                        {isInactiveStudent && (
-                          <p className="mt-1 text-xs text-[#8B7E74]">
-                            비활성 학생이라 새 출석 기록에서는 기본 제외됩니다.
-                          </p>
+                        {helperText && (
+                          <p className="mt-1 truncate text-xs text-[#8B7E74]">{helperText}</p>
                         )}
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                       <div className="flex gap-1">
-                        {(['Present', 'Absent', 'Late'] as const).map((status) => (
-                          <button
-                            key={status}
-                            onClick={() => updateAttendance(record.studentId, status)}
-                            disabled={isExcluded}
-                            className={`rounded-lg px-3 py-1.5 text-[10px] font-bold transition-all ${
-                              isExcluded
-                                ? 'cursor-not-allowed border border-[#E5E3DD] bg-[#F7F4EF] text-[#B3ABA2]'
-                                : record.status === status
-                                  ? status === 'Present'
-                                    ? 'bg-[#D1F3E0] text-[#2D7A4D]'
-                                    : status === 'Absent'
-                                      ? 'bg-[#F3D1D1] text-[#7A2D2D]'
-                                      : 'bg-[#F3EBD1] text-[#7A6A2D]'
-                                  : 'border border-[#E5E3DD] bg-white text-[#8B7E74] hover:bg-[#F3F2EE]'
-                            }`}
-                          >
-                            {status === 'Present' ? '출석' : status === 'Absent' ? '결석' : '지각'}
-                          </button>
-                        ))}
+                        {(['Present', 'Absent', 'Late'] as const).map((status) => {
+                          const fullLabel =
+                            status === 'Present' ? '출석' : status === 'Absent' ? '결석' : '지각';
+
+                          return (
+                            <button
+                              key={status}
+                              onClick={() => updateAttendance(record.studentId, status)}
+                              disabled={isExcluded}
+                              title={fullLabel}
+                              aria-label={`${displayName} ${fullLabel}`}
+                              className={`rounded-lg px-3 py-1.5 text-[10px] font-bold transition-all ${
+                                isExcluded
+                                  ? 'cursor-not-allowed border border-[#E5E3DD] bg-[#F7F4EF] text-[#B3ABA2]'
+                                  : record.status === status
+                                    ? status === 'Present'
+                                      ? 'bg-[#D1F3E0] text-[#2D7A4D]'
+                                      : status === 'Absent'
+                                        ? 'bg-[#F3D1D1] text-[#7A2D2D]'
+                                        : 'bg-[#F3EBD1] text-[#7A6A2D]'
+                                    : 'border border-[#E5E3DD] bg-white text-[#8B7E74] hover:bg-[#F3F2EE]'
+                              }`}
+                            >
+                              {fullLabel}
+                            </button>
+                          );
+                        })}
                       </div>
                       <button
                         type="button"
                         onClick={() => toggleAttendanceExclusion(record.studentId)}
                         title={isExcluded ? '다시 포함' : '제외'}
+                        aria-label={`${displayName} ${isExcluded ? '다시 포함' : '제외'}`}
                         className={`inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-[10px] font-bold transition-all ${
                           isExcluded
                             ? 'bg-[#EEF7F0] text-[#2D7A4D] hover:bg-[#DDEFE2]'
@@ -1086,110 +1207,144 @@ export const FolderDashboard: React.FC<FolderDashboardProps> = ({
         )}
       </div>
 
-      <div className="space-y-8">
-        <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-6 shadow-sm">
-          <div className="mb-6 flex items-center justify-between">
-            <h3 className="font-bold text-[#4A3728]">
-              {viewMonth.getFullYear()}년 {viewMonth.getMonth() + 1}월
-            </h3>
-            <div className="flex gap-1">
-              <button
-                onClick={() =>
-                  setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1))
-                }
-                className="rounded-lg p-1.5 text-[#8B7E74] transition-all hover:bg-[#F3F2EE]"
-              >
-                <ChevronLeft size={16} />
-              </button>
-              <button
-                onClick={() =>
-                  setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1))
-                }
-                className="rounded-lg p-1.5 text-[#8B7E74] transition-all hover:bg-[#F3F2EE]"
-              >
-                <ChevronRight size={16} />
-              </button>
-            </div>
-          </div>
-
-          <p className="mb-4 text-xs font-medium text-[#8B7E74]">
-            날짜를 선택한 뒤 활성화하면 아래 기록 영역이 열립니다.
-          </p>
-          <div className="mb-2 grid grid-cols-7 gap-1">
-            {weekDays.map((day) => (
-              <div key={day} className="py-1 text-center text-[10px] font-bold text-[#A89F94]">
-                {day}
-              </div>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-7 gap-1">
-            {calendarDays.map((date, idx) => {
-              if (!date) {
-                return <div key={`empty-${idx}`} className="h-8" />;
-              }
-
-              const dateStr = getLocalDateString(date);
-              const isSelected = dateStr === selectedDate;
-              const isToday = dateStr === getLocalDateString(new Date());
-              const isActive = activeDateSet.has(dateStr);
-
-              return (
-                <button
-                  key={dateStr}
-                  onClick={() => setSelectedDate(dateStr)}
-                  className={`relative flex h-8 w-full items-center justify-center rounded-lg text-xs font-bold transition-all ${
-                    isSelected
-                      ? 'bg-[#8B5E3C] text-white shadow-md shadow-[#8B5E3C]/20'
-                      : isToday
-                        ? 'bg-[#FFF5E9] text-[#8B5E3C]'
-                        : 'text-[#4A3728] hover:bg-[#F3F2EE]'
-                  }`}
-                >
-                  {date.getDate()}
-                  {isActive && !isSelected && (
-                    <div className="absolute bottom-1 h-1 w-1 rounded-full bg-[#8B5E3C]" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {isCurrentDateActive ? (
-          <div className="flex h-[300px] flex-col rounded-[32px] border border-[#E5E3DD] bg-white p-6 text-left shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="flex items-center gap-2 text-lg font-bold text-[#4A3728]">
-                <MessageSquare className="text-[#8B5E3C]" size={18} />
-                오늘의 수업 메모
-              </h2>
-            </div>
-            <p className="mb-4 text-sm text-[#8B7E74]">
-              활성화된 날짜에만 메모가 저장됩니다.
-            </p>
-            <textarea
-              value={localMemo}
-              onChange={(event) => setLocalMemo(event.target.value)}
-              onBlur={handleSaveMemo}
-              placeholder="특이사항이나 운영 메모를 기록하세요."
-              className="custom-scrollbar flex-1 w-full resize-none rounded-2xl border border-[#F3F2EE] bg-[#FBFBFA] p-4 text-sm outline-none transition-all focus:border-[#8B5E3C]"
-            />
-          </div>
-        ) : (
+        <div className="space-y-6">
           <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-6 shadow-sm">
-            <div className="mb-4 flex items-center gap-2 text-[#8B5E3C]">
-              <AlertCircle size={18} />
-              <h2 className="text-lg font-bold text-[#4A3728]">기록 대기 상태</h2>
+            <div className="mb-6 flex items-start justify-between gap-3">
+              <div className="space-y-2">
+                <h3 className="flex items-center gap-2 text-lg font-bold text-[#4A3728]">
+                  <Calendar className="text-[#8B5E3C]" size={18} />
+                  {viewMonth.getFullYear()}년 {viewMonth.getMonth() + 1}월
+                  <DashboardInfoTooltip content={calendarTooltipText} label="캘린더 설명 보기" />
+                </h3>
+                <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
+                  <span className="rounded-full bg-[#FFF5E9] px-3 py-1.5 text-[#8B5E3C]">
+                    {selectedDate}
+                  </span>
+                  <span
+                    className={`rounded-full px-3 py-1.5 ${
+                      isCurrentDateActive
+                        ? 'bg-[#EEF7F0] text-[#2D7A4D]'
+                        : 'bg-[#F3F2EE] text-[#8B7E74]'
+                    }`}
+                  >
+                    {isCurrentDateActive ? '활성 날짜' : '비활성 날짜'}
+                  </span>
+                </div>
+              </div>
+              <div className="flex gap-1">
+                <button
+                  onClick={() =>
+                    setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1))
+                  }
+                  className="rounded-lg p-1.5 text-[#8B7E74] transition-all hover:bg-[#F3F2EE]"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <button
+                  onClick={() =>
+                    setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1))
+                  }
+                  className="rounded-lg p-1.5 text-[#8B7E74] transition-all hover:bg-[#F3F2EE]"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
             </div>
-            <p className="text-sm leading-relaxed text-[#8B7E74]">
-              이 날짜는 아직 비활성 상태입니다. 활성화 버튼을 누르면 수업기록, 수업메모,
-              출석체크가 열리고 캘린더에도 표시됩니다.
-            </p>
+
+            <div className="mb-2 grid grid-cols-7 gap-1">
+              {weekDays.map((day) => (
+                <div key={day} className="py-1 text-center text-[10px] font-bold text-[#A89F94]">
+                  {day}
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-7 gap-1">
+              {calendarDays.map((date, idx) => {
+                if (!date) {
+                  return <div key={`empty-${idx}`} className="h-8" />;
+                }
+
+                const dateStr = getLocalDateString(date);
+                const isSelected = dateStr === selectedDate;
+                const isToday = dateStr === getLocalDateString(new Date());
+                const isActive = activeDateSet.has(dateStr);
+
+                return (
+                  <button
+                    key={dateStr}
+                    onClick={() => setSelectedDate(dateStr)}
+                    className={`relative flex h-8 w-full items-center justify-center rounded-lg text-xs font-bold transition-all ${
+                      isSelected
+                        ? 'bg-[#8B5E3C] text-white shadow-md shadow-[#8B5E3C]/20'
+                        : isToday
+                          ? 'bg-[#FFF5E9] text-[#8B5E3C]'
+                          : 'text-[#4A3728] hover:bg-[#F3F2EE]'
+                    }`}
+                  >
+                    {date.getDate()}
+                    {isActive && !isSelected && (
+                      <div className="absolute bottom-1 h-1 w-1 rounded-full bg-[#8B5E3C]" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        )}
-      </div>
-    </motion.div>
-  );
+
+          {isCurrentDateActive ? (
+            <div className="flex h-[300px] flex-col rounded-[32px] border border-[#E5E3DD] bg-white p-6 text-left shadow-sm">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div className="space-y-2">
+                  <h2 className="flex items-center gap-2 text-lg font-bold text-[#4A3728]">
+                    <MessageSquare className="text-[#8B5E3C]" size={18} />
+                    오늘의 수업 메모
+                    <DashboardInfoTooltip content={memoTooltipText} label="수업 메모 설명 보기" />
+                  </h2>
+                  <span className="inline-flex rounded-full bg-[#FFF5E9] px-3 py-1.5 text-xs font-bold text-[#8B5E3C]">
+                    {selectedDate}
+                  </span>
+                </div>
+              </div>
+              <textarea
+                value={localMemo}
+                onChange={(event) => setLocalMemo(event.target.value)}
+                onBlur={handleSaveMemo}
+                placeholder="특이사항이나 운영 메모를 기록하세요."
+                className="custom-scrollbar flex-1 w-full resize-none rounded-2xl border border-[#F3F2EE] bg-[#FBFBFA] p-4 text-sm outline-none transition-all focus:border-[#8B5E3C]"
+              />
+            </div>
+          ) : (
+            <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-6 shadow-sm">
+              <div className="mb-4 flex items-start gap-2 text-[#8B5E3C]">
+                <AlertCircle size={18} className="mt-0.5 shrink-0" />
+                <div className="space-y-2">
+                  <h2 className="flex items-center gap-2 text-lg font-bold text-[#4A3728]">
+                    기록 대기 상태
+                    <DashboardInfoTooltip
+                      content={waitingTooltipText}
+                      label="기록 대기 상태 설명 보기"
+                    />
+                  </h2>
+                  <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
+                    <span className="rounded-full bg-[#FFF5E9] px-3 py-1.5 text-[#8B5E3C]">
+                      {selectedDate}
+                    </span>
+                    <span className="rounded-full bg-[#F3F2EE] px-3 py-1.5 text-[#8B7E74]">
+                      비활성
+                    </span>
+                    <span className="rounded-full bg-[#FBFBFA] px-3 py-1.5 text-[#8B7E74]">
+                      활성화 전
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </motion.div>
+    );
+  };
 
   const renderStudentCard = (student: Student, index: number) => {
     const inactive = isStudentInactive(student);
