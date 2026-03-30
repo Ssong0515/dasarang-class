@@ -1,7 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 
 const GEMINI_API_KEY_PLACEHOLDER = 'MY_GEMINI_API_KEY';
-const DEFAULT_GEMINI_MODEL = 'gemini-3-flash-preview';
+const DEFAULT_GEMINI_MODEL = 'gemini-2.0-flash';
 
 const INVALID_KEY_PATTERN =
   /api key not valid|please pass a valid api key|invalid api key|api_key_invalid/i;
