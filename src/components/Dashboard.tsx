@@ -9,6 +9,7 @@ import {
   Edit3,
   Users,
   Library,
+  GraduationCap,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { ClassroomDiagnosticsBanner } from './ClassroomDiagnosticsBanner';
@@ -138,14 +139,33 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </div>
 
-        <div className="absolute right-12 top-1/2 flex h-56 w-80 -translate-y-1/2 flex-col gap-4 rounded-3xl border border-[#FFF5E9] bg-white p-6 shadow-2xl shadow-[#8B5E3C]/10">
-          <div className="flex items-center gap-3">
-            <div className="h-2 w-2 rounded-full bg-[#EBD9C1]" />
-            <div className="h-2 w-24 rounded-full bg-[#F3F2EE]" />
+        <div className="absolute right-12 top-1/2 hidden -translate-y-1/2 flex-col gap-4 rounded-3xl border border-[#EBD9C1] bg-white p-6 shadow-2xl shadow-[#8B5E3C]/10 lg:flex" style={{ width: '18rem', height: '14rem' }}>
+          <div className="flex items-center gap-3 border-b border-[#F3F2EE] pb-4">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#FFF5E9]">
+              <GraduationCap size={18} className="text-[#8B5E3C]" />
+            </div>
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-widest text-[#A89F94]">현황 요약</p>
+            </div>
           </div>
-          <div className="h-2 w-full rounded-full bg-[#F3F2EE]" />
-          <div className="h-2 w-full rounded-full bg-[#F3F2EE]" />
-          <div className="h-2 w-3/4 rounded-full bg-[#F3F2EE]" />
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-[#8B7E74]">운영 클래스</span>
+              <span className="font-bold text-[#4A3728]">{classrooms.length}개</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-[#8B7E74]">전체 학생</span>
+              <span className="font-bold text-[#4A3728]">
+                {classrooms.reduce((sum, c) => sum + (c.students?.filter(s => !s.inactive && !s.deleted)?.length ?? 0), 0)}명
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-[#8B7E74]">오늘 날짜</span>
+              <span className="font-bold text-[#8B5E3C]">
+                {new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })}
+              </span>
+            </div>
+          </div>
         </div>
       </motion.section>
 
@@ -162,7 +182,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </span>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {classrooms.map((classroom, idx) => {
             const { activeCount, inactiveCount } = getStudentCounts(classroom.students || []);
             const { color, backgroundColor } = getClassroomCardColors(classroom.color);
@@ -248,14 +268,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
           />
           <QuickNavCard
             icon={<BookOpen size={24} />}
-            title="콘텐츠 배정 관리"
+            title="콘텐츠 라이브러리"
             description="학생 페이지에 노출할 클래스별 콘텐츠를 바로 편집합니다."
             delay={0.3}
-            onClick={() => {
-              if (firstClassroom) {
-                onManageClassroom(firstClassroom);
-              }
-            }}
+            onClick={onGoToLibrary}
           />
           <QuickNavCard
             icon={<StickyNote size={24} />}
@@ -294,15 +310,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </button>
           </div>
 
-          <div className="relative h-48 w-48">
-            <div className="absolute inset-0 flex items-center justify-center rounded-[32px] bg-white shadow-xl shadow-[#8B5E3C]/5">
-              <div className="flex flex-col items-center gap-2">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#D1E4F3]">
-                  <div className="h-10 w-10 rounded-full bg-white" />
-                </div>
-                <div className="h-2 w-20 rounded-full bg-[#A8D3E6]" />
-              </div>
-            </div>
+          <div className="hidden shrink-0 lg:flex h-40 w-40 items-center justify-center rounded-[32px] bg-white shadow-xl shadow-[#8B5E3C]/5">
+            <Calendar size={56} className="text-[#C5A882]" strokeWidth={1.5} />
           </div>
         </motion.div>
 

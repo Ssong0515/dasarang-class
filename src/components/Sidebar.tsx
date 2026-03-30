@@ -3,7 +3,6 @@ import {
   LayoutGrid,
   Users,
   StickyNote,
-  HelpCircle,
   LogOut,
   Library,
   Plus,
@@ -334,12 +333,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         <div className={`mt-auto border-t border-[#E5E3DD] ${isCollapsed ? 'pt-5 space-y-2' : 'pt-8 space-y-2'}`}>
-          <SidebarFooterButton
-            icon={<HelpCircle size={20} />}
-            label="사용 안내"
-            isCollapsed={isCollapsed}
-            onClick={() => {}}
-          />
           <SidebarFooterButton
             icon={<LogOut size={20} />}
             label="로그아웃"

@@ -1160,7 +1160,7 @@ export default function App() {
             />
           ) : (
             <>
-              <Header user={user} />
+              <Header user={user} activeTab={activeTab} />
               {googleSheetsSyncError && (
             <div className="mx-6 mt-4 flex items-center justify-between gap-4 rounded-[24px] border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900 shadow-sm">
               <div>
