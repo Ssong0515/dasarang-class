@@ -95,3 +95,17 @@ export interface GeneratedMemoDraftOption {
   label: string;
   memo: string;
 }
+
+export interface ClassroomLoadDiagnostics {
+  status: 'idle' | 'loading' | 'success' | 'empty' | 'error';
+  snapshotCount?: number;
+  oneShotCount?: number;
+  snapshotCompleted?: boolean;
+  oneShotCompleted?: boolean;
+  configuredDatabaseId?: string;
+  resolvedDatabaseId?: string;
+  lastError?: string;
+  countMismatch?: boolean;
+  studentSchemaIssueCount?: number;
+  studentSchemaIssueMessage?: string;
+}
