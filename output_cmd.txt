@@ -1,0 +1,14 @@
+[dotenv@17.3.1] injecting env (14) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+Testing generateText...
+API Key length: 39
+Error string: ApiError: {"error":{"code":404,"message":"models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.","status":"NOT_FOUND"}}
+Error JSON: {
+  "name": "ApiError",
+  "status": 404
+}
+Error stack: ApiError: {"error":{"code":404,"message":"models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.","status":"NOT_FOUND"}}
+    at throwErrorIfNotOK (C:\dev\dasarang-class\node_modules\@google\genai\src\_api_client.ts:945:24)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (C:\dev\dasarang-class\node_modules\@google\genai\src\_api_client.ts:553:9)
+    at async Models.Models.generateContent (C:\dev\dasarang-class\node_modules\@google\genai\src\models.ts:123:14)
+    at async test (C:\dev\dasarang-class\test-gemini.ts:12:22)
