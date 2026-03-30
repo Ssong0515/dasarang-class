@@ -9,6 +9,10 @@ RUN npm ci
 # Copy application files
 COPY . .
 
+# Set build argument for Vite
+ARG APP_BASE_PATH
+ENV APP_BASE_PATH=${APP_BASE_PATH}
+
 # Build the Vite frontend application
 RUN npm run build
 
