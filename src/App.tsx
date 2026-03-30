@@ -374,6 +374,8 @@ export default function App() {
           icon: typeof data.icon === 'string' ? data.icon : undefined,
           color: typeof data.color === 'string' ? data.color : undefined,
           createdAt: typeof data.createdAt === 'string' ? data.createdAt : undefined,
+          driveFolderId: typeof data.driveFolderId === 'string' ? data.driveFolderId : undefined,
+          driveFolderName: typeof data.driveFolderName === 'string' ? data.driveFolderName : undefined,
         } satisfies Classroom;
       });
 

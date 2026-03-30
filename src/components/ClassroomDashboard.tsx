@@ -24,6 +24,9 @@ import {
   UserMinus,
   Undo2,
   HelpCircle,
+  FolderOpen,
+  ExternalLink,
+  Loader2,
 } from 'lucide-react';
 import {
   AttendanceRecord,
@@ -56,6 +59,7 @@ import {
   splitStudentsByStatus,
 } from '../utils/students';
 import { isAttendanceExcluded } from '../utils/attendance';
+import { openDriveFolderPicker } from '../utils/drivePicker';
 
 interface ClassroomDashboardProps {
   classroom: Classroom;
@@ -197,7 +201,10 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     name: classroom.name,
     color: classroom.color || DEFAULT_CLASSROOM_COLOR,
     icon: classroom.icon || DEFAULT_CLASSROOM_ICON,
+    driveFolderId: classroom.driveFolderId || '',
+    driveFolderName: classroom.driveFolderName || '',
   });
+  const [isPickerLoading, setIsPickerLoading] = useState(false);
 
   const isSavingStudentAction = studentAction !== null;
   const availableMoveClassrooms = classrooms.filter((candidate) => candidate.id !== classroom.id);
@@ -295,8 +302,10 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       name: classroom.name,
       color: classroom.color || DEFAULT_CLASSROOM_COLOR,
       icon: classroom.icon || DEFAULT_CLASSROOM_ICON,
+      driveFolderId: classroom.driveFolderId || '',
+      driveFolderName: classroom.driveFolderName || '',
     });
-  }, [classroom.color, classroom.icon, classroom.name]);
+  }, [classroom.color, classroom.icon, classroom.name, classroom.driveFolderId, classroom.driveFolderName]);
 
   useEffect(() => {
     setStudents(classroom.students || []);
@@ -1964,6 +1973,88 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               );
             })}
           </div>
+        </div>
+
+        <div className="mt-10">
+          <div className="mb-4 flex items-center gap-2">
+            <FolderOpen size={18} className="text-[#8B5E3C]" />
+            <h3 className="text-lg font-bold text-[#4A3728]">Google Drive 폴더</h3>
+          </div>
+          <p className="mb-3 text-sm text-[#A89F94]">
+            이 클래스 관련 파일을 저장할 Google Drive 폴더를 연결하세요.
+          </p>
+          {settingsDraft.driveFolderId ? (
+            <div className="flex items-center gap-3 rounded-2xl border-2 border-[#E5E3DD] bg-[#FBFBFA] p-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#FFF5E9]">
+                <FolderOpen size={20} className="text-[#8B5E3C]" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-bold text-[#4A3728]">
+                  {settingsDraft.driveFolderName || '연결됨'}
+                </p>
+                <p className="truncate text-xs text-[#A89F94]">{settingsDraft.driveFolderId}</p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <a
+                  href={`https://drive.google.com/drive/folders/${settingsDraft.driveFolderId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 rounded-xl border border-[#E5E3DD] px-3 py-1.5 text-xs font-bold text-[#8B5E3C] transition-all hover:bg-[#FFF5E9]"
+                >
+                  <ExternalLink size={12} />
+                  열기
+                </a>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSettingsDraft({ ...settingsDraft, driveFolderId: '', driveFolderName: '' })
+                  }
+                  className="flex items-center gap-1 rounded-xl border border-[#E5E3DD] px-3 py-1.5 text-xs font-bold text-[#A89F94] transition-all hover:border-red-200 hover:text-red-400"
+                >
+                  <X size={12} />
+                  해제
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={isPickerLoading || !import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID}
+              onClick={async () => {
+                const clientId = import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID;
+                const apiKey = import.meta.env.VITE_GOOGLE_PICKER_API_KEY;
+                if (!clientId) return;
+                setIsPickerLoading(true);
+                try {
+                  const folder = await openDriveFolderPicker(apiKey, clientId);
+                  if (folder) {
+                    setSettingsDraft({
+                      ...settingsDraft,
+                      driveFolderId: folder.id,
+                      driveFolderName: folder.name,
+                    });
+                  }
+                } catch (err) {
+                  console.error('Drive Picker error:', err);
+                } finally {
+                  setIsPickerLoading(false);
+                }
+              }}
+              className="flex items-center gap-3 rounded-2xl border-2 border-dashed border-[#E5E3DD] px-6 py-4 text-sm font-bold text-[#A89F94] transition-all hover:border-[#8B5E3C] hover:text-[#8B5E3C] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isPickerLoading ? (
+                <Loader2 size={18} className="animate-spin" />
+              ) : (
+                <FolderOpen size={18} />
+              )}
+              {isPickerLoading ? '폴더 선택 중...' : 'Google Drive 폴더 선택'}
+            </button>
+          )}
+          {!import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID && (
+            <p className="mt-2 text-xs text-amber-500">
+              VITE_GOOGLE_OAUTH_CLIENT_ID 환경변수가 설정되지 않았습니다.
+            </p>
+          )}
         </div>
 
         <div className="mt-10 rounded-2xl border border-[#F3F2EE] bg-[#FBFBFA] p-6">

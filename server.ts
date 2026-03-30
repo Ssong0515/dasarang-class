@@ -20,6 +20,8 @@ import {
 } from './server/geminiClassNotes';
 import { translateText, validateTranslatePayload } from './server/geminiTranslate';
 import { verifyAdminIdToken } from './server/firebaseAdmin';
+import { uploadStudentWork } from './server/googleDriveUpload';
+import multer from 'multer';
 
 dotenv.config();
 
@@ -90,6 +92,15 @@ async function startServer() {
 
   app.use(express.json({ limit: '1mb' }));
 
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
+    fileFilter: (_req, file, cb) => {
+      const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'text/html', 'application/pdf'];
+      cb(null, allowed.includes(file.mimetype));
+    },
+  });
+
   const requireAdmin: express.RequestHandler = async (req, res, next) => {
     try {
       const authHeader = req.headers.authorization;
@@ -109,6 +120,34 @@ async function startServer() {
   };
 
   // API routes go here
+  app.post(
+    withBasePath(APP_BASE_PATH, '/api/drive/upload'),
+    upload.single('file'),
+    async (req, res) => {
+      try {
+        if (!req.file) {
+          res.status(400).json({ error: '파일이 없습니다.' });
+          return;
+        }
+        const { classroomId, studentName } = req.body as { classroomId?: string; studentName?: string };
+        if (!classroomId || !studentName?.trim()) {
+          res.status(400).json({ error: 'classroomId와 studentName이 필요합니다.' });
+          return;
+        }
+        const result = await uploadStudentWork({
+          classroomId,
+          studentName: studentName.trim(),
+          fileBuffer: req.file.buffer,
+          originalName: req.file.originalname,
+          mimeType: req.file.mimetype,
+        });
+        res.json({ ok: true, ...result });
+      } catch (error) {
+        res.status(500).json({ error: error instanceof Error ? error.message : '업로드에 실패했습니다.' });
+      }
+    }
+  );
+
   app.get(withBasePath(APP_BASE_PATH, '/api/health'), (req, res) => {
     res.json({ status: 'ok' });
   });

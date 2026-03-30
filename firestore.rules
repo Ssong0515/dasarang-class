@@ -37,7 +37,9 @@ service cloud.firestore {
              (!('order' in data) || data.order is number) &&
              (!('icon' in data) || data.icon is string) &&
              (!('color' in data) || data.color is string) &&
-             (!('createdAt' in data) || data.createdAt is string);
+             (!('createdAt' in data) || data.createdAt is string) &&
+             (!('driveFolderId' in data) || data.driveFolderId is string) &&
+             (!('driveFolderName' in data) || data.driveFolderName is string);
     }
 
     function isValidLesson(data) {

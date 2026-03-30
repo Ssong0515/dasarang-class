@@ -7,6 +7,9 @@ import {
   FileText,
   ArrowLeft,
   BookOpen,
+  Upload,
+  CheckCircle2,
+  X,
 } from 'lucide-react';
 import { Classroom, LessonCategory, LessonContent } from '../types';
 import { resolveAppPath } from '../utils/appPaths';
@@ -239,6 +242,55 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   const [translatedClassroomNames, setTranslatedClassroomNames] = useState<Record<string, string>>(
     {}
   );
+
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [uploadStudentName, setUploadStudentName] = useState('');
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadPreview, setUploadPreview] = useState<string | null>(null);
+  const [uploadState, setUploadState] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle');
+  const [uploadResult, setUploadResult] = useState<{ fileName: string; webViewLink: string } | null>(null);
+  const [uploadError, setUploadError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const setUploadFileWithPreview = (file: File | null) => {
+    setUploadFile(file);
+    if (file && file.type.startsWith('image/')) {
+      const url = URL.createObjectURL(file);
+      setUploadPreview(url);
+    } else {
+      setUploadPreview(null);
+    }
+  };
+
+  const resetUploadModal = () => {
+    setUploadState('idle');
+    setUploadResult(null);
+    setUploadFile(null);
+    setUploadPreview(null);
+    setUploadStudentName('');
+    setUploadError('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const doUpload = async () => {
+    if (!uploadFile || !uploadStudentName.trim() || !activeClassroomId) return;
+    setUploadState('uploading');
+    setUploadError('');
+    try {
+      const formData = new FormData();
+      formData.append('file', uploadFile);
+      formData.append('classroomId', activeClassroomId);
+      formData.append('studentName', uploadStudentName.trim());
+      const res = await fetch(resolveAppPath('/api/drive/upload'), { method: 'POST', body: formData });
+      const data = await res.json() as { ok?: boolean; fileName?: string; webViewLink?: string; error?: string };
+      if (!res.ok || !data.ok) throw new Error(data.error || '업로드 실패');
+      setUploadResult({ fileName: data.fileName!, webViewLink: data.webViewLink! });
+      setUploadState('done');
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : '업로드에 실패했습니다.');
+      setUploadState('error');
+    }
+  };
 
   const homeTranslationCacheRef = useRef<Record<string, string>>({});
   const homeTranslationRequestIdRef = useRef(0);
@@ -529,6 +581,17 @@ export const StudentPage: React.FC<StudentPageProps> = ({
                 </div>
               )}
 
+              {activeClassroom?.driveFolderId && (
+                <button
+                  onClick={() => { resetUploadModal(); setIsUploadModalOpen(true); }}
+                  className="flex items-center gap-2 rounded-xl bg-[#FFF5E9] px-3 py-2 text-sm font-bold text-[#8B5E3C] transition-all hover:bg-[#FFE8CC]"
+                  title="활동 결과 업로드"
+                >
+                  <Upload size={18} />
+                  <span className="hidden sm:inline">업로드</span>
+                </button>
+              )}
+
               {isAdmin && onBackToAdmin && (
                 <button
                   onClick={onBackToAdmin}
@@ -713,7 +776,129 @@ export const StudentPage: React.FC<StudentPageProps> = ({
               </p>
             </motion.section>
           )}
+
         </main>
+      )}
+
+      {isUploadModalOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 p-4 sm:items-center"
+          onClick={(e) => { if (e.target === e.currentTarget) { setIsUploadModalOpen(false); resetUploadModal(); } }}
+          onPaste={(e) => {
+            const item = Array.from(e.clipboardData.items).find((i) => (i as DataTransferItem).type.startsWith('image/')) as DataTransferItem | undefined;
+            if (item) {
+              const file = item.getAsFile();
+              if (file) setUploadFileWithPreview(file);
+            }
+          }}
+        >
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 30 }}
+            className="w-full max-w-md rounded-[32px] bg-white p-7 shadow-2xl"
+          >
+            <div className="mb-5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FFF5E9]">
+                  <Upload size={20} className="text-[#8B5E3C]" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-[#4A3728]">활동 결과 업로드</h3>
+                  <p className="text-xs text-[#A89F94]">Drive에 직접 전달됩니다</p>
+                </div>
+              </div>
+              <button
+                onClick={() => { setIsUploadModalOpen(false); resetUploadModal(); }}
+                className="rounded-xl p-2 text-[#A89F94] hover:bg-[#F3F2EE]"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {uploadState === 'done' && uploadResult ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3 rounded-2xl bg-green-50 p-4">
+                  <CheckCircle2 size={22} className="shrink-0 text-green-500" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-green-700">업로드 완료!</p>
+                    <p className="truncate text-xs text-green-600">{uploadResult.fileName}</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <a
+                    href={uploadResult.webViewLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 rounded-2xl border-2 border-[#8B5E3C] py-3 text-center text-sm font-bold text-[#8B5E3C] transition-all hover:bg-[#FFF5E9]"
+                  >
+                    Drive에서 보기
+                  </a>
+                  <button
+                    onClick={() => { resetUploadModal(); }}
+                    className="flex-1 rounded-2xl bg-[#F3F2EE] py-3 text-sm font-bold text-[#4A3728] transition-all hover:bg-[#EAE8E2]"
+                  >
+                    다시 업로드
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  placeholder="이름을 입력하세요"
+                  value={uploadStudentName}
+                  onChange={(e) => setUploadStudentName(e.target.value)}
+                  className="w-full rounded-2xl border-2 border-[#E5E3DD] px-4 py-3 text-sm text-[#4A3728] outline-none focus:border-[#8B5E3C]"
+                />
+
+                {uploadPreview ? (
+                  <div className="relative">
+                    <img src={uploadPreview} alt="미리보기" className="max-h-48 w-full rounded-2xl object-cover" />
+                    <button
+                      onClick={() => { setUploadFile(null); setUploadPreview(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
+                      className="absolute right-2 top-2 rounded-full bg-black/50 p-1 text-white hover:bg-black/70"
+                    >
+                      <X size={14} />
+                    </button>
+                    <p className="mt-1 truncate text-center text-xs text-[#A89F94]">{uploadFile?.name}</p>
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex cursor-pointer flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-[#E5E3DD] px-4 py-8 transition-colors hover:border-[#8B5E3C]"
+                  >
+                    <Upload size={24} className="text-[#C8BFB8]" />
+                    <p className="text-sm font-bold text-[#A89F94]">
+                      {uploadFile ? uploadFile.name : '클릭하거나 Ctrl+V로 붙여넣기'}
+                    </p>
+                    <p className="text-xs text-[#C8BFB8]">사진, HTML, PDF · 최대 20MB</p>
+                  </div>
+                )}
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*,.html,application/pdf"
+                  className="hidden"
+                  onChange={(e) => setUploadFileWithPreview(e.target.files?.[0] ?? null)}
+                />
+
+                {uploadState === 'error' && (
+                  <p className="rounded-xl bg-red-50 px-4 py-2 text-xs text-red-500">{uploadError}</p>
+                )}
+
+                <button
+                  disabled={!uploadStudentName.trim() || !uploadFile || uploadState === 'uploading'}
+                  onClick={doUpload}
+                  className="w-full rounded-2xl bg-[#8B5E3C] py-3.5 text-sm font-bold text-white transition-all hover:bg-[#724D31] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {uploadState === 'uploading' ? '업로드 중...' : '업로드'}
+                </button>
+              </div>
+            )}
+          </motion.div>
+        </div>
       )}
 
       <footer className="mt-20 border-t border-[#E5E3DD] py-12 text-center">

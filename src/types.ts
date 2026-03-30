@@ -69,6 +69,8 @@ export interface Classroom {
   icon?: string;
   color?: string;
   createdAt?: string;
+  driveFolderId?: string;
+  driveFolderName?: string;
 }
 
 export interface Memo {
