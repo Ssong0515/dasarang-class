@@ -653,6 +653,13 @@ export default function App() {
     return response.summary;
   };
 
+  const handleUpdateDailyReview = async (id: string, summary: string) => {
+    await updateDoc(doc(db, DAILY_REVIEWS_COLLECTION, id), {
+      summary,
+      updatedAt: new Date().toISOString(),
+    });
+  };
+
   const upsertLocalClassroomDateRecord = (record: ClassroomDateRecord) => {
     setClassroomDateRecords((previousRecords) =>
       canonicalizeClassroomDateRecords([
@@ -1194,6 +1201,7 @@ export default function App() {
               onAddMemo={handleAddMemo}
               onDeleteMemo={handleDeleteMemo}
               onGenerateDailyReview={handleGenerateDailyReview}
+              onUpdateDailyReview={handleUpdateDailyReview}
             />
           )}
           {activeTab === 'classroom-management' && activeClassroom && (

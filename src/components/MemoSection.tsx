@@ -2,14 +2,17 @@ import React, { useMemo, useState } from 'react';
 import {
   BookOpen,
   Calendar,
+  Check,
   ClipboardList,
   Loader2,
   type LucideIcon,
+  Pencil,
   Plus,
   RefreshCw,
   StickyNote,
   Trash2,
   Users,
+  X,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Classroom, ClassroomDateRecord, DailyReview, Memo } from '../types';
@@ -23,30 +26,33 @@ interface MemoSectionProps {
   onAddMemo: (content: string) => void;
   onDeleteMemo: (id: string) => void;
   onGenerateDailyReview?: (date: string) => Promise<void>;
+  onUpdateDailyReview?: (id: string, summary: string) => Promise<void>;
 }
 
-type Tab = 'general' | 'date-records' | 'students' | 'daily-reviews';
+type Tab = 'general' | 'date-records' | 'students';
 
 const TEXT = {
   title: '메모장',
-  subtitle: '운영 메모와 날짜별 수업 메모, 학생별 메모를 한곳에서 봅니다.',
+  subtitle: '날짜별 수업 메모 및 하루 전체 평, 학생별 메모를 한곳에서 봅니다.',
   newMemoPlaceholder: '새 메모를 입력하세요.',
   saveMemo: '메모 저장',
-  dailyReviewTab: '하루 전체 평',
-  dateRecordTab: '수업별 메모',
+  dateRecordTab: '날짜별 수업',
   studentTab: '학생별 메모',
   generalTab: '기타 메모',
-  dailyReviewBadge: '하루 전체 수업 평',
+  dailyReviewBadge: '하루 전체 평',
   dailyReviewSuffix: '개 수업 기록 기준',
-  noDailyReview: '수업 메모가 있는 날짜가 없습니다.',
+  noDateRecord: '수업 메모가 있는 날짜가 없습니다.',
   noGeneralMemo: '아직 작성된 기타 메모가 없습니다.',
-  noDateRecordMemo: '활성 날짜에 작성된 수업 메모가 없습니다.',
   noStudentMemo: '학생별로 작성된 메모가 없습니다.',
   recordedContentCountSuffix: '개 수업 콘텐츠',
   noRecordedContent: '진행 콘텐츠 미선택',
   generateDailyReview: '하루 전체 평 생성',
   regenerateDailyReview: '다시 생성',
   generating: '생성 중...',
+  editReview: '수정',
+  saveReview: '저장',
+  cancelEdit: '취소',
+  saving: '저장 중...',
 };
 
 export const MemoSection: React.FC<MemoSectionProps> = ({
@@ -57,13 +63,17 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
   onAddMemo,
   onDeleteMemo,
   onGenerateDailyReview,
+  onUpdateDailyReview,
 }) => {
   const [newMemo, setNewMemo] = useState('');
-  const [activeTab, setActiveTab] = useState<Tab>('daily-reviews');
+  const [activeTab, setActiveTab] = useState<Tab>('date-records');
   const [generatingDate, setGeneratingDate] = useState<string | null>(null);
+  const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState('');
+  const [savingReviewId, setSavingReviewId] = useState<string | null>(null);
 
   const classroomNamesById = useMemo(
-    () => new Map(classrooms.map((classroom) => [classroom.id, classroom.name])),
+    () => new Map(classrooms.map((c) => [c.id, c.name])),
     [classrooms]
   );
 
@@ -71,29 +81,18 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
   const dateGroups = useMemo(() => {
     const recordsWithMemo = classroomDateRecords.filter((r) => r.memo.trim());
     const groups = new Map<string, ClassroomDateRecord[]>();
-
     recordsWithMemo.forEach((record) => {
       const existing = groups.get(record.date) ?? [];
       groups.set(record.date, [...existing, record]);
     });
-
     return Array.from(groups.entries())
       .sort(([a], [b]) => new Date(b).getTime() - new Date(a).getTime())
       .map(([date, records]) => ({ date, records }));
   }, [classroomDateRecords]);
 
-  // date → DailyReview 조회용 맵
   const dailyReviewsByDate = useMemo(
     () => new Map(dailyReviews.map((r) => [r.date, r])),
     [dailyReviews]
-  );
-
-  const dateRecordMemos = useMemo(
-    () =>
-      classroomDateRecords
-        .filter((record) => record.memo.trim())
-        .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime()),
-    [classroomDateRecords]
   );
 
   const studentMemos = useMemo(
@@ -101,10 +100,7 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
       classrooms.flatMap((classroom) =>
         (classroom.students || [])
           .filter((student) => student.memo?.trim())
-          .map((student) => ({
-            ...student,
-            classroomName: classroom.name,
-          }))
+          .map((student) => ({ ...student, classroomName: classroom.name }))
       ),
     [classrooms]
   );
@@ -126,20 +122,36 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
     }
   };
 
+  const handleEditStart = (review: DailyReview) => {
+    setEditingReviewId(review.id);
+    setEditingText(review.summary);
+  };
+
+  const handleEditCancel = () => {
+    setEditingReviewId(null);
+    setEditingText('');
+  };
+
+  const handleEditSave = async (id: string) => {
+    if (!onUpdateDailyReview || !editingText.trim()) return;
+    setSavingReviewId(id);
+    try {
+      await onUpdateDailyReview(id, editingText.trim());
+      setEditingReviewId(null);
+      setEditingText('');
+    } finally {
+      setSavingReviewId(null);
+    }
+  };
+
   const isGeneralTab = activeTab === 'general';
 
   const tabs: Array<{ id: Tab; label: string; icon: LucideIcon; count: number }> = [
     {
-      id: 'daily-reviews',
-      label: TEXT.dailyReviewTab,
-      icon: ClipboardList,
-      count: dateGroups.length,
-    },
-    {
       id: 'date-records',
       label: TEXT.dateRecordTab,
       icon: BookOpen,
-      count: dateRecordMemos.length,
+      count: dateGroups.length,
     },
     {
       id: 'students',
@@ -168,7 +180,7 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
             <form onSubmit={handleSubmit} className="space-y-4">
               <textarea
                 value={newMemo}
-                onChange={(event) => setNewMemo(event.target.value)}
+                onChange={(e) => setNewMemo(e.target.value)}
                 placeholder={TEXT.newMemoPlaceholder}
                 className="min-h-[120px] w-full resize-none rounded-2xl border-none bg-[#F3F2EE] p-6 text-[#4A3728] outline-none transition-all placeholder:text-[#A89F94] focus:ring-2 focus:ring-[#8B5E3C]/20"
               />
@@ -212,18 +224,21 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
 
         <section className="space-y-6">
           <AnimatePresence mode="wait">
-            {/* ── 하루 전체 평 탭 ── */}
-            {activeTab === 'daily-reviews' && (
+
+            {/* ── 날짜별 수업 탭 (수업 메모 + 하루 전체 평 통합) ── */}
+            {activeTab === 'date-records' && (
               <motion.div
-                key="daily-reviews"
+                key="date-records"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="space-y-8"
+                className="space-y-6"
               >
                 {dateGroups.map(({ date, records }) => {
                   const existingReview = dailyReviewsByDate.get(date);
                   const isGenerating = generatingDate === date;
+                  const isEditing = editingReviewId === existingReview?.id;
+                  const isSaving = savingReviewId === existingReview?.id;
 
                   return (
                     <div
@@ -232,73 +247,149 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
                     >
                       {/* 날짜 헤더 */}
                       <div className="flex items-center gap-2 border-b border-[#F3F2EE] bg-[#FBFBFA] px-6 py-4">
-                        <Calendar size={15} className="text-[#8B5E3C]" />
+                        <Calendar size={14} className="text-[#8B5E3C]" />
                         <span className="text-sm font-bold text-[#4A3728]">{date}</span>
                         <span className="ml-1 rounded-full bg-[#EBD9C1]/50 px-2 py-0.5 text-[10px] font-bold text-[#8B5E3C]">
                           {records.length}개 클래스
                         </span>
                       </div>
 
-                      <div className="p-6 space-y-4">
-                        {/* 각 클래스 메모 */}
-                        {records.map((record) => (
-                          <div key={record.id} className="flex gap-3">
-                            <div className="mt-0.5 shrink-0">
-                              <span className="inline-block rounded-full bg-[#FFF5E9] px-2.5 py-1 text-[11px] font-bold text-[#8B5E3C]">
-                                {classroomNamesById.get(record.classroomId) || record.classroomName}
-                              </span>
+                      <div className="divide-y divide-[#F3F2EE]">
+                        {/* 각 클래스 수업 메모 */}
+                        {records.map((record) => {
+                          const contentIds = normalizeClassroomDateRecordContentIds(record);
+                          return (
+                            <div key={record.id} className="flex gap-3 px-6 py-4">
+                              <div className="shrink-0 pt-0.5">
+                                <span className="inline-block rounded-full bg-[#FFF5E9] px-2.5 py-1 text-[11px] font-bold text-[#8B5E3C]">
+                                  {classroomNamesById.get(record.classroomId) || record.classroomName}
+                                </span>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#4A3728]">
+                                  {record.memo}
+                                </p>
+                                {contentIds.length > 0 && (
+                                  <p className="mt-1 text-[11px] text-[#A89F94]">
+                                    콘텐츠 {contentIds.length}개
+                                  </p>
+                                )}
+                              </div>
                             </div>
-                            <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#4A3728]">
-                              {record.memo}
-                            </p>
-                          </div>
-                        ))}
+                          );
+                        })}
 
-                        {/* 기존 하루 전체 평 */}
-                        {existingReview && (
-                          <div className="mt-4 rounded-2xl border border-[#C8E6D4] bg-[#EEF7F0] p-4">
-                            <div className="mb-2 flex items-center gap-2">
-                              <ClipboardList size={14} className="text-[#2D7A4D]" />
-                              <span className="text-[11px] font-bold text-[#2D7A4D]">
-                                {TEXT.dailyReviewBadge}
-                              </span>
-                              <span className="text-[10px] text-[#6BAF85]">
-                                {existingReview.sourceRecordIds.length}{TEXT.dailyReviewSuffix}
-                              </span>
-                            </div>
-                            <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#2D5A3D]">
-                              {existingReview.summary}
-                            </p>
-                          </div>
-                        )}
+                        {/* 하루 전체 평 영역 */}
+                        <div className="px-6 py-4">
+                          {existingReview ? (
+                            <div className="rounded-2xl border border-[#C8E6D4] bg-[#EEF7F0] p-4">
+                              <div className="mb-2 flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <ClipboardList size={13} className="text-[#2D7A4D]" />
+                                  <span className="text-[11px] font-bold text-[#2D7A4D]">
+                                    {TEXT.dailyReviewBadge}
+                                  </span>
+                                  <span className="text-[10px] text-[#6BAF85]">
+                                    {existingReview.sourceRecordIds.length}{TEXT.dailyReviewSuffix}
+                                  </span>
+                                </div>
 
-                        {/* 생성 버튼 */}
-                        {onGenerateDailyReview && (
-                          <div className="flex justify-end pt-2">
-                            <button
-                              onClick={() => handleGenerateClick(date)}
-                              disabled={!!generatingDate}
-                              className="flex items-center gap-2 rounded-xl border border-[#8B5E3C]/20 bg-[#FFF5E9] px-5 py-2.5 text-sm font-bold text-[#8B5E3C] transition-all hover:bg-[#F3E8DB] disabled:opacity-50"
-                            >
-                              {isGenerating ? (
-                                <>
-                                  <Loader2 size={15} className="animate-spin" />
-                                  {TEXT.generating}
-                                </>
-                              ) : existingReview ? (
-                                <>
-                                  <RefreshCw size={15} />
-                                  {TEXT.regenerateDailyReview}
-                                </>
+                                {/* 편집/재생성 버튼 */}
+                                {!isEditing && (
+                                  <div className="flex items-center gap-1">
+                                    {onUpdateDailyReview && (
+                                      <button
+                                        onClick={() => handleEditStart(existingReview)}
+                                        className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold text-[#2D7A4D] transition-colors hover:bg-[#C8E6D4]"
+                                      >
+                                        <Pencil size={11} />
+                                        {TEXT.editReview}
+                                      </button>
+                                    )}
+                                    {onGenerateDailyReview && (
+                                      <button
+                                        onClick={() => handleGenerateClick(date)}
+                                        disabled={!!generatingDate}
+                                        className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold text-[#2D7A4D] transition-colors hover:bg-[#C8E6D4] disabled:opacity-50"
+                                      >
+                                        {isGenerating ? (
+                                          <Loader2 size={11} className="animate-spin" />
+                                        ) : (
+                                          <RefreshCw size={11} />
+                                        )}
+                                        {isGenerating ? TEXT.generating : TEXT.regenerateDailyReview}
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* 편집 모드 */}
+                              {isEditing ? (
+                                <div className="space-y-2">
+                                  <textarea
+                                    value={editingText}
+                                    onChange={(e) => setEditingText(e.target.value)}
+                                    rows={3}
+                                    className="w-full resize-none rounded-xl border border-[#A8D5B8] bg-white px-3 py-2 text-sm leading-relaxed text-[#2D5A3D] outline-none focus:ring-2 focus:ring-[#2D7A4D]/20"
+                                  />
+                                  <div className="flex items-center justify-between">
+                                    <span className={`text-[11px] font-bold ${editingText.length > 60 ? 'text-amber-500' : 'text-[#6BAF85]'}`}>
+                                      {editingText.length}자
+                                    </span>
+                                    <div className="flex gap-2">
+                                      <button
+                                        onClick={handleEditCancel}
+                                        className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-[11px] font-bold text-[#6BAF85] transition-colors hover:bg-[#C8E6D4]"
+                                      >
+                                        <X size={11} />
+                                        {TEXT.cancelEdit}
+                                      </button>
+                                      <button
+                                        onClick={() => handleEditSave(existingReview.id)}
+                                        disabled={isSaving || !editingText.trim()}
+                                        className="flex items-center gap-1 rounded-lg bg-[#2D7A4D] px-3 py-1.5 text-[11px] font-bold text-white transition-colors hover:bg-[#245F3C] disabled:opacity-50"
+                                      >
+                                        {isSaving ? (
+                                          <Loader2 size={11} className="animate-spin" />
+                                        ) : (
+                                          <Check size={11} />
+                                        )}
+                                        {isSaving ? TEXT.saving : TEXT.saveReview}
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
                               ) : (
-                                <>
-                                  <ClipboardList size={15} />
-                                  {TEXT.generateDailyReview}
-                                </>
+                                <p className="text-sm leading-relaxed text-[#2D5A3D]">
+                                  {existingReview.summary}
+                                </p>
                               )}
-                            </button>
-                          </div>
-                        )}
+                            </div>
+                          ) : (
+                            /* 아직 하루 전체 평 없음 → 생성 버튼 */
+                            onGenerateDailyReview && (
+                              <div className="flex items-center justify-between rounded-2xl border border-dashed border-[#C8E6D4] bg-[#F6FBF7] px-4 py-3">
+                                <div className="flex items-center gap-2 text-[12px] text-[#6BAF85]">
+                                  <ClipboardList size={14} />
+                                  <span>아직 하루 전체 평이 없습니다</span>
+                                </div>
+                                <button
+                                  onClick={() => handleGenerateClick(date)}
+                                  disabled={!!generatingDate}
+                                  className="flex items-center gap-1.5 rounded-xl bg-[#2D7A4D] px-4 py-2 text-[12px] font-bold text-white transition-colors hover:bg-[#245F3C] disabled:opacity-50"
+                                >
+                                  {isGenerating ? (
+                                    <Loader2 size={13} className="animate-spin" />
+                                  ) : (
+                                    <ClipboardList size={13} />
+                                  )}
+                                  {isGenerating ? TEXT.generating : TEXT.generateDailyReview}
+                                </button>
+                              </div>
+                            )
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
@@ -306,8 +397,53 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
 
                 {dateGroups.length === 0 && (
                   <div className="flex flex-col items-center justify-center rounded-[32px] border-2 border-dashed border-[#E5E3DD] bg-[#F3F2EE]/50 py-20 text-[#A89F94]">
-                    <ClipboardList size={48} className="mb-4 opacity-20" />
-                    <p>{TEXT.noDailyReview}</p>
+                    <BookOpen size={48} className="mb-4 opacity-20" />
+                    <p>{TEXT.noDateRecord}</p>
+                  </div>
+                )}
+              </motion.div>
+            )}
+
+            {/* ── 학생별 메모 탭 ── */}
+            {activeTab === 'students' && (
+              <motion.div
+                key="students"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="grid grid-cols-1 gap-6 md:grid-cols-2"
+              >
+                {studentMemos.map((student) => (
+                  <div
+                    key={`${student.id}-${student.classroomName}`}
+                    className="relative rounded-[24px] border border-[#E5E3DD] bg-white p-6 shadow-sm"
+                  >
+                    <div className="mb-4">
+                      <div className="mb-1 flex items-center gap-2">
+                        <span className="rounded-full bg-[#EFF6FF] px-2 py-0.5 text-[10px] font-bold text-[#3B82F6]">
+                          {student.classroomName}
+                        </span>
+                      </div>
+                      <h4 className="text-sm font-bold text-[#4A3728]">
+                        {student.name}
+                        {student.age ? ` (${student.age})` : ''}
+                      </h4>
+                    </div>
+                    <div className="flex gap-4">
+                      <div className="mt-1 text-[#BFDBFE]">
+                        <Users size={20} />
+                      </div>
+                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#4A3728]">
+                        {student.memo}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+
+                {studentMemos.length === 0 && (
+                  <div className="col-span-full flex flex-col items-center justify-center rounded-[32px] border-2 border-dashed border-[#E5E3DD] bg-[#F3F2EE]/50 py-20 text-[#A89F94]">
+                    <Users size={48} className="mb-4 opacity-20" />
+                    <p>{TEXT.noStudentMemo}</p>
                   </div>
                 )}
               </motion.div>
@@ -363,108 +499,6 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
               </motion.div>
             )}
 
-            {/* ── 수업별 메모 탭 ── */}
-            {activeTab === 'date-records' && (
-              <motion.div
-                key="date-records"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="grid grid-cols-1 gap-6 md:grid-cols-2"
-              >
-                {dateRecordMemos.map((record) => {
-                  const recordedContentIds = normalizeClassroomDateRecordContentIds(record);
-                  const recordTitle =
-                    recordedContentIds.length > 0
-                      ? `${recordedContentIds.length}${TEXT.recordedContentCountSuffix}`
-                      : TEXT.noRecordedContent;
-
-                  return (
-                    <div
-                      key={record.id}
-                      className="relative rounded-[24px] border border-[#E5E3DD] bg-white p-6 shadow-sm"
-                    >
-                      <div className="mb-4 flex items-start justify-between">
-                        <div>
-                          <div className="mb-1 flex items-center gap-2">
-                            <span className="rounded-full bg-[#FFF5E9] px-2 py-0.5 text-[10px] font-bold text-[#8B5E3C]">
-                              {classroomNamesById.get(record.classroomId) || record.classroomName}
-                            </span>
-                            <span className="flex items-center gap-1 text-[11px] font-bold text-[#A89F94]">
-                              <Calendar size={12} />
-                              {record.date}
-                            </span>
-                          </div>
-                          <h4 className="text-sm font-bold text-[#4A3728]">{recordTitle}</h4>
-                        </div>
-                      </div>
-                      <div className="flex gap-4">
-                        <div className="mt-1 text-[#EBD9C1]">
-                          <BookOpen size={20} />
-                        </div>
-                        <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#4A3728]">
-                          {record.memo}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {dateRecordMemos.length === 0 && (
-                  <div className="col-span-full flex flex-col items-center justify-center rounded-[32px] border-2 border-dashed border-[#E5E3DD] bg-[#F3F2EE]/50 py-20 text-[#A89F94]">
-                    <BookOpen size={48} className="mb-4 opacity-20" />
-                    <p>{TEXT.noDateRecordMemo}</p>
-                  </div>
-                )}
-              </motion.div>
-            )}
-
-            {/* ── 학생별 메모 탭 ── */}
-            {activeTab === 'students' && (
-              <motion.div
-                key="students"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="grid grid-cols-1 gap-6 md:grid-cols-2"
-              >
-                {studentMemos.map((student) => (
-                  <div
-                    key={`${student.id}-${student.classroomName}`}
-                    className="relative rounded-[24px] border border-[#E5E3DD] bg-white p-6 shadow-sm"
-                  >
-                    <div className="mb-4 flex items-start justify-between">
-                      <div>
-                        <div className="mb-1 flex items-center gap-2">
-                          <span className="rounded-full bg-[#EFF6FF] px-2 py-0.5 text-[10px] font-bold text-[#3B82F6]">
-                            {student.classroomName}
-                          </span>
-                        </div>
-                        <h4 className="text-sm font-bold text-[#4A3728]">
-                          {student.name}
-                          {student.age ? ` (${student.age})` : ''}
-                        </h4>
-                      </div>
-                    </div>
-                    <div className="flex gap-4">
-                      <div className="mt-1 text-[#BFDBFE]">
-                        <Users size={20} />
-                      </div>
-                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#4A3728]">
-                        {student.memo}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-
-                {studentMemos.length === 0 && (
-                  <div className="col-span-full flex flex-col items-center justify-center rounded-[32px] border-2 border-dashed border-[#E5E3DD] bg-[#F3F2EE]/50 py-20 text-[#A89F94]">
-                    <Users size={48} className="mb-4 opacity-20" />
-                    <p>{TEXT.noStudentMemo}</p>
-                  </div>
-                )}
-              </motion.div>
-            )}
           </AnimatePresence>
         </section>
       </div>

@@ -645,12 +645,11 @@ const summarizeAttendance = (records: AttendanceRecord[]) => {
 const buildDailyReviewSource = (records: DailyReviewRecordContext[]) => `Write a Korean daily class review summary for an internal admin memo.
 
 Rules:
-- 3 or 4 short lines
-- Concise and factual
-- No heading and no date line
-- Summarize notable activity, guidance points, attendance patterns, and checks across classrooms
+- Single sentence, approximately 40-55 Korean characters (한글 기준 40~55자 내외)
+- Concise and factual, no heading, no date, no line breaks
+- Summarize the most notable point across all classrooms (activity, guidance, or attendance)
 - Use only the information below
-- Output only the summary text
+- Output only the summary text, nothing else
 
 Daily records:
 ${records
