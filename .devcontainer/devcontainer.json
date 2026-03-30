@@ -1,0 +1,19 @@
+{
+  "name": "Dasarang Class Dev",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:22",
+  "forwardPorts": [3100],
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "editor.formatOnSave": true
+      },
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss",
+        "dsznajder.es7-react-js-snippets"
+      ]
+    }
+  },
+  "postCreateCommand": "npm install"
+}
