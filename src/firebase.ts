@@ -16,7 +16,8 @@ import {
   writeBatch,
   serverTimestamp,
   orderBy,
-  getDocFromServer
+  getDocFromServer,
+  deleteField
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
@@ -108,5 +109,6 @@ export {
   deleteDoc,
   writeBatch,
   serverTimestamp,
-  orderBy
+  orderBy,
+  deleteField
 };
