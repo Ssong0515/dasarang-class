@@ -31,7 +31,7 @@ service cloud.firestore {
       return data.keys().hasAll(['name', 'ownerUid']) &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              data.ownerUid == request.auth.uid &&
-             (!('students' in data) || data.students is list) &&
+             !('students' in data) &&
              (!('assignedContentIds' in data) || data.assignedContentIds is list) &&
              (!('isOpen' in data) || data.isOpen is bool) &&
              (!('order' in data) || data.order is number) &&

@@ -71,23 +71,6 @@ export const normalizeStudentRecord = (
   };
 };
 
-export const normalizeLegacyStudents = (
-  value: unknown,
-  options: Pick<Student, 'classroomId' | 'ownerUid'> &
-    Partial<Pick<Student, 'createdAt' | 'updatedAt'>>
-) =>
-  Array.isArray(value)
-    ? value.map((entry, index) =>
-        normalizeStudentRecord(entry as Partial<Student>, {
-          classroomId: options.classroomId,
-          ownerUid: options.ownerUid,
-          order: index,
-          createdAt: options.createdAt,
-          updatedAt: options.updatedAt,
-        })
-      )
-    : [];
-
 export const isStudentInactive = (student: Student) =>
   typeof student.inactiveAt === 'string' && student.inactiveAt.trim().length > 0;
 

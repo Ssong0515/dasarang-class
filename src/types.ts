@@ -61,6 +61,7 @@ export interface Classroom {
   id: string;
   name: string;
   ownerUid: string;
+  /** Runtime-only: hydrated from the canonical `students` collection, never persisted. */
   students?: Student[];
   assignedContentIds?: string[];
   isOpen?: boolean;

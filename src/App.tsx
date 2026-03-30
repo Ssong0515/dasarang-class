@@ -58,7 +58,6 @@ import {
 import {
   getVisibleStudents,
   isStudentDeleted,
-  normalizeLegacyStudents,
   normalizeStudentRecord,
   sanitizeStudentForStorage,
   sortStudents,
@@ -174,24 +173,6 @@ const sortContents = (items: LessonContent[]) =>
     return left.title.localeCompare(right.title);
   });
 
-const mergeStudentsWithLegacy = (students: Student[], legacyStudents: Student[]) => {
-  const mergedStudentsById = new Map<string, Student>();
-
-  legacyStudents.forEach((student) => {
-    if (student.id) {
-      mergedStudentsById.set(student.id, student);
-    }
-  });
-
-  students.forEach((student) => {
-    if (student.id) {
-      mergedStudentsById.set(student.id, student);
-    }
-  });
-
-  return sortStudents([...mergedStudentsById.values()]);
-};
-
 const getStudentsByClassroomId = (students: Student[]) => {
   const studentsByClassroomId = new Map<string, Student[]>();
 
@@ -232,31 +213,13 @@ export default function App() {
 
   const ADMIN_EMAIL = 'songes0515@gmail.com';
   const isAdmin = user?.email === ADMIN_EMAIL;
-  const legacyStudents = useMemo(
-    () =>
-      sortStudents(
-        classrooms.flatMap((classroom) =>
-          normalizeLegacyStudents(classroom.students, {
-            classroomId: classroom.id,
-            ownerUid: classroom.ownerUid,
-            createdAt: classroom.createdAt,
-            updatedAt: classroom.createdAt,
-          })
-        )
-      ),
-    [classrooms]
-  );
-  const mergedStudents = useMemo(
-    () => mergeStudentsWithLegacy(students, legacyStudents),
-    [students, legacyStudents]
-  );
   const studentsById = useMemo(
-    () => new Map(mergedStudents.map((student) => [student.id, student])),
-    [mergedStudents]
+    () => new Map(students.map((student) => [student.id, student])),
+    [students]
   );
   const studentsByClassroomId = useMemo(
-    () => getStudentsByClassroomId(mergedStudents),
-    [mergedStudents]
+    () => getStudentsByClassroomId(students),
+    [students]
   );
   const classroomsWithStudents = useMemo(
     () =>
@@ -396,17 +359,11 @@ export default function App() {
   useEffect(() => {
     const normalizeClassroomSnapshot = (snapshot: QuerySnapshot<DocumentData>) =>
       snapshot.docs.map((classroomDoc) => {
-        const data = classroomDoc.data() as Partial<Classroom> & { students?: unknown };
+        const data = classroomDoc.data() as Partial<Classroom>;
         return {
           id: classroomDoc.id,
           name: data.name ?? '',
           ownerUid: data.ownerUid ?? '',
-          students: normalizeLegacyStudents(data.students, {
-            classroomId: classroomDoc.id,
-            ownerUid: data.ownerUid ?? '',
-            createdAt: data.createdAt,
-            updatedAt: data.createdAt,
-          }),
           assignedContentIds: Array.isArray(data.assignedContentIds)
             ? normalizeAssignedContentIds(data.assignedContentIds)
             : [],
@@ -437,6 +394,16 @@ export default function App() {
             ...(studentDoc.data() as Partial<Student>),
           })
         );
+
+        if (import.meta.env.DEV) {
+          const incomplete = nextStudents.filter((s) => !s.classroomId || s.order === undefined);
+          if (incomplete.length > 0) {
+            console.warn(
+              '[dev] Students missing classroomId or order:',
+              incomplete.map((s) => ({ id: s.id, name: s.name, classroomId: s.classroomId, order: s.order }))
+            );
+          }
+        }
 
         setStudents(sortStudents(nextStudents));
       },
@@ -893,7 +860,7 @@ export default function App() {
           where('classroomId', '==', classroomId)
         )
       );
-      const studentsToDelete = mergedStudents.filter(
+      const studentsToDelete = students.filter(
         (student) => student.classroomId === classroomId
       );
       for (const recordDoc of recordsToDeleteSnapshot.docs) {
