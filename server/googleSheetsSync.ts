@@ -2,7 +2,6 @@ import { google } from 'googleapis';
 import type { Classroom, Student } from '../src/types';
 import {
   getVisibleStudents,
-  normalizeLegacyStudents,
   normalizeStudentRecord,
   sortStudents,
 } from '../src/utils/students';
@@ -298,34 +297,15 @@ const getClassroomDoc = async (classroomId: string) => {
 };
 
 const getStudentsForClassroom = async (classroom: Classroom) => {
-  const embeddedStudents = normalizeLegacyStudents(classroom.students, {
-    classroomId: classroom.id,
-    ownerUid: classroom.ownerUid,
-    createdAt: classroom.createdAt,
-    updatedAt: classroom.createdAt,
-  });
   const snapshot = await getAdminDb().collection(STUDENTS_COLLECTION).get();
-  const globalStudents = snapshot.docs.map((studentDoc) =>
+  const allStudents = snapshot.docs.map((studentDoc) =>
     normalizeStudentRecord({
       id: studentDoc.id,
       ...(studentDoc.data() as Partial<Student>),
     })
   );
-  const mergedStudentsById = new Map<string, Student>();
 
-  embeddedStudents.forEach((student) => {
-    if (student.id) {
-      mergedStudentsById.set(student.id, student);
-    }
-  });
-
-  globalStudents.forEach((student) => {
-    if (student.id) {
-      mergedStudentsById.set(student.id, student);
-    }
-  });
-
-  return getVisibleStudents(sortStudents([...mergedStudentsById.values()])).filter(
+  return getVisibleStudents(sortStudents(allStudents)).filter(
     (student) => student.classroomId === classroom.id
   );
 };
