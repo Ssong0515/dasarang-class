@@ -1186,13 +1186,14 @@ export default function App() {
             />
           )}
           {activeTab === 'memo' && (
-            <MemoSection 
+            <MemoSection
               memos={memos}
               dailyReviews={dailyReviews}
               classrooms={classroomsWithStudents}
               classroomDateRecords={classroomDateRecords}
-              onAddMemo={handleAddMemo} 
-              onDeleteMemo={handleDeleteMemo} 
+              onAddMemo={handleAddMemo}
+              onDeleteMemo={handleDeleteMemo}
+              onGenerateDailyReview={handleGenerateDailyReview}
             />
           )}
           {activeTab === 'classroom-management' && activeClassroom && (
