@@ -207,10 +207,6 @@ export default function App() {
   const [googleSheetsSyncError, setGoogleSheetsSyncError] = useState<GoogleSheetsSyncErrorState | null>(null);
   const [isRetryingGoogleSheetsSync, setIsRetryingGoogleSheetsSync] = useState(false);
 
-  // Migration State
-  const [isMigrating, setIsMigrating] = useState(false);
-  const [migrationResult, setMigrationResult] = useState<string | null>(null);
-
   // Login Modal State
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
@@ -328,163 +324,6 @@ export default function App() {
   const handleRetryGoogleSheetsSync = async () => {
     if (!googleSheetsSyncError) return;
     await syncClassroomsWithGoogleSheets(googleSheetsSyncError.requests, { isRetry: true });
-  };
-
-  const handleMigrateEmbeddedStudents = async () => {
-    if (!user || !isAdmin || isMigrating) return;
-
-    if (!window.confirm('레거시 학생 데이터를 canonical students 컬렉션으로 마이그레이션합니다. 진행하시겠습니까?')) {
-      return;
-    }
-
-    setIsMigrating(true);
-    setMigrationResult(null);
-
-    try {
-      // 1. Read all classrooms with embedded students
-      const classroomSnapshot = await getDocs(query(collection(db, CLASSROOMS_COLLECTION)));
-      const classroomDocs = classroomSnapshot.docs.map((classroomDoc) => ({
-        id: classroomDoc.id,
-        data: classroomDoc.data() as Record<string, unknown>,
-      }));
-
-      // 2. Read all existing canonical students
-      const studentSnapshot = await getDocs(query(collection(db, 'students')));
-      const globalStudentsById = new Map<string, Student>();
-      studentSnapshot.docs.forEach((studentDoc) => {
-        const student = normalizeStudentRecord({
-          id: studentDoc.id,
-          ...(studentDoc.data() as Partial<Student>),
-        });
-        if (student.id) globalStudentsById.set(student.id, student);
-      });
-
-      // 3. Extract embedded students from classrooms
-      const embeddedById = new Map<string, Student>();
-      const classroomsWithEmbedded: string[] = [];
-
-      for (const classroomDoc of classroomDocs) {
-        const embeddedArray = classroomDoc.data.students;
-        if (!Array.isArray(embeddedArray) || embeddedArray.length === 0) continue;
-
-        classroomsWithEmbedded.push(classroomDoc.id);
-        embeddedArray.forEach((entry: unknown, index: number) => {
-          const partial = entry as Partial<Student>;
-          const student = normalizeStudentRecord(partial, {
-            classroomId: classroomDoc.id,
-            ownerUid: (classroomDoc.data.ownerUid as string) ?? '',
-            order: index,
-            createdAt: classroomDoc.data.createdAt as string | undefined,
-            updatedAt: classroomDoc.data.createdAt as string | undefined,
-          });
-          if (student.id && student.name) {
-            embeddedById.set(student.id, student);
-          }
-        });
-      }
-
-      // 4. Merge: global as base, embedded fills gaps
-      const allIds = new Set([...globalStudentsById.keys(), ...embeddedById.keys()]);
-      const canonicalStudents: Student[] = [];
-
-      for (const id of allIds) {
-        const global = globalStudentsById.get(id);
-        const embedded = embeddedById.get(id);
-
-        if (global && !embedded) {
-          canonicalStudents.push(global);
-          continue;
-        }
-
-        if (embedded && !global) {
-          canonicalStudents.push(embedded);
-          continue;
-        }
-
-        if (global && embedded) {
-          const merged = { ...global };
-          if (!merged.classroomId && embedded.classroomId) merged.classroomId = embedded.classroomId;
-          if (embedded.order !== 0 || merged.order === 0) merged.order = embedded.order;
-          if (embedded.inactiveAt && !merged.inactiveAt) merged.inactiveAt = embedded.inactiveAt;
-
-          const globalUpdated = new Date(global.updatedAt).getTime();
-          const embeddedUpdated = new Date(embedded.updatedAt).getTime();
-          if (Number.isFinite(embeddedUpdated) && embeddedUpdated > globalUpdated) {
-            merged.updatedAt = embedded.updatedAt;
-          }
-          const globalCreated = new Date(global.createdAt).getTime();
-          const embeddedCreated = new Date(embedded.createdAt).getTime();
-          if (Number.isFinite(embeddedCreated) && embeddedCreated < globalCreated) {
-            merged.createdAt = embedded.createdAt;
-          }
-          canonicalStudents.push(merged);
-        }
-      }
-
-      // 5. Detect duplicates by (classroomId, name)
-      const byKey = new Map<string, Student[]>();
-      for (const s of canonicalStudents) {
-        if (s.deletedAt) continue;
-        const key = `${s.classroomId}::${s.name}`;
-        const group = byKey.get(key);
-        if (group) group.push(s);
-        else byKey.set(key, [s]);
-      }
-
-      const staleIds: string[] = [];
-      for (const [, group] of byKey) {
-        if (group.length <= 1) continue;
-        group.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-        group.slice(1).forEach((s) => staleIds.push(s.id));
-      }
-
-      // 6. Write canonical students
-      const timestamp = new Date().toISOString();
-      let upsertCount = 0;
-
-      for (let i = 0; i < canonicalStudents.length; i += 400) {
-        const batch = writeBatch(db);
-        canonicalStudents.slice(i, i + 400).forEach((student) => {
-          batch.set(doc(db, 'students', student.id), sanitizeStudentForStorage(student));
-          upsertCount++;
-        });
-        await batch.commit();
-      }
-
-      // 7. Soft-delete stale duplicates
-      for (let i = 0; i < staleIds.length; i += 400) {
-        const batch = writeBatch(db);
-        staleIds.slice(i, i + 400).forEach((id) => {
-          batch.set(doc(db, 'students', id), { deletedAt: timestamp, updatedAt: timestamp }, { merge: true });
-        });
-        await batch.commit();
-      }
-
-      // 8. Remove embedded students field from classroom documents
-      for (const classroomId of classroomsWithEmbedded) {
-        await updateDoc(doc(db, CLASSROOMS_COLLECTION, classroomId), {
-          students: deleteField(),
-        });
-      }
-
-      const resultMessage = [
-        `마이그레이션 완료:`,
-        `  canonical students upsert: ${upsertCount}건`,
-        staleIds.length > 0 ? `  중복 soft-delete: ${staleIds.length}건` : null,
-        classroomsWithEmbedded.length > 0
-          ? `  classroom embedded students 제거: ${classroomsWithEmbedded.length}개 클래스`
-          : `  embedded students 없음 (이미 정리됨)`,
-      ].filter(Boolean).join('\n');
-
-      console.log(resultMessage);
-      setMigrationResult(resultMessage);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '마이그레이션 실패';
-      console.error('Migration error:', error);
-      setMigrationResult(`오류: ${message}`);
-    } finally {
-      setIsMigrating(false);
-    }
   };
 
   // Auth Listener
@@ -1335,22 +1174,6 @@ export default function App() {
               >
                 {isRetryingGoogleSheetsSync ? '재시도 중...' : '다시 시도'}
               </button>
-            </div>
-          )}
-          {activeTab === 'home' && isAdmin && (
-            <div className="mx-6 mt-4">
-              <button
-                onClick={() => void handleMigrateEmbeddedStudents()}
-                disabled={isMigrating}
-                className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {isMigrating ? '마이그레이션 중...' : '레거시 학생 데이터 마이그레이션'}
-              </button>
-              {migrationResult && (
-                <pre className="mt-3 whitespace-pre-wrap rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-900">
-                  {migrationResult}
-                </pre>
-              )}
             </div>
           )}
           {activeTab === 'home' && (

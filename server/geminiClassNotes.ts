@@ -142,7 +142,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const isRetryableModelError = (error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
-  return /503|UNAVAILABLE|high demand|overloaded|temporarily unavailable/i.test(message);
+  return /503|429|UNAVAILABLE|high demand|overloaded|temporarily unavailable|RESOURCE_EXHAUSTED|quota exceeded/i.test(message);
 };
 
 const generateText = async (prompt: string) => {
@@ -170,6 +170,12 @@ const generateText = async (prompt: string) => {
 
       if (attempt >= 3 || !isRetryableModelError(error)) {
         throw error;
+      }
+
+      const message = error instanceof Error ? error.message : String(error);
+      const retryInMatch = message.match(/retry in ([\d.]+)s/i);
+      if (retryInMatch && retryInMatch[1]) {
+        retryDelay = parseFloat(retryInMatch[1]) * 1000 + 500;
       }
 
       await sleep(retryDelay);
@@ -350,6 +356,41 @@ Rules:
 
 ${buildMemoSourceBlock(contents, existingMemo)}`;
 
+const buildBulkMemoDraftPrompt = (
+  contents: MemoSourceContent[],
+  existingMemo: string
+) => `You are a teacher writing 3 alternative class memo lines based on the source below.
+
+Rules for each memo line:
+- Output exactly one line per style
+- Keep it around 50 to 80 Korean characters
+- Do not write any date
+- Memo style only, like a quick teacher note
+- Never use explanatory, 안내문, or 보고문 tone
+- Never use phrases like "오늘은", "수업을 진행했다", "안내 바랍니다"
+- Weave together the selected contents naturally instead of choosing only one representative item
+- If existing class memo is present, include its key point in shortened form
+- End with one of: 진행, 함, 했음, 확인함
+- Do not invent details outside the source
+
+The 3 styles to create:
+1. 활동중심 (activity): Blend the selected lesson titles and descriptions into one compact memo line that reflects the overall class flow.
+2. 지도중심 (guidance): Emphasize teacher guidance, caution points, pronunciation/input guidance, or instructions from the source.
+3. 확인중심 (check): Emphasize final checks such as saving, registration, completion, or confirmation while still mentioning the class activity briefly.
+
+Must return exactly a raw JSON array of objects. Do not use markdown backticks around the json. Example format:
+[
+  { "style": "activity", "memo": "..." },
+  { "style": "guidance", "memo": "..." },
+  { "style": "check", "memo": "..." }
+]
+
+Tone examples:
+- 자음모음 타이핑과 받침 읽기 연계 진행, 실명 입력 안내함
+- 자음모음 타이핑과 발음 확인 진행, 수료증 이미지 저장 확인함
+
+${buildMemoSourceBlock(contents, existingMemo)}`;
+
 const generateStrictMemoDraft = async (
   variant: (typeof MEMO_DRAFT_VARIANTS)[number],
   contents: MemoSourceContent[],
@@ -386,10 +427,27 @@ const generateMemoDraftOptions = async (
   contents: MemoSourceContent[],
   existingMemo: string
 ): Promise<MemoDraftOption[]> => {
+  let parsedDrafts: { style: string; memo: string }[] = [];
+  
+  try {
+    const prompt = buildBulkMemoDraftPrompt(contents, existingMemo);
+    const responseText = await generateText(prompt);
+    const jsonStr = responseText.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
+    parsedDrafts = JSON.parse(jsonStr);
+  } catch (error) {
+    console.warn('Failed to parse bulk JSON response, falling back to individual generation', error);
+  }
+
   const drafts: MemoDraftOption[] = [];
 
   for (const variant of MEMO_DRAFT_VARIANTS) {
-    const memo = await generateStrictMemoDraft(variant, contents, existingMemo, drafts);
+    const parsed = parsedDrafts.find(d => d.style === variant.style);
+    let memo = parsed?.memo ? normalizeMemoDraftText(parsed.memo) : '';
+    
+    if (!isMemoDraftValid(memo)) {
+      memo = await generateStrictMemoDraft(variant, contents, existingMemo, drafts);
+    }
+    
     drafts.push({
       style: variant.style,
       label: variant.label,

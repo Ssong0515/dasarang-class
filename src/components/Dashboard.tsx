@@ -11,7 +11,8 @@ import {
   Library,
 } from 'lucide-react';
 import { motion } from 'motion/react';
-import { Classroom } from '../types';
+import { ClassroomDiagnosticsBanner } from './ClassroomDiagnosticsBanner';
+import { Classroom, ClassroomLoadDiagnostics } from '../types';
 import {
   getClassroomCardColors,
   getClassroomIconComponent,
@@ -43,6 +44,7 @@ const QuickNavCard: React.FC<{
 
 interface DashboardProps {
   classrooms?: Classroom[];
+  classroomLoadDiagnostics?: ClassroomLoadDiagnostics;
   onManageClassroom: (classroom: Classroom) => void;
   onGoToLibrary: () => void;
   onGoToMemo: () => void;
@@ -51,13 +53,54 @@ interface DashboardProps {
 
 export const Dashboard: React.FC<DashboardProps> = ({
   classrooms = [],
+  classroomLoadDiagnostics,
   onManageClassroom,
   onGoToLibrary,
   onGoToMemo,
   onSwitchToStudent,
 }) => {
+  const isDev = import.meta.env.DEV;
   const firstClassroom = classrooms[0];
   const lastClassroom = classrooms[classrooms.length - 1];
+
+  const renderEmptyClassroomState = () => {
+    const status = classroomLoadDiagnostics?.status ?? 'idle';
+    const title =
+      status === 'error'
+        ? '클래스 목록을 불러오지 못했습니다.'
+        : status === 'loading' || status === 'idle'
+          ? '클래스 목록을 불러오는 중입니다.'
+          : '아직 생성된 클래스가 없습니다.';
+    const description =
+      status === 'error'
+        ? 'Firestore 읽기 상태를 확인한 뒤 다시 시도해 주세요.'
+        : status === 'loading' || status === 'idle'
+          ? 'one-shot 조회와 실시간 구독을 동시에 확인하고 있습니다.'
+          : 'classrooms 컬렉션이 실제로 비어 있을 때만 이 문구가 표시됩니다.';
+
+    return (
+      <div className="col-span-full rounded-[32px] border border-dashed border-[#E5E3DD] bg-white p-12 text-center">
+        <p className="font-bold text-[#4A3728]">{title}</p>
+        <p className="mt-2 text-[#8B7E74]">{isDev ? description : status === 'empty' ? title : description}</p>
+        {isDev && classroomLoadDiagnostics && (
+          <div className="mt-4 space-y-1 text-left text-xs text-[#8B7E74]">
+            <p>status: {classroomLoadDiagnostics.status}</p>
+            <p>snapshotCount: {classroomLoadDiagnostics.snapshotCount ?? 'pending'}</p>
+            <p>oneShotCount: {classroomLoadDiagnostics.oneShotCount ?? 'pending'}</p>
+            <p>snapshotCompleted: {String(classroomLoadDiagnostics.snapshotCompleted)}</p>
+            <p>oneShotCompleted: {String(classroomLoadDiagnostics.oneShotCompleted)}</p>
+            <p>configuredDatabaseId: {classroomLoadDiagnostics.configuredDatabaseId}</p>
+            <p>resolvedDatabaseId: {classroomLoadDiagnostics.resolvedDatabaseId}</p>
+            {classroomLoadDiagnostics.lastError && (
+              <p className="break-all text-red-600">
+                lastClassroomLoadError: {classroomLoadDiagnostics.lastError}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <main className="flex-1 overflow-y-auto bg-[#FBFBFA] p-8">
@@ -107,6 +150,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
       </motion.section>
 
       <section className="mb-12">
+        <ClassroomDiagnosticsBanner
+          diagnostics={classroomLoadDiagnostics}
+          isDev={isDev}
+          className="mb-6"
+        />
         <div className="mb-8 flex items-center justify-between">
           <h2 className="text-2xl font-serif font-bold text-[#4A3728]">수업 클래스 관리</h2>
           <span className="rounded-full bg-[#EBD9C1]/30 px-3 py-1 text-xs font-bold text-[#8B5E3C]">
@@ -166,11 +214,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             );
           })}
 
-          {classrooms.length === 0 && (
-            <div className="col-span-full rounded-[32px] border border-dashed border-[#E5E3DD] bg-white p-12 text-center">
-              <p className="text-[#8B7E74]">아직 생성된 수업 클래스가 없습니다.</p>
-            </div>
-          )}
+          {classrooms.length === 0 && renderEmptyClassroomState()}
         </div>
       </section>
 
