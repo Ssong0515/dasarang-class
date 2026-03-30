@@ -62,22 +62,35 @@ jobs:
       - name: Deploy on Lightsail
         run: |
           set -euo pipefail
-          ssh -i ~/.ssh/lightsail_key "${LIGHTSAIL_USER}@${LIGHTSAIL_HOST}" \
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/lightsail_key "${LIGHTSAIL_USER}@${LIGHTSAIL_HOST}" \
             "DEPLOY_PATH='${DEPLOY_PATH}' SYSTEMD_SERVICE='${SYSTEMD_SERVICE}' bash -se" <<'EOF'
           set -euo pipefail
           cd "${DEPLOY_PATH}"
           git fetch origin main
           git checkout main
           git reset --hard origin/main
-          npm ci
-          npm run build
-          sudo systemctl restart "${SYSTEMD_SERVICE}"
+          
+          # Stop and disable legacy systemd service to free up port 3100
+          if sudo systemctl is-active --quiet "${SYSTEMD_SERVICE}"; then
+            echo "Stopping legacy systemd service ${SYSTEMD_SERVICE}..."
+            sudo systemctl stop "${SYSTEMD_SERVICE}" || true
+            sudo systemctl disable "${SYSTEMD_SERVICE}" || true
+          fi
+          
+          # Build and start the docker container
+          docker compose up -d --build
+          
+          # Wait for health check
+          echo "Waiting for service to become healthy..."
           for attempt in $(seq 1 15); do
             if curl --fail --silent http://127.0.0.1:3100/dasarang-class/api/health >/dev/null; then
+              echo "Deployment successful!"
               exit 0
             fi
             sleep 2
           done
-          sudo systemctl status "${SYSTEMD_SERVICE}" --no-pager
+          
+          echo "Health check failed. Showing docker logs:"
+          docker compose logs --tail=20
           exit 1
           EOF

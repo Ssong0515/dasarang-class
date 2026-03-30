@@ -1,0 +1,9 @@
+services:
+  app:
+    build: .
+    container_name: dasarang-class
+    restart: always
+    ports:
+      - "3100:3100"
+    env_file:
+      - .env
