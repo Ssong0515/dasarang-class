@@ -208,23 +208,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
       }`}
     >
       {showHeader && (
-        <div className={`flex items-start ${isCollapsed ? 'justify-end mb-8' : 'justify-between gap-3 mb-12'}`}>
-          {showBrand && (
-            <div className="flex flex-col cursor-pointer" onClick={() => onTabChange('home')}>
-              <h1 className="font-serif font-bold text-[#141414] text-xl leading-tight">다사랑 교실</h1>
-              <p className="text-[11px] text-[#8B7E74] font-medium mt-1">관리자 대시보드</p>
-            </div>
-          )}
-
-          {showToggleButton && (
+        <div className={`flex items-start ${isCollapsed ? 'justify-center mb-8' : 'justify-between gap-3 mb-12'}`}>
+          {isCollapsed && showToggleButton && (
             <button
               type="button"
               onClick={handleToggleSidebar}
-              title={isCollapsed ? '사이드바 펼치기' : '사이드바 접기'}
-              aria-label={isCollapsed ? '사이드바 펼치기' : '사이드바 접기'}
+              title="사이드바 펼치기"
+              aria-label="사이드바 펼치기"
+              className="flex items-center justify-center"
+            >
+              <img src="/logo.svg" alt="다사랑 로고" className="w-9 h-9 rounded-xl" />
+            </button>
+          )}
+          {showBrand && (
+            <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => onTabChange('home')}>
+              <img src="/logo.svg" alt="다사랑 로고" className="w-9 h-9 rounded-xl shrink-0" />
+              <div className="flex flex-col">
+                <h1 className="font-serif font-bold text-[#141414] text-xl leading-tight">다사랑 교실</h1>
+                <p className="text-[11px] text-[#8B7E74] font-medium mt-1">관리자 대시보드</p>
+              </div>
+            </div>
+          )}
+
+          {showToggleButton && !isCollapsed && (
+            <button
+              type="button"
+              onClick={handleToggleSidebar}
+              title="사이드바 접기"
+              aria-label="사이드바 접기"
               className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#E5E3DD] bg-white text-[#8B7E74] transition-all hover:border-[#D8D2C8] hover:text-[#4A3728]"
             >
-              {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+              <ChevronLeft size={18} />
             </button>
           )}
         </div>
