@@ -9,15 +9,19 @@ RUN npm ci
 # Copy application files
 COPY . .
 
-# Set build argument for Vite
+# Build-time arguments (baked into Vite frontend bundle)
 ARG APP_BASE_PATH
+ARG VITE_GOOGLE_PICKER_API_KEY
+ARG VITE_GOOGLE_OAUTH_CLIENT_ID
 ENV APP_BASE_PATH=${APP_BASE_PATH}
+ENV VITE_GOOGLE_PICKER_API_KEY=${VITE_GOOGLE_PICKER_API_KEY}
+ENV VITE_GOOGLE_OAUTH_CLIENT_ID=${VITE_GOOGLE_OAUTH_CLIENT_ID}
 
 # Build the Vite frontend application
 RUN npm run build
 
-# Expose the port that the application runs on
-EXPOSE 3100
+# Firebase App Hosting sets PORT=8080 at runtime
+EXPOSE 8080
 
 # Start the server
 CMD ["npm", "start"]

@@ -1,0 +1,34 @@
+runConfig:
+  runtime: nodejs22
+  cpu: 1
+  memoryMiB: 512
+  minInstances: 0
+  maxInstances: 2
+
+env:
+  # ── 빌드 & 런타임 공통 ──────────────────────────────────────────
+  - variable: NODE_ENV
+    value: production
+
+  - variable: APP_BASE_PATH
+    value: /
+
+  - variable: APP_URL
+    value: https://class.damuna.org
+
+  # ── Vite 프론트엔드 빌드 시 번들에 포함 (공개 키) ─────────────
+  - variable: VITE_GOOGLE_PICKER_API_KEY
+    value: AIzaSyB586MSkADndLvJY1GYqy7SuQcAWCLIsSM
+
+  - variable: VITE_GOOGLE_OAUTH_CLIENT_ID
+    value: 1049224228341-p1qe72is5mc7mosv31ba5fo000c5qqs4.apps.googleusercontent.com
+
+  # ── 서버 전용 시크릿 (Secret Manager) ────────────────────────────
+  - variable: GEMINI_API_KEY
+    secret: GEMINI_API_KEY
+
+  - variable: GOOGLE_SERVICE_ACCOUNT_JSON
+    secret: GOOGLE_SERVICE_ACCOUNT_JSON
+
+  - variable: GOOGLE_SPREADSHEET_ID
+    value: 1rG25qrjqtCY4Un8CxM5sPKRcuYBuAkC2BhH91HY4Hwc
