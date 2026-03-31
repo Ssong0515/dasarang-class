@@ -43,7 +43,7 @@ type StudentHistoryState = {
 
 const translations = {
   KO: {
-    title: '다사랑 학생 센터',
+    title: '다사랑 클래스',
     subtitle: '오늘의 배움을 확인해보세요',
     backToAdmin: '관리자 페이지로 돌아가기',
     welcome: '환영합니다!',
@@ -64,7 +64,7 @@ const translations = {
     am: '오전',
   },
   EN: {
-    title: 'Dasarang Student Center',
+    title: 'Dasarang Class',
     subtitle: "Check out today's learning",
     backToAdmin: 'Back to Admin Page',
     welcome: 'Welcome!',
@@ -85,7 +85,7 @@ const translations = {
     am: 'AM',
   },
   RU: {
-    title: 'Студенческий центр Дасаран',
+    title: 'Дасаран Класс',
     subtitle: 'Посмотрите, что нового сегодня',
     backToAdmin: 'Вернуться в админ-панель',
     welcome: 'Добро пожаловать!',
@@ -106,7 +106,7 @@ const translations = {
     am: 'утра',
   },
   ZH: {
-    title: '多爱学生中心',
+    title: '多爱课堂',
     subtitle: '查看今天的学习内容',
     backToAdmin: '返回管理员页面',
     welcome: '欢迎！',
