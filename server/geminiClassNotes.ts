@@ -12,7 +12,7 @@ import {
 import { getAdminDb } from './firebaseAdmin';
 
 // const DEFAULT_CLASS_NOTE_MODEL = 'gemini-3-flash-preview';
-const DEFAULT_CLASS_NOTE_MODEL = 'gemini-1.5-flash';
+const DEFAULT_CLASS_NOTE_MODEL = 'gemini-2.0-flash';
 const CONTENTS_COLLECTION = 'contents';
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_EXISTING_MEMO_SOURCE_LENGTH = 600;
