@@ -36,11 +36,13 @@ async function loadGis(): Promise<void> {
   await loadScript('https://accounts.google.com/gsi/client');
 }
 
-async function getAccessToken(clientId: string): Promise<string> {
+async function getAccessToken(clientId: string, hintEmail?: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const tokenClient = window.google.accounts.oauth2.initTokenClient({
       client_id: clientId,
       scope: DRIVE_READONLY_SCOPE,
+      hint: hintEmail,
+      prompt: hintEmail ? '' : undefined,
       callback: (response: any) => {
         if (response.error) {
           reject(new Error(response.error_description || response.error));
@@ -58,13 +60,61 @@ export interface DriveFolder {
   name: string;
 }
 
+export interface DriveSlideFile {
+  id: string;
+  name: string;
+  mimeType: string;
+  embedUrl: string;
+}
+
+const SLIDES_MIME = 'application/vnd.google-apps.presentation';
+const PPTX_MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+
+export async function openDriveSlidePicker(
+  apiKey: string,
+  clientId: string,
+  hintEmail?: string
+): Promise<DriveSlideFile | null> {
+  await Promise.all([loadGapiPicker(), loadGis()]);
+
+  const accessToken = await getAccessToken(clientId, hintEmail);
+
+  return new Promise((resolve) => {
+    const view = new window.google.picker.DocsView()
+      .setMimeTypes(`${SLIDES_MIME},${PPTX_MIME}`)
+      .setIncludeFolders(true);
+
+    const picker = new window.google.picker.PickerBuilder()
+      .addView(view)
+      .setOAuthToken(accessToken)
+      .setDeveloperKey(apiKey)
+      .setTitle('슬라이드 파일 선택')
+      .setCallback((data: any) => {
+        if (data.action === window.google.picker.Action.PICKED) {
+          const doc = data.docs[0];
+          const isGoogleSlides = doc.mimeType === SLIDES_MIME;
+          const embedUrl = isGoogleSlides
+            ? `https://docs.google.com/presentation/d/${doc.id}/embed`
+            : `https://drive.google.com/file/d/${doc.id}/preview`;
+          resolve({ id: doc.id, name: doc.name, mimeType: doc.mimeType, embedUrl });
+        } else if (data.action === window.google.picker.Action.CANCEL) {
+          resolve(null);
+        }
+      })
+      .build();
+
+    picker.setVisible(true);
+  });
+}
+
 export async function openDriveFolderPicker(
   apiKey: string,
-  clientId: string
+  clientId: string,
+  hintEmail?: string
 ): Promise<DriveFolder | null> {
   await Promise.all([loadGapiPicker(), loadGis()]);
 
-  const accessToken = await getAccessToken(clientId);
+  const accessToken = await getAccessToken(clientId, hintEmail);
 
   return new Promise((resolve) => {
     const view = new window.google.picker.DocsView(window.google.picker.ViewId.FOLDERS)

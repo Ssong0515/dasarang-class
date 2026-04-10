@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithCredential, signOut, onAuthStateChanged } from 'firebase/auth';
 import { 
   getFirestore, 
   collection, 
@@ -25,6 +25,8 @@ const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
+export { GoogleAuthProvider };
+googleProvider.addScope('https://www.googleapis.com/auth/drive.readonly');
 
 // Error Handling
 export enum OperationType {
@@ -92,8 +94,7 @@ testConnection();
 
 export {
   signInWithPopup,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
+  signInWithCredential,
   signOut,
   onAuthStateChanged,
   collection,

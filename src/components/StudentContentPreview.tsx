@@ -1,6 +1,70 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronDown, FileText } from 'lucide-react';
+import { ChevronDown, FileText, Maximize2, Presentation } from 'lucide-react';
 import { LessonContent } from '../types';
+
+const toSlideEmbedUrl = (url: string): string => {
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+  const match = trimmed.match(/https:\/\/docs\.google\.com\/presentation\/d\/([^/]+)/);
+  if (!match) return trimmed;
+  return `https://docs.google.com/presentation/d/${match[1]}/embed`;
+};
+
+interface SlideEmbedProps {
+  slideUrl: string;
+  title: string;
+  roundedBottom?: boolean;
+}
+
+export const SlideEmbed: React.FC<SlideEmbedProps> = ({ slideUrl, title, roundedBottom = false }) => {
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const [isHovered, setIsHovered] = useState(false);
+
+  const handleFullscreen = () => {
+    const el = iframeRef.current;
+    if (!el) return;
+    if (el.requestFullscreen) {
+      void el.requestFullscreen();
+    }
+  };
+
+  return (
+    <>
+      <div className="border-b border-[#F3F2EE] px-5 py-3 sm:px-8">
+        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.15em] text-[#A89F94]">
+          <Presentation size={13} />
+          슬라이드
+        </div>
+      </div>
+      <div
+        className={`relative w-full overflow-hidden ${roundedBottom ? 'rounded-b-[32px]' : ''}`}
+        style={{ paddingBottom: '56.25%' }}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        <iframe
+          ref={iframeRef}
+          src={toSlideEmbedUrl(slideUrl)}
+          title={`${title} 슬라이드`}
+          className="absolute inset-0 h-full w-full"
+          style={{ border: 'none' }}
+          allowFullScreen
+        />
+        {isHovered && (
+          <button
+            type="button"
+            onClick={handleFullscreen}
+            title="슬라이드 전체화면"
+            className="absolute right-3 top-3 z-10 flex items-center gap-1.5 rounded-xl bg-black/50 px-3 py-2 text-xs font-bold text-white backdrop-blur-sm transition-all hover:bg-black/70"
+          >
+            <Maximize2 size={13} />
+            전체화면
+          </button>
+        )}
+      </div>
+    </>
+  );
+};
 
 const iframeResponsiveStyleTag = `
   <style>
@@ -232,11 +296,21 @@ export const StudentContentCard: React.FC<StudentContentCardProps> = ({
 
       {details}
 
-      <StudentContentPreviewFrame
-        html={content.html}
-        title={content.title}
-        className="w-full rounded-b-[32px]"
-      />
+      {content.slideUrl?.trim() ? (
+        <SlideEmbed
+          slideUrl={content.slideUrl}
+          title={content.title}
+          roundedBottom={!content.html?.trim()}
+        />
+      ) : null}
+
+      {content.html?.trim() ? (
+        <StudentContentPreviewFrame
+          html={content.html}
+          title={content.title}
+          className="w-full rounded-b-[32px]"
+        />
+      ) : null}
     </section>
   );
 };

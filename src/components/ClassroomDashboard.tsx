@@ -68,6 +68,7 @@ interface ClassroomDashboardProps {
   dateRecords: ClassroomDateRecord[];
   categories: LessonCategory[];
   contents: LessonContent[];
+  userEmail?: string;
   onSaveStudents: (classroomId: string, students: Student[]) => Promise<void>;
   onMoveStudent: (sourceClassroomId: string, targetClassroomId: string, studentId: string) => Promise<void>;
   onSaveDateRecord: (record: ClassroomDateRecord) => void;
@@ -164,6 +165,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   dateRecords,
   categories,
   contents,
+  userEmail,
   onSaveStudents,
   onMoveStudent,
   onSaveDateRecord,
@@ -2026,7 +2028,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 if (!clientId) return;
                 setIsPickerLoading(true);
                 try {
-                  const folder = await openDriveFolderPicker(apiKey, clientId);
+                  const folder = await openDriveFolderPicker(apiKey, clientId, userEmail);
                   if (folder) {
                     setSettingsDraft({
                       ...settingsDraft,

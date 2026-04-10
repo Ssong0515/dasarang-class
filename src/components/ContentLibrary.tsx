@@ -15,14 +15,18 @@ import {
   Eye,
   Maximize2,
   GripVertical,
+  Presentation,
+  FolderOpen,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { LessonCategory, LessonContent } from '../types';
-import { StudentContentCard, StudentContentPreviewFrame } from './StudentContentPreview';
+import { StudentContentCard, StudentContentPreviewFrame, SlideEmbed } from './StudentContentPreview';
+import { openDriveSlidePicker } from '../utils/drivePicker';
 
 interface ContentLibraryProps {
   categories: LessonCategory[];
   contents: LessonContent[];
+  userEmail?: string;
   onSaveCategory: (category: Partial<LessonCategory>) => Promise<void>;
   onSaveContent: (content: Partial<LessonContent>) => Promise<LessonContent>;
   onReorderCategories: (nextCategories: LessonCategory[]) => Promise<void>;
@@ -50,13 +54,17 @@ const createEmptyContentDraft = (categoryId: string | null): Partial<LessonConte
   title: '',
   description: '',
   html: '',
+  slideUrl: '',
 });
 const normalizeContentDraft = (draft: Partial<LessonContent> | null | undefined, fallbackCategoryId: string | null) => ({
   categoryId: typeof draft?.categoryId === 'string' ? draft.categoryId : fallbackCategoryId,
   title: draft?.title?.trim() ?? '',
   description: draft?.description ?? '',
   html: draft?.html ?? '',
+  slideUrl: draft?.slideUrl?.trim() ?? '',
 });
+
+
 const isContentDraftDirty = (
   draft: Partial<LessonContent> | null,
   snapshot: LessonContent | null
@@ -76,7 +84,8 @@ const isContentDraftDirty = (
     current.categoryId !== baseline.categoryId ||
     current.title !== baseline.title ||
     current.description !== baseline.description ||
-    current.html !== baseline.html
+    current.html !== baseline.html ||
+    current.slideUrl !== baseline.slideUrl
   );
 };
 
@@ -208,6 +217,7 @@ const buildContentReorderUpdates = (
 export const ContentLibrary: React.FC<ContentLibraryProps> = ({
   categories,
   contents,
+  userEmail,
   onSaveCategory,
   onSaveContent,
   onReorderCategories,
@@ -225,6 +235,7 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
   const [editorTab, setEditorTab] = useState<EditorTab>('edit');
   const [isFullscreenPreviewOpen, setIsFullscreenPreviewOpen] = useState(false);
   const [isSavingContent, setIsSavingContent] = useState(false);
+  const [isPickingSlide, setIsPickingSlide] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [displayedCategories, setDisplayedCategories] = useState<LessonCategory[]>(categories);
   const [displayedContents, setDisplayedContents] = useState<LessonContent[]>(contents);
@@ -246,6 +257,7 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
         title: editingContent.title?.trim() || '미리보기 콘텐츠',
         description: editingContent.description ?? '',
         html: editingContent.html ?? '',
+        slideUrl: editingContent.slideUrl ?? '',
         createdAt: editingContent.createdAt ?? new Date().toISOString(),
         order: editingContent.order,
       } satisfies LessonContent)
@@ -253,6 +265,7 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
 
   const uncategorizedContents = getContentsForCategory(displayedContents, null);
   const hasPreviewHtml = Boolean(previewContent?.html.trim());
+  const hasPreviewContent = hasPreviewHtml || Boolean(previewContent?.slideUrl?.trim());
   const isExistingContent = Boolean(editingContent?.id);
   const hasUnsavedChanges = isContentDraftDirty(editingContent, savedContentSnapshot);
   const editorTitle = isExistingContent ? '콘텐츠 미리보기' : '새 콘텐츠 작성';
@@ -979,6 +992,55 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                   </div>
 
                   <div>
+                    <label className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#8B5E3C]">
+                      <Presentation size={14} /> 슬라이드
+                    </label>
+                    {editingContent.slideUrl?.trim() ? (
+                      <div className="flex items-center gap-3 rounded-2xl bg-[#F3F2EE] px-4 py-3">
+                        <Presentation size={16} className="shrink-0 text-[#8B5E3C]" />
+                        <span className="flex-1 truncate text-sm font-medium text-[#4A3728]">
+                          슬라이드 연결됨
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSaveError(null);
+                            setEditingContent({ ...editingContent, slideUrl: '' });
+                          }}
+                          className="shrink-0 rounded-lg p-1 text-[#A89F94] transition-all hover:bg-white hover:text-red-500"
+                          title="슬라이드 연결 해제"
+                        >
+                          <X size={15} />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={isPickingSlide || !import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID}
+                        onClick={async () => {
+                          const clientId = import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID;
+                          const apiKey = import.meta.env.VITE_GOOGLE_PICKER_API_KEY;
+                          if (!clientId) return;
+                          setIsPickingSlide(true);
+                          try {
+                            const file = await openDriveSlidePicker(apiKey, clientId, userEmail);
+                            if (file) {
+                              setSaveError(null);
+                              setEditingContent({ ...editingContent, slideUrl: file.embedUrl });
+                            }
+                          } finally {
+                            setIsPickingSlide(false);
+                          }
+                        }}
+                        className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-6 py-4 font-bold text-[#8B7E74] transition-all hover:border-[#8B5E3C] hover:bg-[#FFF5E9] hover:text-[#8B5E3C] disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <FolderOpen size={18} />
+                        {isPickingSlide ? '드라이브 열기 중...' : 'Google Drive에서 슬라이드 선택'}
+                      </button>
+                    )}
+                  </div>
+
+                  <div>
                     <div className="mb-2 flex items-center justify-between">
                       <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#8B5E3C]">
                         {isDescriptionTab ? <FileText size={14} /> : <Code size={14} />}
@@ -1016,7 +1078,7 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                         </div>
                         <button
                           onClick={() => setIsFullscreenPreviewOpen(true)}
-                          disabled={!hasPreviewHtml}
+                          disabled={!hasPreviewContent}
                           className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#E5E3DD] bg-white text-[#8B5E3C] transition-all hover:border-[#8B5E3C] hover:bg-[#FFF5E9] disabled:cursor-not-allowed disabled:border-[#ECE9E2] disabled:bg-[#F8F6F2] disabled:text-[#C8BEB2]"
                         >
                           <Maximize2 size={15} />
@@ -1035,20 +1097,30 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                         className="h-[400px] w-full resize-none rounded-2xl border-none bg-[#F3F2EE] px-6 py-4 font-mono text-sm text-[#4A3728] outline-none transition-all focus:ring-2 focus:ring-[#8B5E3C]"
                       />
                     ) : editorTab === 'preview' ? (
-                      <div className="h-[400px] w-full overflow-hidden rounded-2xl border border-[#E5E3DD] bg-white">
-                        {editingContent.html?.trim() ? (
-                          <StudentContentPreviewFrame
-                            html={editingContent.html}
-                            title={editingContent.title?.trim() || '콘텐츠 미리보기'}
-                            autoHeight={false}
-                            className="h-full w-full"
+                      <div className="w-full overflow-hidden rounded-2xl border border-[#E5E3DD] bg-white">
+                        {editingContent.slideUrl?.trim() ? (
+                          <SlideEmbed
+                            slideUrl={editingContent.slideUrl}
+                            title={editingContent.title?.trim() || '슬라이드 미리보기'}
+                            roundedBottom={!editingContent.html?.trim()}
                           />
-                        ) : (
-                          <div className="flex h-full flex-col items-center justify-center text-[#8B7E74]">
-                            <Eye size={32} className="mb-3 opacity-30" />
-                            <p className="text-sm">HTML을 입력하면 여기에서 미리보기가 표시됩니다.</p>
+                        ) : null}
+                        {editingContent.html?.trim() ? (
+                          <div className="h-[400px]">
+                            <StudentContentPreviewFrame
+                              html={editingContent.html}
+                              title={editingContent.title?.trim() || '콘텐츠 미리보기'}
+                              autoHeight={false}
+                              className="h-full w-full"
+                            />
                           </div>
-                        )}
+                        ) : null}
+                        {!editingContent.slideUrl?.trim() && !editingContent.html?.trim() ? (
+                          <div className="flex h-[400px] flex-col items-center justify-center text-[#8B7E74]">
+                            <Eye size={32} className="mb-3 opacity-30" />
+                            <p className="text-sm">슬라이드 URL 또는 HTML을 입력하면 미리보기가 표시됩니다.</p>
+                          </div>
+                        ) : null}
                       </div>
                     ) : (
                       <textarea
@@ -1077,7 +1149,7 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
         </div>
 
         <AnimatePresence>
-          {isFullscreenPreviewOpen && previewContent && hasPreviewHtml && (
+          {isFullscreenPreviewOpen && previewContent && hasPreviewContent && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}

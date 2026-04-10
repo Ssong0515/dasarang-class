@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { DocumentData, QuerySnapshot } from 'firebase/firestore';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
@@ -7,6 +7,7 @@ import { MemoSection } from './components/MemoSection';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { StudentPage } from './components/StudentPage';
 import {
+  AccessLog,
   ClassroomDateRecord,
   Classroom,
   DailyReview,
@@ -19,8 +20,10 @@ import {
 import {
   auth,
   db,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
+  googleProvider,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInWithCredential,
   signOut,
   onAuthStateChanged,
   collection,
@@ -207,14 +210,19 @@ export default function App() {
   const [googleSheetsSyncError, setGoogleSheetsSyncError] = useState<GoogleSheetsSyncErrorState | null>(null);
   const [isRetryingGoogleSheetsSync, setIsRetryingGoogleSheetsSync] = useState(false);
 
-  // Login Modal State
-  const [showLoginModal, setShowLoginModal] = useState(false);
-  const [adminPassword, setAdminPassword] = useState('');
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [loginError, setLoginError] = useState('');
+  // Login State
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [signInError, setSignInError] = useState('');
+  const [driveAccessToken, setDriveAccessToken] = useState('');
 
-  const ADMIN_EMAIL = 'songes0515@gmail.com';
-  const isAdmin = user?.email === ADMIN_EMAIL;
+  // Admins (Firestore-driven)
+  const [adminEmails, setAdminEmails] = useState<string[] | null>(null);
+  const isAdmin = adminEmails !== null && adminEmails.includes(user?.email ?? '');
+  const isAppReady = isAuthReady && adminEmails !== null;
+
+  // Access Logs (admin-only)
+  const [accessLogs, setAccessLogs] = useState<AccessLog[]>([]);
+  const accessLoggedRef = useRef(false);
   const studentsById = useMemo(
     () => new Map(students.map((student) => [student.id, student])),
     [students]
@@ -326,19 +334,76 @@ export default function App() {
     await syncClassroomsWithGoogleSheets(googleSheetsSyncError.requests, { isRetry: true });
   };
 
+  // Load admin emails from Firestore once on mount
+  useEffect(() => {
+    const FALLBACK_ADMINS = ['songes0515@gmail.com', 'damunacenter@gmail.com'];
+    getDocs(collection(db, 'admins'))
+      .then((snapshot) => {
+        const emails = snapshot.docs.map((d) => d.id);
+        setAdminEmails(emails.length > 0 ? emails : FALLBACK_ADMINS);
+      })
+      .catch(() => {
+        setAdminEmails(FALLBACK_ADMINS);
+      });
+  }, []);
+
   // Auth Listener
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
+    const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
+      setUser(nextUser);
       setIsAuthReady(true);
-      if (user?.email === ADMIN_EMAIL) {
-        setViewMode('admin');
-      } else {
-        setViewMode('student');
+      if (!nextUser) {
+        accessLoggedRef.current = false;
       }
     });
     return () => unsubscribe();
   }, []);
+
+  // Set viewMode once we know both user & adminEmails
+  useEffect(() => {
+    if (adminEmails === null) return;
+    if (user?.email && adminEmails.includes(user.email)) {
+      setViewMode('admin');
+    } else if (user) {
+      setViewMode('student');
+    }
+  }, [user, adminEmails]);
+
+  // Log non-admin access
+  useEffect(() => {
+    if (!user || adminEmails === null || isAdmin || accessLoggedRef.current) return;
+    accessLoggedRef.current = true;
+    void addDoc(collection(db, 'access_logs'), {
+      email: user.email ?? '',
+      uid: user.uid,
+      displayName: user.displayName ?? '',
+      loginAt: new Date().toISOString(),
+    });
+  }, [user, adminEmails, isAdmin]);
+
+  // Load access logs (admin only)
+  useEffect(() => {
+    if (!isAdmin) {
+      setAccessLogs([]);
+      return;
+    }
+    const logsQuery = query(
+      collection(db, 'access_logs'),
+      orderBy('loginAt', 'desc')
+    );
+    const unsubscribe = onSnapshot(logsQuery, (snapshot) => {
+      setAccessLogs(
+        snapshot.docs.map((d) => ({
+          id: d.id,
+          email: d.data().email ?? '',
+          uid: d.data().uid ?? '',
+          displayName: d.data().displayName ?? '',
+          loginAt: d.data().loginAt ?? '',
+        }))
+      );
+    });
+    return () => unsubscribe();
+  }, [isAdmin]);
 
   useEffect(() => {
     if (!user) {
@@ -537,6 +602,7 @@ export default function App() {
           title: data.title ?? '',
           description: data.description ?? '',
           html: data.html ?? '',
+          slideUrl: data.slideUrl ?? '',
           createdAt: data.createdAt ?? new Date(0).toISOString(),
           order: hasNumericOrder(data.order) ? data.order : undefined,
         } satisfies LessonContent;
@@ -556,43 +622,67 @@ export default function App() {
     };
   }, [user]);
 
-  const handleLogin = () => {
-    setShowLoginModal(true);
-    setAdminPassword('');
-    setLoginError('');
-  };
-
-  const handlePasswordSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoggingIn(true);
-    setLoginError('');
-    
-    // Firebase Auth requires at least 6 characters. If user typed '0221', pad it.
-    const finalPassword = adminPassword.length < 6 ? adminPassword.padEnd(6, '0') : adminPassword;
-
+  const handleGoogleSignIn = async () => {
+    setIsSigningIn(true);
+    setSignInError('');
     try {
-      await signInWithEmailAndPassword(auth, ADMIN_EMAIL, finalPassword);
-      setShowLoginModal(false);
+      const result = await signInWithPopup(auth, googleProvider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      if (credential?.accessToken) {
+        setDriveAccessToken(credential.accessToken);
+      }
     } catch (error: any) {
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
-        // If the user doesn't exist as email/password, try creating it
-        try {
-          await createUserWithEmailAndPassword(auth, ADMIN_EMAIL, finalPassword);
-          setShowLoginModal(false);
-        } catch (createError: any) {
-          console.error("Creation failed", createError);
-          setLoginError('계정 연동에 실패했습니다. 구글 로그인이 이미 등록되어 있을 수 있습니다.');
-        }
-      } else if (error.code === 'auth/wrong-password') {
-        setLoginError('비밀번호가 일치하지 않습니다.');
-      } else {
-        console.error("Login failed", error);
-        setLoginError('로그인에 실패했습니다. 다시 시도해주세요.');
+      if (error.code !== 'auth/popup-closed-by-user') {
+        setSignInError('로그인에 실패했습니다. 다시 시도해주세요.');
       }
     } finally {
-      setIsLoggingIn(false);
+      setIsSigningIn(false);
     }
   };
+
+  // Google One Tap auto-login
+  useEffect(() => {
+    const clientId = import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID as string | undefined;
+    if (!clientId || user || !isAuthReady) return;
+
+    const onLoad = () => {
+      window.google?.accounts.id.initialize({
+        client_id: clientId,
+        callback: async (response: { credential: string }) => {
+          try {
+            const cred = GoogleAuthProvider.credential(response.credential);
+            const result = await signInWithCredential(auth, cred);
+            const googleCred = GoogleAuthProvider.credentialFromResult(result);
+            if (googleCred?.accessToken) {
+              setDriveAccessToken(googleCred.accessToken);
+            }
+          } catch (err) {
+            console.error('One Tap sign-in failed:', err);
+          }
+        },
+        auto_select: true,
+      });
+      window.google?.accounts.id.prompt();
+    };
+
+    if (window.google?.accounts?.id) {
+      onLoad();
+    } else {
+      const existing = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
+      if (!existing) {
+        const script = document.createElement('script');
+        script.src = 'https://accounts.google.com/gsi/client';
+        script.async = true;
+        script.defer = true;
+        script.onload = onLoad;
+        document.head.appendChild(script);
+      }
+    }
+
+    return () => {
+      window.google?.accounts.id.cancel?.();
+    };
+  }, [user, isAuthReady]);
 
   const handleLogout = async () => {
     if (!confirmContentLibraryNavigation()) {
@@ -601,6 +691,7 @@ export default function App() {
 
     try {
       await signOut(auth);
+      setDriveAccessToken('');
       setActiveTab('home');
     } catch (error) {
       console.error("Logout failed", error);
@@ -936,6 +1027,7 @@ export default function App() {
       title: content.title.trim(),
       description,
       html: content.html ?? '',
+      slideUrl: content.slideUrl ?? '',
       createdAt,
       order,
     };
@@ -1087,7 +1179,7 @@ export default function App() {
   };
 
   const renderContent = () => {
-    if (!isAuthReady) {
+    if (!isAppReady) {
       return (
         <div className="h-screen flex items-center justify-center bg-[#FBFBFA]">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#8B5E3C]"></div>
@@ -1095,41 +1187,54 @@ export default function App() {
       );
     }
 
-    if (!user || !isAdmin) {
+    if (!user) {
       return (
-        <StudentPage 
-          isAdmin={isAdmin} 
-          onBackToAdmin={user ? () => setViewMode('admin') : undefined} 
-          onLogin={handleLogin}
-          classrooms={classroomsWithStudents}
-          categories={categories}
-          contents={contents}
-        />
+        <div className="h-screen flex flex-col items-center justify-center bg-[#FBFBFA] p-8">
+          <div className="max-w-sm w-full bg-white p-12 rounded-[40px] border border-[#E5E3DD] shadow-xl shadow-[#8B5E3C]/5 text-center">
+            <div className="w-16 h-16 bg-[#FFF5E9] rounded-2xl flex items-center justify-center mx-auto mb-8">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#8B5E3C" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+              </svg>
+            </div>
+            <h1 className="text-3xl font-serif font-bold text-[#4A3728] mb-3">다사랑 클래스</h1>
+            <p className="text-[#8B7E74] mb-10 leading-relaxed text-sm">
+              Google 계정으로 로그인하여<br/>수업 자료를 확인하세요.
+            </p>
+            {signInError && (
+              <p className="text-sm text-red-500 mb-5 font-medium">{signInError}</p>
+            )}
+            <button
+              onClick={() => void handleGoogleSignIn()}
+              disabled={isSigningIn}
+              className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-white border-2 border-[#E5E3DD] rounded-2xl text-[#4A3728] font-bold hover:bg-[#F3F2EE] hover:border-[#8B5E3C] transition-all disabled:opacity-50 shadow-sm"
+            >
+              {isSigningIn ? (
+                <span className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#8B5E3C]" />
+              ) : (
+                <>
+                  <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                  </svg>
+                  Google로 로그인
+                </>
+              )}
+            </button>
+          </div>
+        </div>
       );
     }
 
     if (!isAdmin) {
       return (
-        <div className="h-screen flex flex-col items-center justify-center bg-[#FBFBFA] p-8 text-center">
-          <div className="max-w-md bg-white p-12 rounded-[40px] border border-[#E5E3DD] shadow-xl shadow-[#8B5E3C]/5">
-            <h1 className="text-4xl font-serif font-bold text-[#4A3728] mb-6">접근 제한</h1>
-            <p className="text-[#8B7E74] mb-10 leading-relaxed">
-              죄송합니다. 이 페이지는 관리자 전용입니다.<br/>학생 페이지를 이용해주세요.
-            </p>
-            <button 
-              onClick={() => setViewMode('student')}
-              className="w-full py-4 bg-[#8B5E3C] text-white rounded-2xl font-bold shadow-lg shadow-[#8B5E3C]/20 hover:bg-[#724D31] transition-all"
-            >
-              학생 페이지로 가기
-            </button>
-            <button 
-              onClick={handleLogout}
-              className="mt-4 text-sm text-[#8B7E74] hover:text-[#4A3728] font-medium"
-            >
-              로그아웃
-            </button>
-          </div>
-        </div>
+        <StudentPage
+          isAdmin={false}
+          classrooms={classroomsWithStudents}
+          categories={categories}
+          contents={contents}
+        />
       );
     }
 
@@ -1192,6 +1297,7 @@ export default function App() {
               onGoToLibrary={() => handleTabChange('content-library')}
               onGoToMemo={() => handleTabChange('memo')}
               onSwitchToStudent={handleSwitchToStudent}
+              accessLogs={accessLogs}
             />
           )}
           {activeTab === 'memo' && (
@@ -1207,7 +1313,7 @@ export default function App() {
             />
           )}
           {activeTab === 'classroom-management' && activeClassroom && (
-            <ClassroomDashboard 
+            <ClassroomDashboard
               key={activeClassroom.id}
               classroom={activeClassroom}
               classrooms={classroomsWithStudents}
@@ -1215,6 +1321,7 @@ export default function App() {
               dateRecords={classroomDateRecords}
               categories={categories}
               contents={contents}
+              userEmail={user?.email ?? undefined}
               onSaveStudents={handleSaveStudents}
               onMoveStudent={handleMoveStudent}
               onSaveDateRecord={handleSaveClassroomDateRecord}
@@ -1227,9 +1334,10 @@ export default function App() {
             />
           )}
           {activeTab === 'content-library' && (
-            <ContentLibrary 
+            <ContentLibrary
               categories={categories}
               contents={contents}
+              userEmail={user?.email ?? undefined}
               onSaveCategory={handleSaveCategory}
               onSaveContent={handleSaveContent}
               onReorderCategories={handleReorderCategories}
@@ -1249,52 +1357,6 @@ export default function App() {
   return (
     <ErrorBoundary>
       {renderContent()}
-
-      {/* Login Modal */}
-      {showLoginModal && (
-        <div className="fixed inset-0 bg-[#A89F94]/50 backdrop-blur-sm flex items-center justify-center p-4 z-[100]">
-          <div className="bg-white rounded-[32px] w-full max-w-sm overflow-hidden shadow-2xl relative">
-            <button 
-              onClick={() => setShowLoginModal(false)}
-              className="absolute top-6 right-6 text-[#A89F94] hover:text-[#4A3728] transition-colors"
-            >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-            </button>
-            <div className="p-8">
-              <div className="w-12 h-12 bg-[#FFF5E9] rounded-2xl flex items-center justify-center mb-6">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8B5E3C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-              </div>
-              <h2 className="text-2xl font-bold text-[#4A3728] mb-2">관리자 로그인</h2>
-              <p className="text-[#8B7E74] text-sm mb-6">비밀번호를 입력하여 권한을 확인하세요.</p>
-              
-              <form onSubmit={handlePasswordSubmit}>
-                <div className="mb-6">
-                  <input
-                    type="password"
-                    value={adminPassword}
-                    onChange={(e) => setAdminPassword(e.target.value)}
-                    placeholder="비밀번호 입력"
-                    required
-                    className="w-full bg-[#F3F2EE] border-none rounded-xl p-4 text-[#4A3728] placeholder:text-[#A89F94] focus:ring-2 focus:ring-[#8B5E3C] outline-none transition-all"
-                  />
-                  {loginError && <p className="text-sm text-red-500 mt-2 font-bold">{loginError}</p>}
-                </div>
-                <button
-                  type="submit"
-                  disabled={isLoggingIn || !adminPassword.trim()}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-4 bg-[#8B5E3C] text-white rounded-xl font-bold shadow-lg shadow-[#8B5E3C]/20 hover:bg-[#724D31] transition-all disabled:opacity-50 disabled:shadow-none"
-                >
-                  {isLoggingIn ? (
-                    <span className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></span>
-                  ) : (
-                    '로그인'
-                  )}
-                </button>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
     </ErrorBoundary>
   );
 }

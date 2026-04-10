@@ -40,6 +40,7 @@ export interface LessonContent {
   title: string;
   description: string;
   html: string;
+  slideUrl?: string;
   createdAt: string;
   order?: number;
 }
@@ -88,6 +89,14 @@ export interface DailyReview {
   sourceRecordIds: string[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AccessLog {
+  id: string;
+  email: string;
+  uid: string;
+  displayName: string;
+  loginAt: string;
 }
 
 export type GeneratedMemoDraftStyle = 'activity' | 'guidance' | 'check';

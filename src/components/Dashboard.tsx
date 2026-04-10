@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { ClassroomDiagnosticsBanner } from './ClassroomDiagnosticsBanner';
-import { Classroom, ClassroomLoadDiagnostics } from '../types';
+import { AccessLog, Classroom, ClassroomLoadDiagnostics } from '../types';
 import {
   getClassroomCardColors,
   getClassroomIconComponent,
@@ -50,6 +50,7 @@ interface DashboardProps {
   onGoToLibrary: () => void;
   onGoToMemo: () => void;
   onSwitchToStudent: () => void;
+  accessLogs?: AccessLog[];
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -59,6 +60,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onGoToLibrary,
   onGoToMemo,
   onSwitchToStudent,
+  accessLogs = [],
 }) => {
   const isDev = import.meta.env.DEV;
   const firstClassroom = classrooms[0];
@@ -350,6 +352,53 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <div className="absolute -bottom-10 -right-10 h-40 w-40 rounded-full bg-white/5 blur-3xl" />
         </motion.div>
       </div>
+
+      {/* Access Logs */}
+      {accessLogs.length > 0 && (
+        <motion.section
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.4 }}
+          className="mx-6 mb-8"
+        >
+          <h2 className="mb-4 text-lg font-bold text-[#4A3728]">방문 로그</h2>
+          <div className="overflow-hidden rounded-[24px] border border-[#E5E3DD] bg-white shadow-sm">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[#E5E3DD] bg-[#F3F2EE]">
+                  <th className="px-5 py-3 text-left font-semibold text-[#8B7E74]">이름</th>
+                  <th className="px-5 py-3 text-left font-semibold text-[#8B7E74]">이메일</th>
+                  <th className="px-5 py-3 text-left font-semibold text-[#8B7E74]">접속 시간</th>
+                </tr>
+              </thead>
+              <tbody>
+                {accessLogs.slice(0, 50).map((log, i) => (
+                  <tr
+                    key={log.id}
+                    className={i % 2 === 0 ? 'bg-white' : 'bg-[#FBFBFA]'}
+                  >
+                    <td className="px-5 py-3 font-medium text-[#4A3728]">
+                      {log.displayName || '(이름 없음)'}
+                    </td>
+                    <td className="px-5 py-3 text-[#8B7E74]">{log.email}</td>
+                    <td className="px-5 py-3 text-[#8B7E74]">
+                      {log.loginAt
+                        ? new Date(log.loginAt).toLocaleString('ko-KR', {
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })
+                        : '-'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </motion.section>
+      )}
     </main>
   );
 };
