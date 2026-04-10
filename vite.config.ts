@@ -6,10 +6,10 @@ import {defineConfig, loadEnv} from 'vite';
 const normalizeBasePath = (value?: string) => {
   const trimmed = (value || '').trim();
   if (!trimmed || trimmed === '/') {
-    return '/';
+    return './';
   }
 
-  return `/${trimmed.replace(/^\/+|\/+$/g, '')}/`;
+  return `./${trimmed.replace(/^\/+|\/+$/g, '')}/`;
 };
 
 export default defineConfig(({mode}) => {
@@ -17,7 +17,7 @@ export default defineConfig(({mode}) => {
   const appBasePath = process.env.APP_BASE_PATH || env.APP_BASE_PATH;
 
   return {
-    base: normalizeBasePath(appBasePath),
+    base: './', // Always use relative paths for asset loading outside server environment
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
