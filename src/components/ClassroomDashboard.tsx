@@ -38,10 +38,9 @@ import {
   Student,
 } from '../types';
 import {
-  getAssignedContentIdsForClassroom,
-  orderAssignedContentIds,
-} from '../utils/classroomContentAssignments';
-import { normalizeClassroomDateRecordContentIds } from '../utils/classroomDateRecordContent';
+  normalizeClassroomDateRecordContentIds,
+  orderClassroomDateRecordContentIds,
+} from '../utils/classroomDateRecordContent';
 import {
   CLASSROOM_COLOR_OPTIONS,
   CLASSROOM_ICON_OPTIONS,
@@ -73,13 +72,11 @@ interface ClassroomDashboardProps {
   onMoveStudent: (sourceClassroomId: string, targetClassroomId: string, studentId: string) => Promise<void>;
   onSaveDateRecord: (record: ClassroomDateRecord) => void;
   onDeleteDateRecord: (recordId: string) => void;
-  onSaveClassroomContents: (classroomId: string, contentIds: string[]) => Promise<void>;
   onGenerateMemoDraft: (
     classroomId: string,
     date: string,
     existingMemo?: string
   ) => Promise<GeneratedMemoDraftOption[]>;
-  onGoToLibrary: () => void;
   onUpdateClassroom?: (classroomId: string, data: Partial<Classroom>) => void;
   onDeleteClassroom?: (classroomId: string) => void;
 }
@@ -170,9 +167,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   onMoveStudent,
   onSaveDateRecord,
   onDeleteDateRecord,
-  onSaveClassroomContents,
   onGenerateMemoDraft,
-  onGoToLibrary,
   onUpdateClassroom,
   onDeleteClassroom,
 }) => {
@@ -229,15 +224,22 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     () => new Set(classroomDateRecords.map((record) => record.date)),
     [classroomDateRecords]
   );
-  const assignedContentIds = getAssignedContentIdsForClassroom(classroom);
+  const categorizedContents = useMemo(
+    () => contents.filter((content) => content.categoryId !== null),
+    [contents]
+  );
+  const assignedContentIds = useMemo(
+    () => categorizedContents.map((content) => content.id),
+    [categorizedContents]
+  );
   const assignedContentIdSet = useMemo(() => new Set(assignedContentIds), [assignedContentIds]);
   const assignedContents = useMemo(
-    () => contents.filter((content) => assignedContentIdSet.has(content.id)),
-    [contents, assignedContentIdSet]
+    () => categorizedContents.filter((content) => assignedContentIdSet.has(content.id)),
+    [categorizedContents, assignedContentIdSet]
   );
   const assignedContentsById = useMemo(
-    () => new Map(assignedContents.map((content) => [content.id, content])),
-    [assignedContents]
+    () => new Map(contents.map((content) => [content.id, content])),
+    [contents]
   );
   const currentDateRecordContentIds = currentDateRecord
     ? normalizeClassroomDateRecordContentIds(currentDateRecord)
@@ -413,15 +415,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     setIsAssignmentCardCollapsed((current) => !current);
   };
 
-  const handleToggleContent = (content: LessonContent) => {
-    const nextIds = assignedContentIds.includes(content.id)
-      ? assignedContentIds.filter((contentId) => contentId !== content.id)
-      : [...assignedContentIds, content.id];
-
-    void onSaveClassroomContents(classroom.id, orderAssignedContentIds(nextIds, contents)).catch((error) => {
-      console.error('Failed to save classroom content assignments', error);
-    });
-  };
+  const handleToggleContent = (_content: LessonContent) => {};
 
   const handleToggleDateRecordContent = (content: LessonContent) => {
     if (!currentDateRecord) {
@@ -437,7 +431,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
 
     onSaveDateRecord({
       ...currentDateRecord,
-      contentIds: orderAssignedContentIds(nextIds, assignedContents),
+      contentIds: orderClassroomDateRecordContentIds(nextIds, assignedContents),
     });
   };
 
@@ -805,7 +799,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
         className="grid grid-cols-1 gap-8 lg:grid-cols-3"
       >
         <div className="space-y-6 lg:col-span-2">
-          <div className="rounded-[40px] border border-[#E5E3DD] bg-white p-8 shadow-sm sm:p-10">
+          <div className="hidden rounded-[40px] border border-[#E5E3DD] bg-white p-8 shadow-sm sm:p-10">
           <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
             <div className="space-y-3">
               <h2 className="flex items-center gap-2 text-xl font-bold text-[#4A3728]">
@@ -837,7 +831,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 {isAssignmentCardCollapsed ? '펼치기' : '접기'}
               </button>
               <button
-                onClick={onGoToLibrary}
+                onClick={() => undefined}
                 className="rounded-xl border border-[#E5E3DD] px-4 py-2 text-sm font-bold text-[#8B5E3C] transition-all hover:bg-[#FFF5E9]"
               >
                 라이브러리 열기
@@ -1040,8 +1034,11 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 <AlertCircle size={20} />
                 <div className="text-sm">
                   <p className="font-bold">현재 기록에 포함된 콘텐츠 중 일부를 찾을 수 없습니다.</p>
-                  <p className="opacity-80">
+                  <p className="hidden opacity-80">
                     이미 배정에서 빠졌거나 삭제된 콘텐츠일 수 있습니다. 아래 목록에서는 현재 배정된 콘텐츠만 다시 선택할 수 있습니다.
+                  </p>
+                  <p className="opacity-80">
+                    이 기록에 포함된 콘텐츠 중 일부는 삭제되었거나 현재 목록에서 찾을 수 없습니다. 남아 있는 콘텐츠는 그대로 유지되고, 아래에서는 지금 보이는 콘텐츠만 추가로 선택할 수 있습니다.
                   </p>
                 </div>
               </div>
@@ -2118,11 +2115,17 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
             </span>
           </div>
           <h1 className="mb-4 text-5xl font-serif font-bold text-[#4A3728]">{classroom.name}</h1>
-          <p className="max-w-md text-[#8B7E74]">
+          <p className="hidden max-w-md text-[#8B7E74]">
             클래스별 콘텐츠 배정과 날짜별 운영 기록을 한 화면에서 관리합니다.
           </p>
-          <p className="mt-3 max-w-2xl text-sm text-[#8B7E74]">
+          <p className="hidden mt-3 max-w-2xl text-sm text-[#8B7E74]">
             콘텐츠는 학생 페이지 노출 기준이고, 날짜 기록은 활성화한 날에만 별도로 저장됩니다.
+          </p>
+          <p className="max-w-md text-[#8B7E74]">
+            날짜별 수업 기록과 실제 진행한 콘텐츠, 출석, 메모를 한 화면에서 관리합니다.
+          </p>
+          <p className="mt-3 max-w-2xl text-sm text-[#8B7E74]">
+            학생 페이지에는 분류된 전체 콘텐츠가 공통으로 노출되고, 날짜 기록에서는 그날 실제 진행한 수업만 별도로 남길 수 있습니다.
           </p>
         </div>
 

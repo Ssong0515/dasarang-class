@@ -34,7 +34,6 @@ import {
   addDoc,
   setDoc,
   deleteDoc,
-  deleteField,
   doc,
   updateDoc,
   writeBatch,
@@ -50,7 +49,6 @@ import {
   normalizeAttendanceRecords,
   sanitizeAttendanceRecordsForStorage,
 } from './utils/attendance';
-import { normalizeAssignedContentIds } from './utils/classroomContentAssignments';
 import { normalizeClassroomDateRecordContentIds } from './utils/classroomDateRecordContent';
 import {
   CLASSROOMS_COLLECTION,
@@ -431,9 +429,6 @@ export default function App() {
           id: classroomDoc.id,
           name: data.name ?? '',
           ownerUid: data.ownerUid ?? '',
-          assignedContentIds: Array.isArray(data.assignedContentIds)
-            ? normalizeAssignedContentIds(data.assignedContentIds)
-            : [],
           isOpen: data.isOpen,
           order: hasNumericOrder(data.order) ? data.order : undefined,
           icon: typeof data.icon === 'string' ? data.icon : undefined,
@@ -917,22 +912,6 @@ export default function App() {
     }
   };
 
-  const handleSaveClassroomContents = async (classroomId: string, contentIds: string[]) => {
-    if (!user) return;
-
-    try {
-      const nextData = { assignedContentIds: normalizeAssignedContentIds(contentIds) };
-      await setDoc(doc(db, CLASSROOMS_COLLECTION, classroomId), nextData, { merge: true });
-    } catch (error) {
-      handleFirestoreError(
-        error,
-        OperationType.UPDATE,
-        `${CLASSROOMS_COLLECTION}/${classroomId}/assignedContentIds`
-      );
-      throw error;
-    }
-  };
-
   const handleCreateClassroom = async () => {
     if (!user) return;
     try {
@@ -941,7 +920,6 @@ export default function App() {
       const classroomData = {
         name: '새로운 클래스',
         ownerUid: user.uid,
-        assignedContentIds: [],
         order: newOrder,
         createdAt: new Date().toISOString(),
       };
@@ -1326,9 +1304,7 @@ export default function App() {
               onMoveStudent={handleMoveStudent}
               onSaveDateRecord={handleSaveClassroomDateRecord}
               onDeleteDateRecord={handleDeleteClassroomDateRecord}
-              onSaveClassroomContents={handleSaveClassroomContents}
               onGenerateMemoDraft={handleGenerateMemoDraft}
-              onGoToLibrary={() => handleTabChange('content-library')}
               onUpdateClassroom={handleUpdateClassroom}
               onDeleteClassroom={handleDeleteClassroom}
             />

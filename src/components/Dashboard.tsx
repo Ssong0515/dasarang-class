@@ -119,9 +119,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <h1 className="mb-6 text-6xl font-serif font-bold leading-tight text-[#4A3728]">
             다사랑 <span className="italic text-[#8B5E3C]">컴퓨터 수업</span>
           </h1>
-          <p className="mb-8 text-lg leading-relaxed text-[#8B7E74]">
+          <p className="hidden mb-8 text-lg leading-relaxed text-[#8B7E74]">
             콘텐츠는 클래스별로 배정하고, 날짜별 수업 운영 기록은 클래스 관리 화면에서 활성 날짜만 열어
             관리합니다.
+          </p>
+          <p className="mb-8 text-lg leading-relaxed text-[#8B7E74]">
+            학생 페이지에는 분류된 전체 콘텐츠가 공통으로 노출되고, 날짜별 수업 운영 기록은 클래스 관리 화면에서 실제 진행한 수업만 남길 수 있습니다.
           </p>
           <div className="flex gap-4">
             <button
@@ -246,10 +249,23 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+          <div className="hidden">
           <QuickNavCard
             icon={<LayoutGrid size={24} />}
             title="첫 클래스 열기"
             description="클래스별 콘텐츠 배정과 활성 날짜 기록 화면으로 바로 이동합니다."
+            delay={0.1}
+            onClick={() => {
+              if (firstClassroom) {
+                onManageClassroom(firstClassroom);
+              }
+            }}
+          />
+          </div>
+          <QuickNavCard
+            icon={<LayoutGrid size={24} />}
+            title="첫 클래스 열기"
+            description="날짜별 수업 기록과 출석 체크 화면으로 바로 이동합니다."
             delay={0.1}
             onClick={() => {
               if (firstClassroom) {
@@ -328,9 +344,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <Star size={24} className="fill-white" />
             </div>
             <h2 className="mb-4 text-2xl font-bold">관리자 팁</h2>
-            <p className="text-sm leading-relaxed text-white/80">
+            <p className="hidden text-sm leading-relaxed text-white/80">
               클래스 배정은 학생 페이지 노출 기준이고, 날짜 기록은 실제로 수업을 진행한 날만 활성화해서
               남겨두면 됩니다.
+            </p>
+            <p className="text-sm leading-relaxed text-white/80">
+              학생 페이지는 분류된 전체 콘텐츠를 공통으로 보여주고, 날짜 기록은 실제 진행한 수업만 선택해서 남기는 방식으로 운영됩니다.
             </p>
           </div>
 

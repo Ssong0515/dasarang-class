@@ -14,7 +14,6 @@ import {
 import { Classroom, LessonCategory, LessonContent } from '../types';
 import { resolveAppPath } from '../utils/appPaths';
 import { StudentContentCard } from './StudentContentPreview';
-import { getAssignedContentIdsForClassroom } from '../utils/classroomContentAssignments';
 import {
   getClassroomCardColors,
   getClassroomIconComponent,
@@ -303,15 +302,10 @@ export const StudentPage: React.FC<StudentPageProps> = ({
 
   const categorizedContents = contents.filter((content) => content.categoryId !== null);
   const categorizedContentIds = new Set(categorizedContents.map((content) => content.id));
-  const assignedContentIds = activeClassroom
-    ? getAssignedContentIdsForClassroom(activeClassroom)
-    : [];
-  const visibleAssignedContentIds = new Set(
-    assignedContentIds.filter((id) => categorizedContentIds.has(id))
-  );
-  const visibleContents = categorizedContents.filter((content) =>
-    visibleAssignedContentIds.has(content.id)
-  );
+  const getAssignedContentIdsForClassroom = (_classroom?: Classroom) =>
+    Array.from(categorizedContentIds);
+  const visibleContents = categorizedContents;
+  const visibleAssignedContentIds = categorizedContentIds;
   const visibleContentIds = new Set(visibleContents.map((content) => content.id));
 
   const contentsByCategory = categories

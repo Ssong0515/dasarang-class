@@ -14,7 +14,7 @@
     },
     "Classroom": {
       "title": "Classroom",
-      "description": "Classroom configuration and assigned content",
+      "description": "Classroom configuration",
       "type": "object",
       "properties": {
         "name": { "type": "string" },
@@ -22,10 +22,6 @@
         "students": {
           "type": "array",
           "items": { "type": "object" }
-        },
-        "assignedContentIds": {
-          "type": "array",
-          "items": { "type": "string" }
         },
         "isOpen": { "type": "boolean" },
         "order": { "type": "number" },
