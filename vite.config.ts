@@ -17,7 +17,7 @@ export default defineConfig(({mode}) => {
   const appBasePath = process.env.APP_BASE_PATH || env.APP_BASE_PATH;
 
   return {
-    base: './', // Always use relative paths for asset loading outside server environment
+    base: '/',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {

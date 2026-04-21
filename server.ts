@@ -237,6 +237,7 @@ async function startServer() {
 
   if (!isProduction) {
     const vite = await createViteServer({
+      base: '/',
       server: {
         middlewareMode: true,
         hmr: {
