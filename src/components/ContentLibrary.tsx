@@ -17,16 +17,11 @@ import {
   GripVertical,
   Presentation,
   FolderOpen,
-  Download,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { LessonCategory, LessonContent } from '../types';
 import { StudentContentCard, StudentContentPreviewFrame, SlideEmbed } from './StudentContentPreview';
 import { openDriveSlidePicker } from '../utils/drivePicker';
-import {
-  NOTEBOOKLM_IMPORT_SOURCE,
-  NOTEBOOKLM_PENDING_STATUS,
-} from '../utils/notebooklmImport';
 
 interface ContentLibraryProps {
   categories: LessonCategory[];
@@ -34,13 +29,11 @@ interface ContentLibraryProps {
   userEmail?: string;
   onSaveCategory: (category: Partial<LessonCategory>) => Promise<void>;
   onSaveContent: (content: Partial<LessonContent>) => Promise<LessonContent>;
-  onApplySuggestedCategory: (contentId: string) => Promise<LessonContent>;
   onReorderCategories: (nextCategories: LessonCategory[]) => Promise<void>;
   onReorderContents: (updates: Array<{ id: string; categoryId: string | null; order: number }>) => Promise<void>;
   onDeleteCategory: (id: string) => Promise<void>;
   onDeleteContent: (id: string) => Promise<void>;
   onDirtyStateChange: (isDirty: boolean) => void;
-  onImportFromDrive?: () => Promise<{ scannedFileCount: number; createdCount: number; updatedCount: number; skippedCount: number }>;
 }
 
 export const CONTENT_EDIT_DISCARD_WARNING =
@@ -63,17 +56,6 @@ const createEmptyContentDraft = (categoryId: string | null): Partial<LessonConte
   html: '',
   slideUrl: '',
 });
-const toDriveEmbedUrl = (raw: string): string => {
-  const trimmed = raw.trim();
-  // Google Slides: /presentation/d/{id}/edit or /embed
-  const slidesMatch = trimmed.match(/\/presentation\/d\/([^/?#]+)/);
-  if (slidesMatch) return `https://docs.google.com/presentation/d/${slidesMatch[1]}/embed`;
-  // Google Drive file: /file/d/{id}/view or /preview
-  const fileMatch = trimmed.match(/\/file\/d\/([^/?#]+)/);
-  if (fileMatch) return `https://drive.google.com/file/d/${fileMatch[1]}/preview`;
-  return trimmed;
-};
-
 const normalizeContentDraft = (draft: Partial<LessonContent> | null | undefined, fallbackCategoryId: string | null) => ({
   categoryId: typeof draft?.categoryId === 'string' ? draft.categoryId : fallbackCategoryId,
   title: draft?.title?.trim() ?? '',
@@ -82,6 +64,15 @@ const normalizeContentDraft = (draft: Partial<LessonContent> | null | undefined,
   slideUrl: draft?.slideUrl?.trim() ?? '',
 });
 
+
+const toDriveEmbedUrl = (raw: string): string => {
+  const trimmed = raw.trim();
+  const slidesMatch = trimmed.match(/\/presentation\/d\/([^/?#]+)/);
+  if (slidesMatch) return `https://docs.google.com/presentation/d/${slidesMatch[1]}/embed`;
+  const fileMatch = trimmed.match(/\/file\/d\/([^/?#]+)/);
+  if (fileMatch) return `https://drive.google.com/file/d/${fileMatch[1]}/preview`;
+  return trimmed;
+};
 
 const isContentDraftDirty = (
   draft: Partial<LessonContent> | null,
@@ -238,13 +229,11 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
   userEmail,
   onSaveCategory,
   onSaveContent,
-  onApplySuggestedCategory,
   onReorderCategories,
   onReorderContents,
   onDeleteCategory,
   onDeleteContent,
   onDirtyStateChange,
-  onImportFromDrive,
 }) => {
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -255,13 +244,9 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
   const [editorTab, setEditorTab] = useState<EditorTab>('edit');
   const [isFullscreenPreviewOpen, setIsFullscreenPreviewOpen] = useState(false);
   const [isSavingContent, setIsSavingContent] = useState(false);
-  const [isApplyingSuggestedCategory, setIsApplyingSuggestedCategory] = useState(false);
   const [isPickingSlide, setIsPickingSlide] = useState(false);
   const [driveUrlInput, setDriveUrlInput] = useState('');
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [isImportingFromDrive, setIsImportingFromDrive] = useState(false);
-  const [importResult, setImportResult] = useState<{ scannedFileCount: number; createdCount: number; updatedCount: number; skippedCount: number } | null>(null);
-  const [importError, setImportError] = useState<string | null>(null);
   const [displayedCategories, setDisplayedCategories] = useState<LessonCategory[]>(categories);
   const [displayedContents, setDisplayedContents] = useState<LessonContent[]>(contents);
   const [categoryReorderError, setCategoryReorderError] = useState<string | null>(null);
@@ -292,10 +277,6 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
   const hasPreviewHtml = Boolean(previewContent?.html.trim());
   const hasPreviewContent = hasPreviewHtml || Boolean(previewContent?.slideUrl?.trim());
   const isExistingContent = Boolean(editingContent?.id);
-  const isPendingNotebooklmDraft =
-    editingContent?.importSource === NOTEBOOKLM_IMPORT_SOURCE &&
-    editingContent.importStatus === NOTEBOOKLM_PENDING_STATUS;
-  const suggestedCategoryName = editingContent?.suggestedCategoryName?.trim() || '';
   const hasUnsavedChanges = isContentDraftDirty(editingContent, savedContentSnapshot);
   const editorTitle = isExistingContent ? '콘텐츠 미리보기' : '새 콘텐츠 작성';
   const isDescriptionTab = editorTab === 'description';
@@ -451,7 +432,6 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
     setEditorTab('edit');
     setIsFullscreenPreviewOpen(false);
     setIsSavingContent(false);
-    setIsApplyingSuggestedCategory(false);
     setSaveError(null);
     ensureCategoryExpanded(categoryId);
   };
@@ -465,7 +445,6 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
     setEditorTab('preview');
     setIsFullscreenPreviewOpen(false);
     setIsSavingContent(false);
-    setIsApplyingSuggestedCategory(false);
     setSaveError(null);
     ensureCategoryExpanded(content.categoryId ?? null);
   };
@@ -476,7 +455,6 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
     setEditorTab('edit');
     setIsFullscreenPreviewOpen(false);
     setIsSavingContent(false);
-    setIsApplyingSuggestedCategory(false);
     setSaveError(null);
     setDriveUrlInput('');
   };
@@ -500,24 +478,6 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
       setSaveError(getSaveErrorMessage(error));
     } finally {
       setIsSavingContent(false);
-    }
-  };
-
-  const handleApplySuggestedCategory = async () => {
-    if (!editingContent?.id || !suggestedCategoryName) return;
-    setIsApplyingSuggestedCategory(true);
-    setSaveError(null);
-
-    try {
-      const savedContent = await onApplySuggestedCategory(editingContent.id);
-      setEditingContent(savedContent);
-      setSavedContentSnapshot(savedContent);
-      setSelectedContainerId(getContainerId(savedContent.categoryId ?? null));
-      ensureCategoryExpanded(savedContent.categoryId ?? null);
-    } catch (error) {
-      setSaveError(getSaveErrorMessage(error));
-    } finally {
-      setIsApplyingSuggestedCategory(false);
     }
   };
 
@@ -778,18 +738,6 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
           className="min-w-0 rounded-xl px-2 py-2 text-left text-[13px] text-[#8B7E74] transition-all hover:bg-[#FFF5E9] hover:text-[#8B5E3C] sm:px-3 sm:text-sm"
         >
           <span className="block truncate font-medium">{content.title}</span>
-          {content.importSource === NOTEBOOKLM_IMPORT_SOURCE &&
-          content.importStatus === NOTEBOOKLM_PENDING_STATUS ? (
-            <span className="mt-1 flex flex-wrap items-center gap-1 text-[11px] font-medium text-[#8B5E3C]">
-              <span className="rounded-full bg-[#FFF1D6] px-2 py-0.5">NotebookLM</span>
-              <span className="rounded-full bg-[#F3E1C1] px-2 py-0.5">검토 대기</span>
-              {content.suggestedCategoryName ? (
-                <span className="truncate text-[#A26E2A]">
-                  추천: {content.suggestedCategoryName}
-                </span>
-              ) : null}
-            </span>
-          ) : null}
         </button>
         <div className="flex w-10 justify-end">
           <button
@@ -909,28 +857,6 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
             <p className="text-[#8B7E74]">카테고리 안팎에서 콘텐츠를 만들고 정리하세요.</p>
           </div>
           <div className="flex items-center gap-3">
-            {onImportFromDrive && (
-              <button
-                onClick={async () => {
-                  setIsImportingFromDrive(true);
-                  setImportResult(null);
-                  setImportError(null);
-                  try {
-                    const result = await onImportFromDrive();
-                    setImportResult(result);
-                  } catch (error) {
-                    setImportError(error instanceof Error ? error.message : 'Drive 가져오기에 실패했습니다.');
-                  } finally {
-                    setIsImportingFromDrive(false);
-                  }
-                }}
-                disabled={isImportingFromDrive}
-                className="flex items-center gap-2 rounded-2xl border border-[#E5E3DD] bg-white px-6 py-3 font-bold text-[#8B7E74] transition-all hover:border-[#8B5E3C] hover:bg-[#FFF5E9] hover:text-[#8B5E3C] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Download size={18} />
-                {isImportingFromDrive ? 'Drive 가져오는 중...' : 'Drive PPT 가져오기'}
-              </button>
-            )}
             <button
               onClick={() => handleStartNewContent(null)}
               className="flex items-center gap-2 rounded-2xl bg-[#4A3728] px-6 py-3 font-bold text-white transition-all hover:bg-[#35271d]"
@@ -947,38 +873,6 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
             </button>
           </div>
         </header>
-
-        {importError && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-6 flex items-center justify-between gap-4 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm"
-          >
-            <p className="font-medium text-red-700">{importError}</p>
-            <button onClick={() => setImportError(null)} className="shrink-0 text-red-400 hover:text-red-600">
-              <X size={16} />
-            </button>
-          </motion.div>
-        )}
-
-        {importResult && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-6 flex items-center justify-between gap-4 rounded-2xl border border-green-200 bg-green-50 px-5 py-4 text-sm"
-          >
-            <p className="font-medium text-green-800">
-              Drive 가져오기 완료 — 총 {importResult.scannedFileCount}개 파일 중{' '}
-              {importResult.createdCount > 0 && `${importResult.createdCount}개 추가`}
-              {importResult.updatedCount > 0 && `${importResult.createdCount > 0 ? ', ' : ''}${importResult.updatedCount}개 업데이트`}
-              {importResult.skippedCount > 0 && ` (${importResult.skippedCount}개 중복 건너뜀)`}
-              {importResult.createdCount === 0 && importResult.updatedCount === 0 && ' 새 파일 없음'}
-            </p>
-            <button onClick={() => setImportResult(null)} className="shrink-0 text-green-600 hover:text-green-800">
-              <X size={16} />
-            </button>
-          </motion.div>
-        )}
 
         {isAddingCategory && (
           <motion.div
@@ -1067,7 +961,7 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                     {isExistingContent && (
                       <button
                         onClick={() => handleContentDelete(editingContent.id!)}
-                        disabled={isSavingContent || isApplyingSuggestedCategory}
+                        disabled={isSavingContent}
                         className="flex items-center gap-2 rounded-xl px-6 py-2.5 font-bold text-red-500 transition-all hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         <Trash2 size={18} />
@@ -1076,12 +970,7 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                     )}
                     <button
                       onClick={() => void handleSaveContent()}
-                      disabled={
-                        isSavingContent ||
-                        isApplyingSuggestedCategory ||
-                        !editingContent.title?.trim() ||
-                        !hasUnsavedChanges
-                      }
+                      disabled={isSavingContent || !editingContent.title?.trim() || !hasUnsavedChanges}
                       className="flex items-center gap-2 rounded-xl bg-[#8B5E3C] px-8 py-2.5 font-bold text-white shadow-lg shadow-[#8B5E3C]/10 transition-all hover:bg-[#724D31] disabled:cursor-not-allowed disabled:bg-[#B8AA9A] disabled:shadow-none"
                     >
                       <Save size={18} />
@@ -1093,44 +982,6 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                 {saveError && (
                   <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
                     {saveError}
-                  </div>
-                )}
-
-                {isPendingNotebooklmDraft && (
-                  <div className="mb-6 rounded-3xl border border-[#F2D7A6] bg-[#FFF8EA] px-5 py-4">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                      <div className="space-y-1">
-                        <p className="text-sm font-bold text-[#8B5E3C]">
-                          NotebookLM 가져오기 검토 대기
-                        </p>
-                        <p className="text-sm text-[#8B7E74]">
-                          {suggestedCategoryName
-                            ? `추천 카테고리: ${suggestedCategoryName}`
-                            : '추천 카테고리 정보가 없습니다.'}
-                        </p>
-                        {editingContent.sourceRelativePath ? (
-                          <p className="text-xs text-[#A89F94]">
-                            원본 경로: {editingContent.sourceRelativePath}
-                          </p>
-                        ) : null}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => void handleApplySuggestedCategory()}
-                        disabled={
-                          isApplyingSuggestedCategory ||
-                          !suggestedCategoryName ||
-                          hasUnsavedChanges
-                        }
-                        className="inline-flex items-center justify-center rounded-2xl bg-[#8B5E3C] px-5 py-3 text-sm font-bold text-white transition-all hover:bg-[#724D31] disabled:cursor-not-allowed disabled:bg-[#B8AA9A]"
-                      >
-                        {isApplyingSuggestedCategory
-                          ? '적용 중...'
-                          : hasUnsavedChanges
-                            ? '먼저 저장 후 적용'
-                            : '추천 카테고리 적용'}
-                      </button>
-                    </div>
                   </div>
                 )}
 
