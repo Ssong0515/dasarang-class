@@ -55,6 +55,8 @@ type ContentDropTarget = { categoryId: string | null; index: number } | null;
 
 const UNCATEGORIZED_ID = '__uncategorized__';
 const NOTEBOOKLM_SYNC_FOLDER_STORAGE_KEY = 'notebooklm-sync-folder';
+const CONTENT_LIST_AUTOSCROLL_EDGE = 56;
+const CONTENT_LIST_AUTOSCROLL_MAX_STEP = 24;
 
 const readStoredNotebookLmFolder = (): DriveFolder | null => {
   if (typeof window === 'undefined') return null;
@@ -204,6 +206,31 @@ const applyContentReorderUpdates = (
   );
 };
 
+const scrollByPointerProximity = (element: HTMLElement, clientY: number) => {
+  const rect = element.getBoundingClientRect();
+  const distanceFromTop = clientY - rect.top;
+  const distanceFromBottom = rect.bottom - clientY;
+  let scrollDelta = 0;
+
+  if (distanceFromTop >= 0 && distanceFromTop < CONTENT_LIST_AUTOSCROLL_EDGE) {
+    scrollDelta = -Math.ceil(
+      ((CONTENT_LIST_AUTOSCROLL_EDGE - distanceFromTop) / CONTENT_LIST_AUTOSCROLL_EDGE) *
+        CONTENT_LIST_AUTOSCROLL_MAX_STEP
+    );
+  } else if (distanceFromBottom >= 0 && distanceFromBottom < CONTENT_LIST_AUTOSCROLL_EDGE) {
+    scrollDelta = Math.ceil(
+      ((CONTENT_LIST_AUTOSCROLL_EDGE - distanceFromBottom) / CONTENT_LIST_AUTOSCROLL_EDGE) *
+        CONTENT_LIST_AUTOSCROLL_MAX_STEP
+    );
+  }
+
+  if (scrollDelta === 0) return false;
+
+  const before = element.scrollTop;
+  element.scrollTop += scrollDelta;
+  return element.scrollTop !== before;
+};
+
 const buildContentReorderUpdates = (
   items: LessonContent[],
   draggingContentId: string,
@@ -299,6 +326,7 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
   const categoryDragRef = useRef<string | null>(null);
   const contentDragRef = useRef<DraggedContent | null>(null);
   const dragCleanupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const contentLibraryScrollRef = useRef<HTMLDivElement | null>(null);
 
   const previewContent = editingContent
     ? ({
@@ -703,6 +731,22 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
     return event.clientY < rect.top + rect.height / 2 ? index : index + 1;
   };
 
+  const handleContentDragAutoScroll = (event: React.DragEvent<HTMLElement>) => {
+    const activeDrag = contentDragRef.current ?? draggingContent;
+    if (!activeDrag) return;
+
+    const sourceElement = event.currentTarget as HTMLElement;
+    const listElement = sourceElement.closest('[data-content-scroll-list="true"]') as HTMLElement | null;
+
+    if (listElement && scrollByPointerProximity(listElement, event.clientY)) {
+      return;
+    }
+
+    if (contentLibraryScrollRef.current) {
+      scrollByPointerProximity(contentLibraryScrollRef.current, event.clientY);
+    }
+  };
+
   const getResolvedContentDropTarget = (
     categoryId: string | null,
     fallbackIndex: number
@@ -723,6 +767,7 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
     if (!activeDrag) return;
     event.preventDefault();
     event.stopPropagation();
+    handleContentDragAutoScroll(event);
     setContentDropTargetIfChanged({ categoryId, index: getContentDropIndex(event, index) });
   };
 
@@ -746,6 +791,7 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
     if (!activeDrag) return;
     event.preventDefault();
     event.stopPropagation();
+    handleContentDragAutoScroll(event);
     setContentDropTargetIfChanged({
       categoryId,
       index: getContentsForCategory(displayedContents, categoryId).length,
@@ -923,7 +969,10 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
           <AnimatePresence initial={false}>
             {isExpanded && (
               <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden px-4 pb-4">
-                <div className="space-y-0.5 border-l border-[#E5E3DD] pl-3 sm:pl-4">
+                <div
+                  data-content-scroll-list="true"
+                  className="max-h-[min(58vh,460px)] min-h-[72px] space-y-0.5 overflow-y-auto overscroll-contain border-l border-[#E5E3DD] pl-3 pr-1 sm:pl-4"
+                >
                   {categoryContents.map((content, index) => renderContentRow(content, category.id, index))}
                   {renderDropIndicator(category.id, categoryContents.length)}
                   {renderAppendZone(category.id, categoryContents.length === 0)}
@@ -943,7 +992,7 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
   const notebookLmSyncSummary = notebookLmSyncResult?.summary;
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#FBFBFA] p-8">
+    <div ref={contentLibraryScrollRef} className="flex-1 overflow-y-auto bg-[#FBFBFA] p-8">
       <div className="mx-auto max-w-6xl">
         <header className="mb-12 flex items-center justify-between gap-4">
           <div>
@@ -1105,7 +1154,10 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                 </button>
                 <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-[#8B7E74]">{uncategorizedContents.length}</span>
               </div>
-              <div className="space-y-0.5">
+              <div
+                data-content-scroll-list="true"
+                className="max-h-[min(60vh,520px)] min-h-[80px] space-y-0.5 overflow-y-auto overscroll-contain pr-1"
+              >
                 {uncategorizedContents.map((content, index) => renderContentRow(content, null, index))}
                 {renderDropIndicator(null, uncategorizedContents.length)}
                 {renderAppendZone(null, uncategorizedContents.length === 0)}
