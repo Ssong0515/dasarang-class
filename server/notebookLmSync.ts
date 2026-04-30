@@ -1,4 +1,5 @@
 import { Readable } from 'stream';
+import { GoogleGenAI } from '@google/genai';
 import { google } from 'googleapis';
 import { getAdminDb } from './firebaseAdmin';
 import { getDriveClient, getOrCreateFolder } from './googleDriveUpload';
@@ -79,6 +80,63 @@ const getDriveClientFromAccessToken = (accessToken: string) => {
   const auth = new google.auth.OAuth2();
   auth.setCredentials({ access_token: accessToken });
   return google.drive({ version: 'v3', auth });
+};
+
+const getSlidesClientFromAccessToken = (accessToken: string) => {
+  const auth = new google.auth.OAuth2();
+  auth.setCredentials({ access_token: accessToken });
+  return google.slides({ version: 'v1', auth });
+};
+
+const extractSlidesText = async (accessToken: string, presentationId: string): Promise<string> => {
+  const slidesClient = getSlidesClientFromAccessToken(accessToken);
+  const response = await slidesClient.presentations.get({ presentationId });
+
+  const lines: string[] = [];
+  for (const slide of response.data.slides || []) {
+    for (const element of slide.pageElements || []) {
+      const textElements = element.shape?.text?.textElements || [];
+      const text = textElements
+        .map((te) => te.textRun?.content || '')
+        .join('')
+        .trim();
+      if (text) {
+        lines.push(text);
+      }
+    }
+  }
+
+  return lines.join('\n').trim();
+};
+
+const generateSlidesDescription = async (slidesText: string, title: string): Promise<string> => {
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  if (!apiKey) {
+    return '';
+  }
+
+  const model = process.env.GEMINI_CLASS_NOTE_MODEL?.trim() || 'gemini-2.0-flash';
+  const ai = new GoogleGenAI({ apiKey });
+  const truncatedText = slidesText.slice(0, 4000);
+
+  const prompt = `다음은 "${title}" 수업 자료의 슬라이드 텍스트입니다. 이 내용을 바탕으로 수업 내용을 간결하게 요약해주세요.
+
+요구사항:
+- 한국어로 작성
+- 3문장 이내
+- 수업의 주요 내용과 학습 목표를 포함
+- 간결하고 명확하게
+- 마크다운 없이 일반 텍스트로만
+
+슬라이드 내용:
+${truncatedText}`;
+
+  try {
+    const response = await ai.models.generateContent({ model, contents: prompt });
+    return response.text?.trim() || '';
+  } catch {
+    return '';
+  }
 };
 
 const isGoogleApiErrorStatus = (error: unknown, statusCode: number) => {
@@ -275,7 +333,8 @@ const syncPptxFile = async (
   sourceFile: SourceDriveFile,
   convertedFolderId: string,
   ownerUid: string,
-  nextOrder: () => Promise<number>
+  nextOrder: () => Promise<number>,
+  driveAccessToken: string
 ): Promise<NotebookLmSyncItem> => {
   const db = getAdminDb();
   const syncedAt = new Date().toISOString();
@@ -306,6 +365,17 @@ const syncPptxFile = async (
   }
 
   const converted = await createConvertedPresentation(drive, sourceFile, convertedFolderId);
+
+  let autoDescription = '';
+  try {
+    const slidesText = await extractSlidesText(driveAccessToken, converted.id);
+    if (slidesText) {
+      autoDescription = await generateSlidesDescription(slidesText, toPresentationTitle(sourceFile.name));
+    }
+  } catch (error) {
+    console.warn(`[notebookLmSync] Failed to generate description for "${sourceFile.name}": ${getErrorMessage(error)}`);
+  }
+
   const syncData = {
     sourceDriveFileId: sourceFile.id,
     convertedDriveFileId: converted.id,
@@ -316,7 +386,11 @@ const syncPptxFile = async (
   };
 
   if (existingContent) {
-    await db.collection(CONTENTS_COLLECTION).doc(existingContent.id).set(syncData, { merge: true });
+    const updateData: Record<string, unknown> = { ...syncData };
+    if (autoDescription) {
+      updateData.description = autoDescription;
+    }
+    await db.collection(CONTENTS_COLLECTION).doc(existingContent.id).set(updateData, { merge: true });
     await trashDriveFileIfPossible(drive, existingContent.convertedDriveFileId);
     await trashSourcePptx(drive, sourceFile);
 
@@ -336,7 +410,7 @@ const syncPptxFile = async (
     categoryId: null,
     ownerUid,
     title: toPresentationTitle(sourceFile.name),
-    description: '',
+    description: autoDescription,
     html: '',
     createdAt: syncedAt,
     order: await nextOrder(),
@@ -395,7 +469,7 @@ export const syncNotebookLmPptxFolder = async ({
     }
 
     try {
-      items.push(await syncPptxFile(drive, file, convertedFolderId, ownerUid, getNextOrder));
+      items.push(await syncPptxFile(drive, file, convertedFolderId, ownerUid, getNextOrder, driveAccessToken));
     } catch (error) {
       items.push({
         fileId: file.id,
