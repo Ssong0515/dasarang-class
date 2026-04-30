@@ -255,6 +255,21 @@ const trashDriveFileIfPossible = async (drive: DriveClient, fileId?: string) => 
   }
 };
 
+const trashSourcePptx = async (drive: DriveClient, sourceFile: SourceDriveFile) => {
+  try {
+    await drive.files.update({
+      fileId: sourceFile.id,
+      requestBody: { trashed: true },
+      fields: 'id',
+      supportsAllDrives: true,
+    });
+  } catch (error) {
+    if (!isGoogleApiErrorStatus(error, 404)) {
+      throw new Error(`Converted, but failed to move the source PPTX to trash: ${getErrorMessage(error)}`);
+    }
+  }
+};
+
 const syncPptxFile = async (
   drive: DriveClient,
   sourceFile: SourceDriveFile,
@@ -278,6 +293,7 @@ const syncPptxFile = async (
       },
       { merge: true }
     );
+    await trashSourcePptx(drive, sourceFile);
 
     return {
       fileId: sourceFile.id,
@@ -285,7 +301,7 @@ const syncPptxFile = async (
       status: 'updated',
       contentId: existingContent.id,
       slideUrl: existingContent.slideUrl,
-      message: 'Already converted; sync metadata refreshed.',
+      message: 'Already converted; source PPTX moved to trash.',
     };
   }
 
@@ -302,6 +318,7 @@ const syncPptxFile = async (
   if (existingContent) {
     await db.collection(CONTENTS_COLLECTION).doc(existingContent.id).set(syncData, { merge: true });
     await trashDriveFileIfPossible(drive, existingContent.convertedDriveFileId);
+    await trashSourcePptx(drive, sourceFile);
 
     return {
       fileId: sourceFile.id,
@@ -309,6 +326,7 @@ const syncPptxFile = async (
       status: 'updated',
       contentId: existingContent.id,
       slideUrl: converted.slideUrl,
+      message: 'Source PPTX moved to trash.',
     };
   }
 
@@ -324,6 +342,7 @@ const syncPptxFile = async (
     order: await nextOrder(),
     ...syncData,
   });
+  await trashSourcePptx(drive, sourceFile);
 
   return {
     fileId: sourceFile.id,
@@ -331,6 +350,7 @@ const syncPptxFile = async (
     status: 'created',
     contentId: contentRef.id,
     slideUrl: converted.slideUrl,
+    message: 'Source PPTX moved to trash.',
   };
 };
 
