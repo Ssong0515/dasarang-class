@@ -20,6 +20,7 @@ import {
   RefreshCw,
   CheckCircle2,
   AlertTriangle,
+  Sparkles,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { LessonCategory, LessonContent, NotebookLmFolderSyncResult } from '../types';
@@ -308,6 +309,8 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
   const [isFullscreenPreviewOpen, setIsFullscreenPreviewOpen] = useState(false);
   const [isSavingContent, setIsSavingContent] = useState(false);
   const [isPickingSlide, setIsPickingSlide] = useState(false);
+  const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
+  const [descriptionError, setDescriptionError] = useState<string | null>(null);
   const [isPickingNotebookLmFolder, setIsPickingNotebookLmFolder] = useState(false);
   const [isSyncingNotebookLmFolder, setIsSyncingNotebookLmFolder] = useState(false);
   const [notebookLmFolder, setNotebookLmFolder] = useState<DriveFolder | null>(() => readStoredNotebookLmFolder());
@@ -598,6 +601,55 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
       setNotebookLmSyncError(error instanceof Error ? error.message : 'NotebookLM 폴더 동기화에 실패했습니다.');
     } finally {
       setIsSyncingNotebookLmFolder(false);
+    }
+  };
+
+  const handleGenerateDescription = async () => {
+    if (!editingContent) return;
+    const hasSlide = Boolean(editingContent.slideUrl?.trim());
+    const hasHtml = Boolean(editingContent.html?.trim());
+    if (!hasSlide && !hasHtml) return;
+
+    setIsGeneratingDescription(true);
+    setDescriptionError(null);
+
+    try {
+      const title = editingContent.title?.trim() || '수업 자료';
+      let body: Record<string, string>;
+
+      if (hasSlide) {
+        const clientId = import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID;
+        if (!clientId) throw new Error('Google OAuth Client ID가 설정되어 있지 않습니다.');
+        const driveAccessToken = await requestDriveSyncAccessToken(clientId, userEmail);
+        body = { title, slideUrl: editingContent.slideUrl!, driveAccessToken };
+      } else {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(editingContent.html!, 'text/html');
+        const text = (doc.body.innerText || doc.body.textContent || '').slice(0, 5000);
+        if (!text.trim()) throw new Error('HTML에서 텍스트를 추출할 수 없습니다.');
+        body = { title, text };
+      }
+
+      const response = await fetch('/api/contents/generate-description', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error ?? '요약 생성에 실패했습니다.');
+      }
+
+      const data = (await response.json()) as { description?: string };
+      if (data.description) {
+        setEditingContent({ ...editingContent, description: data.description });
+        setEditorTab('description');
+      }
+    } catch (error) {
+      setDescriptionError(error instanceof Error ? error.message : '요약 생성에 실패했습니다.');
+    } finally {
+      setIsGeneratingDescription(false);
     }
   };
 
@@ -1327,6 +1379,16 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                         {editorSectionTitle}
                       </label>
                       <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void handleGenerateDescription()}
+                          disabled={isGeneratingDescription || (!editingContent?.html?.trim() && !editingContent?.slideUrl?.trim())}
+                          title="AI로 수업 내용 자동 요약"
+                          className="flex items-center gap-1.5 rounded-xl border border-[#E5E3DD] bg-white px-3 py-1.5 text-xs font-bold text-[#8B5E3C] transition-all hover:border-[#8B5E3C] hover:bg-[#FFF5E9] disabled:cursor-not-allowed disabled:border-[#ECE9E2] disabled:bg-[#F8F6F2] disabled:text-[#C8BEB2]"
+                        >
+                          <Sparkles size={13} className={isGeneratingDescription ? 'animate-pulse' : ''} />
+                          {isGeneratingDescription ? '생성 중...' : 'AI 요약'}
+                        </button>
                         <div className="flex items-center gap-1 rounded-xl bg-[#F3F2EE] p-1">
                           <button
                             onClick={() => setEditorTab('edit')}
@@ -1403,15 +1465,24 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                         ) : null}
                       </div>
                     ) : (
-                      <textarea
-                        value={editingContent.description ?? ''}
-                        onChange={(event) => {
-                          setSaveError(null);
-                          setEditingContent({ ...editingContent, description: event.target.value });
-                        }}
-                        placeholder="이 콘텐츠를 수업에서 어떻게 설명할지 입력하세요"
-                        className="h-[240px] w-full resize-none rounded-2xl border-none bg-[#F3F2EE] px-6 py-4 text-sm leading-7 text-[#4A3728] outline-none transition-all focus:ring-2 focus:ring-[#8B5E3C]"
-                      />
+                      <>
+                        <textarea
+                          value={editingContent.description ?? ''}
+                          onChange={(event) => {
+                            setSaveError(null);
+                            setDescriptionError(null);
+                            setEditingContent({ ...editingContent, description: event.target.value });
+                          }}
+                          placeholder={isGeneratingDescription ? 'AI가 수업 내용을 분석하고 있습니다...' : '이 콘텐츠를 수업에서 어떻게 설명할지 입력하세요. 또는 AI 요약 버튼으로 자동 생성하세요.'}
+                          className="h-[240px] w-full resize-none rounded-2xl border-none bg-[#F3F2EE] px-6 py-4 text-sm leading-7 text-[#4A3728] outline-none transition-all focus:ring-2 focus:ring-[#8B5E3C]"
+                        />
+                        {descriptionError && (
+                          <div className="mt-2 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-xs font-medium text-red-700">
+                            <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+                            <span>{descriptionError}</span>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>

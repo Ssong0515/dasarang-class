@@ -25,6 +25,10 @@ import {
   syncNotebookLmPptxFolder,
   validateNotebookLmSyncPayload,
 } from './server/notebookLmSync';
+import {
+  generateDescriptionFromContent,
+  validateGenerateDescriptionPayload,
+} from './server/contentDescription';
 import multer from 'multer';
 
 dotenv.config();
@@ -124,7 +128,7 @@ async function startServer() {
     }
   };
 
-  // API routes go here
+  // API routes
   app.post(
     withBasePath(APP_BASE_PATH, '/api/drive/upload'),
     upload.single('file'),
@@ -153,7 +157,7 @@ async function startServer() {
     }
   );
 
-  app.get(withBasePath(APP_BASE_PATH, '/api/health'), (req, res) => {
+  app.get(withBasePath(APP_BASE_PATH, '/api/health'), (_req, res) => {
     res.json({ status: 'ok' });
   });
 
@@ -173,7 +177,7 @@ async function startServer() {
     }
   });
 
-  app.get(withBasePath(APP_BASE_PATH, '/api/google-sheets/status'), requireAdmin, async (req, res) => {
+  app.get(withBasePath(APP_BASE_PATH, '/api/google-sheets/status'), requireAdmin, async (_req, res) => {
     try {
       const status = await getGoogleSheetsStatus();
       res.json(status);
@@ -256,6 +260,18 @@ async function startServer() {
     }
   });
 
+  app.post(withBasePath(APP_BASE_PATH, '/api/contents/generate-description'), async (req, res) => {
+    try {
+      const payload = validateGenerateDescriptionPayload(req.body);
+      const description = await generateDescriptionFromContent(payload);
+      res.json({ description });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Description generation failed.';
+      const statusCode = /required|invalid/i.test(message) ? 400 : 500;
+      res.status(statusCode).json({ error: message });
+    }
+  });
+
   if (!isProduction) {
     const vite = await createViteServer({
       base: '/',
@@ -276,7 +292,7 @@ async function startServer() {
     };
 
     if (APP_BASE_PATH !== '/') {
-      app.get(new RegExp(`^${escapeForRegExp(APP_BASE_PATH)}$`), (req, res) => {
+      app.get(new RegExp(`^${escapeForRegExp(APP_BASE_PATH)}$`), (_req, res) => {
         res.redirect(301, `${APP_BASE_PATH}/`);
       });
     }
