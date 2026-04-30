@@ -10,6 +10,19 @@ import { getFirestore } from 'firebase-admin/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
 export const ADMIN_EMAIL = 'songes0515@gmail.com';
+const FALLBACK_ADMIN_EMAILS = [ADMIN_EMAIL, 'damunacenter@gmail.com'];
+
+const normalizeEmail = (email?: string | null) => email?.trim().toLowerCase() || '';
+
+const getConfiguredAdminEmails = () => {
+  const raw = process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || '';
+  const envEmails = raw
+    .split(',')
+    .map(normalizeEmail)
+    .filter(Boolean);
+
+  return new Set([...FALLBACK_ADMIN_EMAILS.map(normalizeEmail), ...envEmails]);
+};
 
 interface ServiceAccountConfig {
   projectId?: string;
@@ -96,8 +109,23 @@ export const getAdminDb = () =>
 
 export const verifyAdminIdToken = async (idToken: string): Promise<DecodedIdToken> => {
   const decodedToken = await getAdminAuth(getFirebaseAdminApp()).verifyIdToken(idToken);
+  const email = normalizeEmail(decodedToken.email);
 
-  if (decodedToken.email !== ADMIN_EMAIL) {
+  if (!email) {
+    throw new Error('관리자 권한이 필요합니다.');
+  }
+
+  if (getConfiguredAdminEmails().has(email)) {
+    return decodedToken;
+  }
+
+  const db = getAdminDb();
+  const [adminDoc, userDoc] = await Promise.all([
+    db.collection('admins').doc(email).get(),
+    db.collection('users').doc(decodedToken.uid).get(),
+  ]);
+
+  if (!adminDoc.exists && userDoc.data()?.role !== 'admin') {
     throw new Error('관리자 권한이 필요합니다.');
   }
 

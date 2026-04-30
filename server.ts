@@ -21,6 +21,10 @@ import {
 import { translateText, validateTranslatePayload } from './server/geminiTranslate';
 import { verifyAdminIdToken } from './server/firebaseAdmin';
 import { uploadStudentWork } from './server/googleDriveUpload';
+import {
+  syncNotebookLmPptxFolder,
+  validateNotebookLmSyncPayload,
+} from './server/notebookLmSync';
 import multer from 'multer';
 
 dotenv.config();
@@ -110,7 +114,8 @@ async function startServer() {
       }
 
       const idToken = authHeader.slice('Bearer '.length).trim();
-      await verifyAdminIdToken(idToken);
+      const decodedToken = await verifyAdminIdToken(idToken);
+      res.locals.adminUid = decodedToken.uid;
       next();
     } catch (error) {
       res.status(401).json({
@@ -150,6 +155,22 @@ async function startServer() {
 
   app.get(withBasePath(APP_BASE_PATH, '/api/health'), (req, res) => {
     res.json({ status: 'ok' });
+  });
+
+  app.post(withBasePath(APP_BASE_PATH, '/api/notebooklm/sync-folder'), requireAdmin, async (req, res) => {
+    try {
+      const payload = validateNotebookLmSyncPayload(req.body);
+      const result = await syncNotebookLmPptxFolder({
+        folderId: payload.folderId,
+        ownerUid: res.locals.adminUid as string,
+        driveAccessToken: payload.driveAccessToken,
+      });
+      res.json({ ok: true, ...result });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'NotebookLM folder sync failed.';
+      const statusCode = /required|not a folder/i.test(message) ? 400 : 500;
+      res.status(statusCode).json({ error: message });
+    }
   });
 
   app.get(withBasePath(APP_BASE_PATH, '/api/google-sheets/status'), requireAdmin, async (req, res) => {

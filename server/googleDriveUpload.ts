@@ -4,7 +4,7 @@ import { getAdminDb } from './firebaseAdmin';
 
 const CLASSROOMS_COLLECTION = 'classrooms';
 
-function getDriveClient() {
+export function getDriveClient() {
   const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
   if (!raw) throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON is not set.');
 
@@ -26,7 +26,7 @@ function getDriveClient() {
   return google.drive({ version: 'v3', auth });
 }
 
-async function getOrCreateFolder(
+export async function getOrCreateFolder(
   drive: ReturnType<typeof google.drive>,
   parentId: string,
   folderName: string
@@ -36,6 +36,8 @@ async function getOrCreateFolder(
     q: `'${parentId}' in parents and name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
     fields: 'files(id)',
     spaces: 'drive',
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
   });
 
   if (res.data.files && res.data.files.length > 0) {
@@ -50,6 +52,7 @@ async function getOrCreateFolder(
       parents: [parentId],
     },
     fields: 'id',
+    supportsAllDrives: true,
   });
 
   return folder.data.id!;

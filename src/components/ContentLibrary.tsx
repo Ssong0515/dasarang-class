@@ -17,11 +17,19 @@ import {
   GripVertical,
   Presentation,
   FolderOpen,
+  RefreshCw,
+  CheckCircle2,
+  AlertTriangle,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { LessonCategory, LessonContent } from '../types';
+import { LessonCategory, LessonContent, NotebookLmFolderSyncResult } from '../types';
 import { StudentContentCard, StudentContentPreviewFrame, SlideEmbed } from './StudentContentPreview';
-import { openDriveSlidePicker } from '../utils/drivePicker';
+import {
+  openDriveFolderPicker,
+  openDriveSlidePicker,
+  requestDriveSyncAccessToken,
+  type DriveFolder,
+} from '../utils/drivePicker';
 
 interface ContentLibraryProps {
   categories: LessonCategory[];
@@ -33,6 +41,7 @@ interface ContentLibraryProps {
   onReorderContents: (updates: Array<{ id: string; categoryId: string | null; order: number }>) => Promise<void>;
   onDeleteCategory: (id: string) => Promise<void>;
   onDeleteContent: (id: string) => Promise<void>;
+  onSyncNotebookLmFolder: (folderId: string, driveAccessToken: string) => Promise<NotebookLmFolderSyncResult>;
   onDirtyStateChange: (isDirty: boolean) => void;
 }
 
@@ -45,6 +54,32 @@ type DraggedContent = { id: string; categoryId: string | null };
 type ContentDropTarget = { categoryId: string | null; index: number } | null;
 
 const UNCATEGORIZED_ID = '__uncategorized__';
+const NOTEBOOKLM_SYNC_FOLDER_STORAGE_KEY = 'notebooklm-sync-folder';
+
+const readStoredNotebookLmFolder = (): DriveFolder | null => {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const raw = window.localStorage.getItem(NOTEBOOKLM_SYNC_FOLDER_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<DriveFolder>;
+    if (!parsed.id || !parsed.name || parsed.id === parsed.name) return null;
+    return { id: parsed.id, name: parsed.name };
+  } catch (_) {
+    return null;
+  }
+};
+
+const storeNotebookLmFolder = (folder: DriveFolder | null) => {
+  if (typeof window === 'undefined') return;
+
+  if (!folder) {
+    window.localStorage.removeItem(NOTEBOOKLM_SYNC_FOLDER_STORAGE_KEY);
+    return;
+  }
+
+  window.localStorage.setItem(NOTEBOOKLM_SYNC_FOLDER_STORAGE_KEY, JSON.stringify(folder));
+};
 
 const getContainerId = (categoryId: string | null) => categoryId ?? UNCATEGORIZED_ID;
 const getContentsForCategory = (items: LessonContent[], categoryId: string | null) =>
@@ -233,6 +268,7 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
   onReorderContents,
   onDeleteCategory,
   onDeleteContent,
+  onSyncNotebookLmFolder,
   onDirtyStateChange,
 }) => {
   const [isAddingCategory, setIsAddingCategory] = useState(false);
@@ -245,6 +281,11 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
   const [isFullscreenPreviewOpen, setIsFullscreenPreviewOpen] = useState(false);
   const [isSavingContent, setIsSavingContent] = useState(false);
   const [isPickingSlide, setIsPickingSlide] = useState(false);
+  const [isPickingNotebookLmFolder, setIsPickingNotebookLmFolder] = useState(false);
+  const [isSyncingNotebookLmFolder, setIsSyncingNotebookLmFolder] = useState(false);
+  const [notebookLmFolder, setNotebookLmFolder] = useState<DriveFolder | null>(() => readStoredNotebookLmFolder());
+  const [notebookLmSyncResult, setNotebookLmSyncResult] = useState<NotebookLmFolderSyncResult | null>(null);
+  const [notebookLmSyncError, setNotebookLmSyncError] = useState<string | null>(null);
   const [driveUrlInput, setDriveUrlInput] = useState('');
   const [saveError, setSaveError] = useState<string | null>(null);
   const [displayedCategories, setDisplayedCategories] = useState<LessonCategory[]>(categories);
@@ -478,6 +519,57 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
       setSaveError(getSaveErrorMessage(error));
     } finally {
       setIsSavingContent(false);
+    }
+  };
+
+  const handlePickNotebookLmFolder = async () => {
+    const clientId = import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID;
+    const apiKey = import.meta.env.VITE_GOOGLE_PICKER_API_KEY;
+    if (!clientId) return;
+
+    setIsPickingNotebookLmFolder(true);
+    setNotebookLmSyncError(null);
+
+    try {
+      const folder = await openDriveFolderPicker(apiKey, clientId, userEmail);
+      if (folder) {
+        setNotebookLmFolder(folder);
+        storeNotebookLmFolder(folder);
+        setNotebookLmSyncResult(null);
+      }
+    } catch (error) {
+      setNotebookLmSyncError(error instanceof Error ? error.message : 'Drive 폴더 선택에 실패했습니다.');
+    } finally {
+      setIsPickingNotebookLmFolder(false);
+    }
+  };
+
+  const handleClearNotebookLmFolder = () => {
+    setNotebookLmFolder(null);
+    storeNotebookLmFolder(null);
+    setNotebookLmSyncResult(null);
+    setNotebookLmSyncError(null);
+  };
+
+  const handleSyncNotebookLmFolder = async () => {
+    if (!notebookLmFolder) return;
+
+    setIsSyncingNotebookLmFolder(true);
+    setNotebookLmSyncError(null);
+
+    try {
+      const clientId = import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID;
+      if (!clientId) {
+        throw new Error('Google OAuth Client ID가 설정되어 있지 않습니다.');
+      }
+
+      const driveAccessToken = await requestDriveSyncAccessToken(clientId, userEmail);
+      const result = await onSyncNotebookLmFolder(notebookLmFolder.id, driveAccessToken);
+      setNotebookLmSyncResult(result);
+    } catch (error) {
+      setNotebookLmSyncError(error instanceof Error ? error.message : 'NotebookLM 폴더 동기화에 실패했습니다.');
+    } finally {
+      setIsSyncingNotebookLmFolder(false);
     }
   };
 
@@ -848,6 +940,8 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
     );
   };
 
+  const notebookLmSyncSummary = notebookLmSyncResult?.summary;
+
   return (
     <div className="flex-1 overflow-y-auto bg-[#FBFBFA] p-8">
       <div className="mx-auto max-w-6xl">
@@ -895,6 +989,95 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
             </button>
           </motion.div>
         )}
+
+        <section className="mb-8 rounded-[28px] border border-[#E5E3DD] bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
+              <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#8B5E3C]">
+                <Presentation size={14} />
+                NotebookLM 폴더 동기화
+              </div>
+              {notebookLmFolder ? (
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#FFF5E9] text-[#8B5E3C]">
+                    <FolderOpen size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate font-bold text-[#4A3728]">{notebookLmFolder.name}</p>
+                    <p className="truncate text-xs text-[#8B7E74]">선택된 Google Drive 폴더</p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm font-medium text-[#8B7E74]">동기화할 Google Drive 폴더를 선택하세요.</p>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void handlePickNotebookLmFolder()}
+                disabled={isPickingNotebookLmFolder || isSyncingNotebookLmFolder || !import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID}
+                className="flex items-center gap-2 rounded-2xl border border-[#E5E3DD] bg-white px-4 py-3 text-sm font-bold text-[#8B5E3C] transition-all hover:border-[#8B5E3C] hover:bg-[#FFF5E9] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <FolderOpen size={16} />
+                {isPickingNotebookLmFolder ? '폴더 선택 중...' : notebookLmFolder ? '폴더 변경' : '폴더 선택'}
+              </button>
+              {notebookLmFolder ? (
+                <button
+                  type="button"
+                  onClick={handleClearNotebookLmFolder}
+                  disabled={isSyncingNotebookLmFolder}
+                  className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[#E5E3DD] bg-white text-[#8B7E74] transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  title="선택한 폴더 해제"
+                >
+                  <X size={16} />
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => void handleSyncNotebookLmFolder()}
+                disabled={!notebookLmFolder || isSyncingNotebookLmFolder || isPickingNotebookLmFolder}
+                className="flex items-center gap-2 rounded-2xl bg-[#4A3728] px-5 py-3 text-sm font-bold text-white transition-all hover:bg-[#35271d] disabled:cursor-not-allowed disabled:bg-[#B8AA9A]"
+              >
+                <RefreshCw size={16} className={isSyncingNotebookLmFolder ? 'animate-spin' : ''} />
+                {isSyncingNotebookLmFolder ? '동기화 중...' : '동기화 실행'}
+              </button>
+            </div>
+          </div>
+
+          {notebookLmSyncError ? (
+            <div className="mt-4 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+              <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+              <span>{notebookLmSyncError}</span>
+            </div>
+          ) : null}
+
+          {notebookLmSyncSummary ? (
+            <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+              <div className="flex flex-wrap items-center gap-3 font-bold">
+                <span className="flex items-center gap-2">
+                  <CheckCircle2 size={16} />
+                  스캔 {notebookLmSyncSummary.scanned}
+                </span>
+                <span>생성 {notebookLmSyncSummary.created}</span>
+                <span>갱신 {notebookLmSyncSummary.updated}</span>
+                <span>건너뜀 {notebookLmSyncSummary.skipped}</span>
+                <span>실패 {notebookLmSyncSummary.failed}</span>
+              </div>
+              {notebookLmSyncResult.items.length > 0 ? (
+                <div className="mt-3 max-h-32 space-y-1 overflow-y-auto text-xs font-medium">
+                  {notebookLmSyncResult.items.map((item) => (
+                    <div key={`${item.fileId}-${item.status}`} className="flex gap-2">
+                      <span className="shrink-0 uppercase">{item.status}</span>
+                      <span className="truncate">{item.fileName}</span>
+                      {item.message ? <span className="shrink-0 text-green-700/70">{item.message}</span> : null}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </section>
 
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
           <div className="space-y-5 lg:col-span-1">
