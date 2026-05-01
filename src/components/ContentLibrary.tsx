@@ -17,11 +17,20 @@ import {
   GripVertical,
   Presentation,
   FolderOpen,
+  RefreshCw,
+  CheckCircle2,
+  AlertTriangle,
+  Sparkles,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { LessonCategory, LessonContent } from '../types';
+import { LessonCategory, LessonContent, NotebookLmFolderSyncResult } from '../types';
 import { StudentContentCard, StudentContentPreviewFrame, SlideEmbed } from './StudentContentPreview';
-import { openDriveSlidePicker } from '../utils/drivePicker';
+import {
+  openDriveFolderPicker,
+  openDriveSlidePicker,
+  requestDriveSyncAccessToken,
+  type DriveFolder,
+} from '../utils/drivePicker';
 
 interface ContentLibraryProps {
   categories: LessonCategory[];
@@ -33,6 +42,7 @@ interface ContentLibraryProps {
   onReorderContents: (updates: Array<{ id: string; categoryId: string | null; order: number }>) => Promise<void>;
   onDeleteCategory: (id: string) => Promise<void>;
   onDeleteContent: (id: string) => Promise<void>;
+  onSyncNotebookLmFolder: (folderId: string, driveAccessToken: string) => Promise<NotebookLmFolderSyncResult>;
   onDirtyStateChange: (isDirty: boolean) => void;
 }
 
@@ -45,6 +55,34 @@ type DraggedContent = { id: string; categoryId: string | null };
 type ContentDropTarget = { categoryId: string | null; index: number } | null;
 
 const UNCATEGORIZED_ID = '__uncategorized__';
+const NOTEBOOKLM_SYNC_FOLDER_STORAGE_KEY = 'notebooklm-sync-folder';
+const CONTENT_LIST_AUTOSCROLL_EDGE = 56;
+const CONTENT_LIST_AUTOSCROLL_MAX_STEP = 24;
+
+const readStoredNotebookLmFolder = (): DriveFolder | null => {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const raw = window.localStorage.getItem(NOTEBOOKLM_SYNC_FOLDER_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<DriveFolder>;
+    if (!parsed.id || !parsed.name || parsed.id === parsed.name) return null;
+    return { id: parsed.id, name: parsed.name };
+  } catch (_) {
+    return null;
+  }
+};
+
+const storeNotebookLmFolder = (folder: DriveFolder | null) => {
+  if (typeof window === 'undefined') return;
+
+  if (!folder) {
+    window.localStorage.removeItem(NOTEBOOKLM_SYNC_FOLDER_STORAGE_KEY);
+    return;
+  }
+
+  window.localStorage.setItem(NOTEBOOKLM_SYNC_FOLDER_STORAGE_KEY, JSON.stringify(folder));
+};
 
 const getContainerId = (categoryId: string | null) => categoryId ?? UNCATEGORIZED_ID;
 const getContentsForCategory = (items: LessonContent[], categoryId: string | null) =>
@@ -64,6 +102,15 @@ const normalizeContentDraft = (draft: Partial<LessonContent> | null | undefined,
   slideUrl: draft?.slideUrl?.trim() ?? '',
 });
 
+
+const toDriveEmbedUrl = (raw: string): string => {
+  const trimmed = raw.trim();
+  const slidesMatch = trimmed.match(/\/presentation\/d\/([^/?#]+)/);
+  if (slidesMatch) return `https://docs.google.com/presentation/d/${slidesMatch[1]}/embed`;
+  const fileMatch = trimmed.match(/\/file\/d\/([^/?#]+)/);
+  if (fileMatch) return `https://drive.google.com/file/d/${fileMatch[1]}/preview`;
+  return trimmed;
+};
 
 const isContentDraftDirty = (
   draft: Partial<LessonContent> | null,
@@ -160,6 +207,31 @@ const applyContentReorderUpdates = (
   );
 };
 
+const scrollByPointerProximity = (element: HTMLElement, clientY: number) => {
+  const rect = element.getBoundingClientRect();
+  const distanceFromTop = clientY - rect.top;
+  const distanceFromBottom = rect.bottom - clientY;
+  let scrollDelta = 0;
+
+  if (distanceFromTop >= 0 && distanceFromTop < CONTENT_LIST_AUTOSCROLL_EDGE) {
+    scrollDelta = -Math.ceil(
+      ((CONTENT_LIST_AUTOSCROLL_EDGE - distanceFromTop) / CONTENT_LIST_AUTOSCROLL_EDGE) *
+        CONTENT_LIST_AUTOSCROLL_MAX_STEP
+    );
+  } else if (distanceFromBottom >= 0 && distanceFromBottom < CONTENT_LIST_AUTOSCROLL_EDGE) {
+    scrollDelta = Math.ceil(
+      ((CONTENT_LIST_AUTOSCROLL_EDGE - distanceFromBottom) / CONTENT_LIST_AUTOSCROLL_EDGE) *
+        CONTENT_LIST_AUTOSCROLL_MAX_STEP
+    );
+  }
+
+  if (scrollDelta === 0) return false;
+
+  const before = element.scrollTop;
+  element.scrollTop += scrollDelta;
+  return element.scrollTop !== before;
+};
+
 const buildContentReorderUpdates = (
   items: LessonContent[],
   draggingContentId: string,
@@ -224,6 +296,7 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
   onReorderContents,
   onDeleteCategory,
   onDeleteContent,
+  onSyncNotebookLmFolder,
   onDirtyStateChange,
 }) => {
   const [isAddingCategory, setIsAddingCategory] = useState(false);
@@ -236,6 +309,14 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
   const [isFullscreenPreviewOpen, setIsFullscreenPreviewOpen] = useState(false);
   const [isSavingContent, setIsSavingContent] = useState(false);
   const [isPickingSlide, setIsPickingSlide] = useState(false);
+  const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
+  const [descriptionError, setDescriptionError] = useState<string | null>(null);
+  const [isPickingNotebookLmFolder, setIsPickingNotebookLmFolder] = useState(false);
+  const [isSyncingNotebookLmFolder, setIsSyncingNotebookLmFolder] = useState(false);
+  const [notebookLmFolder, setNotebookLmFolder] = useState<DriveFolder | null>(() => readStoredNotebookLmFolder());
+  const [notebookLmSyncResult, setNotebookLmSyncResult] = useState<NotebookLmFolderSyncResult | null>(null);
+  const [notebookLmSyncError, setNotebookLmSyncError] = useState<string | null>(null);
+  const [driveUrlInput, setDriveUrlInput] = useState('');
   const [saveError, setSaveError] = useState<string | null>(null);
   const [displayedCategories, setDisplayedCategories] = useState<LessonCategory[]>(categories);
   const [displayedContents, setDisplayedContents] = useState<LessonContent[]>(contents);
@@ -248,6 +329,7 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
   const categoryDragRef = useRef<string | null>(null);
   const contentDragRef = useRef<DraggedContent | null>(null);
   const dragCleanupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const contentLibraryScrollRef = useRef<HTMLDivElement | null>(null);
 
   const previewContent = editingContent
     ? ({
@@ -446,6 +528,7 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
     setIsFullscreenPreviewOpen(false);
     setIsSavingContent(false);
     setSaveError(null);
+    setDriveUrlInput('');
   };
 
   const handleSaveContent = async () => {
@@ -467,6 +550,106 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
       setSaveError(getSaveErrorMessage(error));
     } finally {
       setIsSavingContent(false);
+    }
+  };
+
+  const handlePickNotebookLmFolder = async () => {
+    const clientId = import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID;
+    const apiKey = import.meta.env.VITE_GOOGLE_PICKER_API_KEY;
+    if (!clientId) return;
+
+    setIsPickingNotebookLmFolder(true);
+    setNotebookLmSyncError(null);
+
+    try {
+      const folder = await openDriveFolderPicker(apiKey, clientId, userEmail);
+      if (folder) {
+        setNotebookLmFolder(folder);
+        storeNotebookLmFolder(folder);
+        setNotebookLmSyncResult(null);
+      }
+    } catch (error) {
+      setNotebookLmSyncError(error instanceof Error ? error.message : 'Drive 폴더 선택에 실패했습니다.');
+    } finally {
+      setIsPickingNotebookLmFolder(false);
+    }
+  };
+
+  const handleClearNotebookLmFolder = () => {
+    setNotebookLmFolder(null);
+    storeNotebookLmFolder(null);
+    setNotebookLmSyncResult(null);
+    setNotebookLmSyncError(null);
+  };
+
+  const handleSyncNotebookLmFolder = async () => {
+    if (!notebookLmFolder) return;
+
+    setIsSyncingNotebookLmFolder(true);
+    setNotebookLmSyncError(null);
+
+    try {
+      const clientId = import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID;
+      if (!clientId) {
+        throw new Error('Google OAuth Client ID가 설정되어 있지 않습니다.');
+      }
+
+      const driveAccessToken = await requestDriveSyncAccessToken(clientId, userEmail);
+      const result = await onSyncNotebookLmFolder(notebookLmFolder.id, driveAccessToken);
+      setNotebookLmSyncResult(result);
+    } catch (error) {
+      setNotebookLmSyncError(error instanceof Error ? error.message : 'NotebookLM 폴더 동기화에 실패했습니다.');
+    } finally {
+      setIsSyncingNotebookLmFolder(false);
+    }
+  };
+
+  const handleGenerateDescription = async () => {
+    if (!editingContent) return;
+    const hasSlide = Boolean(editingContent.slideUrl?.trim());
+    const hasHtml = Boolean(editingContent.html?.trim());
+    if (!hasSlide && !hasHtml) return;
+
+    setIsGeneratingDescription(true);
+    setDescriptionError(null);
+
+    try {
+      const title = editingContent.title?.trim() || '수업 자료';
+      let body: Record<string, string>;
+
+      if (hasSlide) {
+        const clientId = import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID;
+        if (!clientId) throw new Error('Google OAuth Client ID가 설정되어 있지 않습니다.');
+        const driveAccessToken = await requestDriveSyncAccessToken(clientId, userEmail);
+        body = { title, slideUrl: editingContent.slideUrl!, driveAccessToken };
+      } else {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(editingContent.html!, 'text/html');
+        const text = (doc.body.innerText || doc.body.textContent || '').slice(0, 5000);
+        if (!text.trim()) throw new Error('HTML에서 텍스트를 추출할 수 없습니다.');
+        body = { title, text };
+      }
+
+      const response = await fetch('/api/contents/generate-description', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error ?? '요약 생성에 실패했습니다.');
+      }
+
+      const data = (await response.json()) as { description?: string };
+      if (data.description) {
+        setEditingContent({ ...editingContent, description: data.description });
+        setEditorTab('description');
+      }
+    } catch (error) {
+      setDescriptionError(error instanceof Error ? error.message : '요약 생성에 실패했습니다.');
+    } finally {
+      setIsGeneratingDescription(false);
     }
   };
 
@@ -600,6 +783,22 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
     return event.clientY < rect.top + rect.height / 2 ? index : index + 1;
   };
 
+  const handleContentDragAutoScroll = (event: React.DragEvent<HTMLElement>) => {
+    const activeDrag = contentDragRef.current ?? draggingContent;
+    if (!activeDrag) return;
+
+    const sourceElement = event.currentTarget as HTMLElement;
+    const listElement = sourceElement.closest('[data-content-scroll-list="true"]') as HTMLElement | null;
+
+    if (listElement && scrollByPointerProximity(listElement, event.clientY)) {
+      return;
+    }
+
+    if (contentLibraryScrollRef.current) {
+      scrollByPointerProximity(contentLibraryScrollRef.current, event.clientY);
+    }
+  };
+
   const getResolvedContentDropTarget = (
     categoryId: string | null,
     fallbackIndex: number
@@ -620,6 +819,7 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
     if (!activeDrag) return;
     event.preventDefault();
     event.stopPropagation();
+    handleContentDragAutoScroll(event);
     setContentDropTargetIfChanged({ categoryId, index: getContentDropIndex(event, index) });
   };
 
@@ -643,6 +843,7 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
     if (!activeDrag) return;
     event.preventDefault();
     event.stopPropagation();
+    handleContentDragAutoScroll(event);
     setContentDropTargetIfChanged({
       categoryId,
       index: getContentsForCategory(displayedContents, categoryId).length,
@@ -820,7 +1021,10 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
           <AnimatePresence initial={false}>
             {isExpanded && (
               <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden px-4 pb-4">
-                <div className="space-y-0.5 border-l border-[#E5E3DD] pl-3 sm:pl-4">
+                <div
+                  data-content-scroll-list="true"
+                  className="max-h-[min(58vh,460px)] min-h-[72px] space-y-0.5 overflow-y-auto overscroll-contain border-l border-[#E5E3DD] pl-3 pr-1 sm:pl-4"
+                >
                   {categoryContents.map((content, index) => renderContentRow(content, category.id, index))}
                   {renderDropIndicator(category.id, categoryContents.length)}
                   {renderAppendZone(category.id, categoryContents.length === 0)}
@@ -837,8 +1041,10 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
     );
   };
 
+  const notebookLmSyncSummary = notebookLmSyncResult?.summary;
+
   return (
-    <div className="flex-1 overflow-y-auto bg-[#FBFBFA] p-8">
+    <div ref={contentLibraryScrollRef} className="flex-1 overflow-y-auto bg-[#FBFBFA] p-8">
       <div className="mx-auto max-w-6xl">
         <header className="mb-12 flex items-center justify-between gap-4">
           <div>
@@ -885,6 +1091,95 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
           </motion.div>
         )}
 
+        <section className="mb-8 rounded-[28px] border border-[#E5E3DD] bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
+              <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#8B5E3C]">
+                <Presentation size={14} />
+                NotebookLM 폴더 동기화
+              </div>
+              {notebookLmFolder ? (
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#FFF5E9] text-[#8B5E3C]">
+                    <FolderOpen size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate font-bold text-[#4A3728]">{notebookLmFolder.name}</p>
+                    <p className="truncate text-xs text-[#8B7E74]">선택된 Google Drive 폴더</p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm font-medium text-[#8B7E74]">동기화할 Google Drive 폴더를 선택하세요.</p>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void handlePickNotebookLmFolder()}
+                disabled={isPickingNotebookLmFolder || isSyncingNotebookLmFolder || !import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID}
+                className="flex items-center gap-2 rounded-2xl border border-[#E5E3DD] bg-white px-4 py-3 text-sm font-bold text-[#8B5E3C] transition-all hover:border-[#8B5E3C] hover:bg-[#FFF5E9] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <FolderOpen size={16} />
+                {isPickingNotebookLmFolder ? '폴더 선택 중...' : notebookLmFolder ? '폴더 변경' : '폴더 선택'}
+              </button>
+              {notebookLmFolder ? (
+                <button
+                  type="button"
+                  onClick={handleClearNotebookLmFolder}
+                  disabled={isSyncingNotebookLmFolder}
+                  className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[#E5E3DD] bg-white text-[#8B7E74] transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  title="선택한 폴더 해제"
+                >
+                  <X size={16} />
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => void handleSyncNotebookLmFolder()}
+                disabled={!notebookLmFolder || isSyncingNotebookLmFolder || isPickingNotebookLmFolder}
+                className="flex items-center gap-2 rounded-2xl bg-[#4A3728] px-5 py-3 text-sm font-bold text-white transition-all hover:bg-[#35271d] disabled:cursor-not-allowed disabled:bg-[#B8AA9A]"
+              >
+                <RefreshCw size={16} className={isSyncingNotebookLmFolder ? 'animate-spin' : ''} />
+                {isSyncingNotebookLmFolder ? '동기화 중...' : '동기화 실행'}
+              </button>
+            </div>
+          </div>
+
+          {notebookLmSyncError ? (
+            <div className="mt-4 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+              <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+              <span>{notebookLmSyncError}</span>
+            </div>
+          ) : null}
+
+          {notebookLmSyncSummary ? (
+            <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+              <div className="flex flex-wrap items-center gap-3 font-bold">
+                <span className="flex items-center gap-2">
+                  <CheckCircle2 size={16} />
+                  스캔 {notebookLmSyncSummary.scanned}
+                </span>
+                <span>생성 {notebookLmSyncSummary.created}</span>
+                <span>갱신 {notebookLmSyncSummary.updated}</span>
+                <span>건너뜀 {notebookLmSyncSummary.skipped}</span>
+                <span>실패 {notebookLmSyncSummary.failed}</span>
+              </div>
+              {notebookLmSyncResult.items.length > 0 ? (
+                <div className="mt-3 max-h-32 space-y-1 overflow-y-auto text-xs font-medium">
+                  {notebookLmSyncResult.items.map((item) => (
+                    <div key={`${item.fileId}-${item.status}`} className="flex gap-2">
+                      <span className="shrink-0 uppercase">{item.status}</span>
+                      <span className="truncate">{item.fileName}</span>
+                      {item.message ? <span className="shrink-0 text-green-700/70">{item.message}</span> : null}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </section>
+
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
           <div className="space-y-5 lg:col-span-1">
             {contentReorderError && (
@@ -911,7 +1206,10 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                 </button>
                 <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-[#8B7E74]">{uncategorizedContents.length}</span>
               </div>
-              <div className="space-y-0.5">
+              <div
+                data-content-scroll-list="true"
+                className="max-h-[min(60vh,520px)] min-h-[80px] space-y-0.5 overflow-y-auto overscroll-contain pr-1"
+              >
                 {uncategorizedContents.map((content, index) => renderContentRow(content, null, index))}
                 {renderDropIndicator(null, uncategorizedContents.length)}
                 {renderAppendZone(null, uncategorizedContents.length === 0)}
@@ -1014,29 +1312,63 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                         </button>
                       </div>
                     ) : (
-                      <button
-                        type="button"
-                        disabled={isPickingSlide || !import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID}
-                        onClick={async () => {
-                          const clientId = import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID;
-                          const apiKey = import.meta.env.VITE_GOOGLE_PICKER_API_KEY;
-                          if (!clientId) return;
-                          setIsPickingSlide(true);
-                          try {
-                            const file = await openDriveSlidePicker(apiKey, clientId, userEmail);
-                            if (file) {
-                              setSaveError(null);
-                              setEditingContent({ ...editingContent, slideUrl: file.embedUrl });
+                      <div className="space-y-3">
+                        <button
+                          type="button"
+                          disabled={isPickingSlide || !import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID}
+                          onClick={async () => {
+                            const clientId = import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID;
+                            const apiKey = import.meta.env.VITE_GOOGLE_PICKER_API_KEY;
+                            if (!clientId) return;
+                            setIsPickingSlide(true);
+                            try {
+                              const file = await openDriveSlidePicker(apiKey, clientId, userEmail);
+                              if (file) {
+                                setSaveError(null);
+                                setDriveUrlInput('');
+                                setEditingContent({ ...editingContent, slideUrl: file.embedUrl });
+                              }
+                            } finally {
+                              setIsPickingSlide(false);
                             }
-                          } finally {
-                            setIsPickingSlide(false);
-                          }
-                        }}
-                        className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-6 py-4 font-bold text-[#8B7E74] transition-all hover:border-[#8B5E3C] hover:bg-[#FFF5E9] hover:text-[#8B5E3C] disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        <FolderOpen size={18} />
-                        {isPickingSlide ? '드라이브 열기 중...' : 'Google Drive에서 슬라이드 선택'}
-                      </button>
+                          }}
+                          className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-6 py-4 font-bold text-[#8B7E74] transition-all hover:border-[#8B5E3C] hover:bg-[#FFF5E9] hover:text-[#8B5E3C] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <FolderOpen size={18} />
+                          {isPickingSlide ? '드라이브 열기 중...' : 'Google Drive에서 슬라이드 선택'}
+                        </button>
+                        <div className="flex items-center gap-2">
+                          <div className="h-px flex-1 bg-[#E5E3DD]" />
+                          <span className="text-xs font-bold text-[#A89F94]">또는 URL 직접 입력</span>
+                          <div className="h-px flex-1 bg-[#E5E3DD]" />
+                        </div>
+                        <form
+                          onSubmit={(event) => {
+                            event.preventDefault();
+                            if (!driveUrlInput.trim()) return;
+                            const embedUrl = toDriveEmbedUrl(driveUrlInput);
+                            setSaveError(null);
+                            setDriveUrlInput('');
+                            setEditingContent({ ...editingContent, slideUrl: embedUrl });
+                          }}
+                          className="flex gap-2"
+                        >
+                          <input
+                            type="text"
+                            value={driveUrlInput}
+                            onChange={(event) => setDriveUrlInput(event.target.value)}
+                            placeholder="Google Drive 링크를 붙여넣으세요"
+                            className="flex-1 rounded-2xl border border-[#E5E3DD] bg-[#F3F2EE] px-4 py-3 text-sm text-[#4A3728] outline-none transition-all focus:border-[#8B5E3C] focus:ring-2 focus:ring-[#8B5E3C]"
+                          />
+                          <button
+                            type="submit"
+                            disabled={!driveUrlInput.trim()}
+                            className="rounded-2xl bg-[#8B5E3C] px-5 py-3 text-sm font-bold text-white transition-all hover:bg-[#724D31] disabled:cursor-not-allowed disabled:bg-[#B8AA9A]"
+                          >
+                            적용
+                          </button>
+                        </form>
+                      </div>
                     )}
                   </div>
 
@@ -1047,6 +1379,16 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                         {editorSectionTitle}
                       </label>
                       <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void handleGenerateDescription()}
+                          disabled={isGeneratingDescription || (!editingContent?.html?.trim() && !editingContent?.slideUrl?.trim())}
+                          title="AI로 수업 내용 자동 요약"
+                          className="flex items-center gap-1.5 rounded-xl border border-[#E5E3DD] bg-white px-3 py-1.5 text-xs font-bold text-[#8B5E3C] transition-all hover:border-[#8B5E3C] hover:bg-[#FFF5E9] disabled:cursor-not-allowed disabled:border-[#ECE9E2] disabled:bg-[#F8F6F2] disabled:text-[#C8BEB2]"
+                        >
+                          <Sparkles size={13} className={isGeneratingDescription ? 'animate-pulse' : ''} />
+                          {isGeneratingDescription ? '생성 중...' : 'AI 요약'}
+                        </button>
                         <div className="flex items-center gap-1 rounded-xl bg-[#F3F2EE] p-1">
                           <button
                             onClick={() => setEditorTab('edit')}
@@ -1123,15 +1465,24 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                         ) : null}
                       </div>
                     ) : (
-                      <textarea
-                        value={editingContent.description ?? ''}
-                        onChange={(event) => {
-                          setSaveError(null);
-                          setEditingContent({ ...editingContent, description: event.target.value });
-                        }}
-                        placeholder="이 콘텐츠를 수업에서 어떻게 설명할지 입력하세요"
-                        className="h-[240px] w-full resize-none rounded-2xl border-none bg-[#F3F2EE] px-6 py-4 text-sm leading-7 text-[#4A3728] outline-none transition-all focus:ring-2 focus:ring-[#8B5E3C]"
-                      />
+                      <>
+                        <textarea
+                          value={editingContent.description ?? ''}
+                          onChange={(event) => {
+                            setSaveError(null);
+                            setDescriptionError(null);
+                            setEditingContent({ ...editingContent, description: event.target.value });
+                          }}
+                          placeholder={isGeneratingDescription ? 'AI가 수업 내용을 분석하고 있습니다...' : '이 콘텐츠를 수업에서 어떻게 설명할지 입력하세요. 또는 AI 요약 버튼으로 자동 생성하세요.'}
+                          className="h-[240px] w-full resize-none rounded-2xl border-none bg-[#F3F2EE] px-6 py-4 text-sm leading-7 text-[#4A3728] outline-none transition-all focus:ring-2 focus:ring-[#8B5E3C]"
+                        />
+                        {descriptionError && (
+                          <div className="mt-2 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-xs font-medium text-red-700">
+                            <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+                            <span>{descriptionError}</span>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>

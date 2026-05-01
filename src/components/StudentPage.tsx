@@ -21,6 +21,11 @@ import {
 
 const STUDENT_HOME_HISTORY_VIEW = 'student-home';
 const STUDENT_CLASSROOM_HISTORY_VIEW = 'student-classroom';
+const CONTENT_MENU_WIDTH = 288;
+const CONTENT_MENU_MARGIN = 16;
+const CONTENT_MENU_GAP = 12;
+const CONTENT_MENU_MAX_HEIGHT = 360;
+const CONTENT_MENU_MIN_HEIGHT = 160;
 
 interface StudentPageProps {
   onBackToAdmin?: () => void;
@@ -38,6 +43,13 @@ type TranslationLanguage = Exclude<Language, 'KO'>;
 type StudentHistoryState = {
   studentPageView?: typeof STUDENT_HOME_HISTORY_VIEW | typeof STUDENT_CLASSROOM_HISTORY_VIEW;
   studentClassroomId?: string | null;
+};
+
+type ContentDropdownPosition = {
+  top: number;
+  left: number;
+  width: number;
+  maxHeight: number;
 };
 
 const translations = {
@@ -222,6 +234,30 @@ const translateText = async (
   return payload.translatedText?.trim() || null;
 };
 
+const calculateContentDropdownPosition = (button: HTMLElement): ContentDropdownPosition => {
+  const rect = button.getBoundingClientRect();
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const width = Math.max(
+    180,
+    Math.min(CONTENT_MENU_WIDTH, viewportWidth - CONTENT_MENU_MARGIN * 2)
+  );
+  const left = Math.min(
+    Math.max(rect.left, CONTENT_MENU_MARGIN),
+    viewportWidth - CONTENT_MENU_MARGIN - width
+  );
+  const belowSpace = viewportHeight - rect.bottom - CONTENT_MENU_GAP - CONTENT_MENU_MARGIN;
+  const aboveSpace = rect.top - CONTENT_MENU_GAP - CONTENT_MENU_MARGIN;
+  const openAbove = belowSpace < CONTENT_MENU_MIN_HEIGHT && aboveSpace > belowSpace;
+  const availableHeight = Math.max(openAbove ? aboveSpace : belowSpace, CONTENT_MENU_MIN_HEIGHT);
+  const maxHeight = Math.min(CONTENT_MENU_MAX_HEIGHT, availableHeight);
+  const top = openAbove
+    ? Math.max(CONTENT_MENU_MARGIN, rect.top - CONTENT_MENU_GAP - maxHeight)
+    : Math.min(rect.bottom + CONTENT_MENU_GAP, viewportHeight - CONTENT_MENU_MARGIN - maxHeight);
+
+  return { top, left, width, maxHeight };
+};
+
 export const StudentPage: React.FC<StudentPageProps> = ({
   onBackToAdmin,
   onLogin,
@@ -238,6 +274,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   );
   const [selectedContent, setSelectedContent] = useState<LessonContent | null>(null);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [contentDropdownPosition, setContentDropdownPosition] = useState<ContentDropdownPosition | null>(null);
   const [translatedClassroomNames, setTranslatedClassroomNames] = useState<Record<string, string>>(
     {}
   );
@@ -250,6 +287,8 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   const [uploadResult, setUploadResult] = useState<{ fileName: string; webViewLink: string } | null>(null);
   const [uploadError, setUploadError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const contentDropdownRef = useRef<HTMLDivElement | null>(null);
+  const contentDropdownButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   const setUploadFileWithPreview = (file: File | null) => {
     setUploadFile(file);
@@ -315,17 +354,32 @@ export const StudentPage: React.FC<StudentPageProps> = ({
     }))
     .filter((group) => group.items.length > 0);
 
+  const closeContentDropdown = () => {
+    setOpenDropdown(null);
+    setContentDropdownPosition(null);
+  };
+
+  const toggleContentDropdown = (categoryId: string, button: HTMLButtonElement) => {
+    if (openDropdown === categoryId) {
+      closeContentDropdown();
+      return;
+    }
+
+    setOpenDropdown(categoryId);
+    setContentDropdownPosition(calculateContentDropdownPosition(button));
+  };
+
   const applyHomeViewState = () => {
     setActiveClassroomId(null);
     setSelectedContent(null);
-    setOpenDropdown(null);
+    closeContentDropdown();
     setIsLangOpen(false);
   };
 
   const applyClassroomViewState = (classroomId: string) => {
     setActiveClassroomId(classroomId);
     setSelectedContent(null);
-    setOpenDropdown(null);
+    closeContentDropdown();
     setIsLangOpen(false);
   };
 
@@ -404,9 +458,57 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   useEffect(() => {
     if (selectedContent && !visibleContentIds.has(selectedContent.id)) {
       setSelectedContent(null);
-      setOpenDropdown(null);
+      closeContentDropdown();
     }
   }, [selectedContent, visibleContentIds]);
+
+  useEffect(() => {
+    if (!openDropdown) {
+      setContentDropdownPosition(null);
+    }
+  }, [openDropdown]);
+
+  useEffect(() => {
+    if (!openDropdown) return;
+
+    const closeOnViewportChange = () => closeContentDropdown();
+    const handleViewportScroll = (event: Event) => {
+      const target = event.target as Node;
+      if (contentDropdownRef.current?.contains(target)) {
+        return;
+      }
+
+      closeContentDropdown();
+    };
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      const menuElement = contentDropdownRef.current;
+      const buttonElement = contentDropdownButtonRefs.current[openDropdown];
+
+      if (menuElement?.contains(target) || buttonElement?.contains(target)) {
+        return;
+      }
+
+      closeContentDropdown();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeContentDropdown();
+      }
+    };
+
+    window.addEventListener('resize', closeOnViewportChange);
+    window.addEventListener('scroll', handleViewportScroll, true);
+    window.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('resize', closeOnViewportChange);
+      window.removeEventListener('scroll', handleViewportScroll, true);
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [openDropdown]);
 
   useEffect(() => {
     if (lang === 'KO') {
@@ -599,71 +701,89 @@ export const StudentPage: React.FC<StudentPageProps> = ({
 
           {activeClassroomId && contentsByCategory.length > 0 && (
             <div className="flex flex-wrap items-center gap-2 border-t border-[#F0ECE6] pt-1">
-              {contentsByCategory.map((group) => (
-                <div key={group.category.id} className="relative max-w-full">
-                  <button
-                    onClick={() =>
-                      setOpenDropdown(openDropdown === group.category.id ? null : group.category.id)
-                    }
-                    className={`flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-bold transition-all ${
-                      openDropdown === group.category.id ||
-                      (selectedContent && group.items.some((item) => item.id === selectedContent.id))
-                        ? 'bg-[#8B5E3C] text-white shadow-md'
-                        : 'bg-[#F7F4EF] text-[#6C6258] hover:bg-[#EEE7DD] hover:text-[#4A3728]'
-                    }`}
-                  >
-                    {group.category.name}
-                    <span
-                      className={`text-xs ${
-                        openDropdown === group.category.id ||
-                        (selectedContent && group.items.some((item) => item.id === selectedContent.id))
-                          ? 'text-white/70'
-                          : 'text-[#9B8F84]'
-                      }`}
-                    >
-                      ({group.items.length})
-                    </span>
-                    <ChevronDown
-                      size={14}
-                      className={`transition-transform duration-200 ${
-                        openDropdown === group.category.id ? 'rotate-180' : ''
-                      }`}
-                    />
-                  </button>
+              {contentsByCategory.map((group) => {
+                const isDropdownOpen = openDropdown === group.category.id;
+                const hasSelectedContent = Boolean(
+                  selectedContent && group.items.some((item) => item.id === selectedContent.id)
+                );
+                const menuId = `student-content-menu-${group.category.id}`;
 
-                  {openDropdown === group.category.id && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="absolute left-0 top-full z-[70] mt-3 w-72 overflow-hidden rounded-2xl border border-[#E5E3DD] bg-white shadow-xl"
+                return (
+                  <div key={group.category.id} className="relative max-w-full">
+                    <button
+                      ref={(element) => {
+                        contentDropdownButtonRefs.current[group.category.id] = element;
+                      }}
+                      type="button"
+                      aria-expanded={isDropdownOpen}
+                      aria-controls={menuId}
+                      onClick={(event) => toggleContentDropdown(group.category.id, event.currentTarget)}
+                      className={`flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-bold transition-all ${
+                        isDropdownOpen || hasSelectedContent
+                          ? 'bg-[#8B5E3C] text-white shadow-md'
+                          : 'bg-[#F7F4EF] text-[#6C6258] hover:bg-[#EEE7DD] hover:text-[#4A3728]'
+                      }`}
                     >
-                      {group.items.map((content) => {
-                        const isActive = selectedContent?.id === content.id;
-                        return (
-                          <button
-                            key={content.id}
-                            onClick={() => {
-                              setSelectedContent(content);
-                              setOpenDropdown(null);
-                            }}
-                            className={`flex w-full items-center gap-3 px-5 py-3.5 text-left transition-all ${
-                              isActive
-                                ? 'bg-[#FFF5E9] text-[#8B5E3C]'
-                                : 'text-[#4A3728] hover:bg-[#FBFBFA]'
-                            }`}
-                          >
-                            <FileText
-                              size={16}
-                              className={isActive ? 'text-[#8B5E3C]' : 'text-[#A89F94]'}
-                            />
-                            <span className="truncate text-sm font-medium">{content.title}</span>
-                          </button>
-                        );
-                      })}
-                    </motion.div>
-                  )}
-                </div>
-              ))}
+                      {group.category.name}
+                      <span
+                        className={`text-xs ${
+                          isDropdownOpen || hasSelectedContent ? 'text-white/70' : 'text-[#9B8F84]'
+                        }`}
+                      >
+                        ({group.items.length})
+                      </span>
+                      <ChevronDown
+                        size={14}
+                        className={`transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`}
+                      />
+                    </button>
+
+                    {isDropdownOpen && contentDropdownPosition && (
+                      <motion.div
+                        ref={contentDropdownRef}
+                        id={menuId}
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="fixed z-[90] overflow-hidden rounded-2xl border border-[#E5E3DD] bg-white shadow-xl"
+                        style={{
+                          left: contentDropdownPosition.left,
+                          top: contentDropdownPosition.top,
+                          width: contentDropdownPosition.width,
+                        }}
+                      >
+                        <div
+                          className="overscroll-contain overflow-y-auto"
+                          style={{ maxHeight: contentDropdownPosition.maxHeight }}
+                        >
+                          {group.items.map((content) => {
+                            const isActive = selectedContent?.id === content.id;
+                            return (
+                              <button
+                                key={content.id}
+                                onClick={() => {
+                                  setSelectedContent(content);
+                                  closeContentDropdown();
+                                }}
+                                className={`flex w-full items-center gap-3 px-5 py-3.5 text-left transition-all ${
+                                  isActive
+                                    ? 'bg-[#FFF5E9] text-[#8B5E3C]'
+                                    : 'text-[#4A3728] hover:bg-[#FBFBFA]'
+                                }`}
+                              >
+                                <FileText
+                                  size={16}
+                                  className={isActive ? 'text-[#8B5E3C]' : 'text-[#A89F94]'}
+                                />
+                                <span className="truncate text-sm font-medium">{content.title}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </motion.div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

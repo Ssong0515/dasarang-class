@@ -5,6 +5,8 @@ runConfig:
   minInstances: 0
   maxInstances: 2
 
+buildCommand: npm run build
+
 env:
   # ── 빌드 & 런타임 공통 ──────────────────────────────────────────
   - variable: NODE_ENV

@@ -13,6 +13,7 @@ import {
   DailyReview,
   GeneratedMemoDraftOption,
   Memo,
+  NotebookLmFolderSyncResult,
   Student,
   LessonCategory,
   LessonContent,
@@ -327,6 +328,12 @@ export default function App() {
     void syncClassroomsWithGoogleSheets(requests);
   };
 
+  const handleSyncNotebookLmFolder = (folderId: string, driveAccessToken: string) =>
+    postAdminRequest<NotebookLmFolderSyncResult>('api/notebooklm/sync-folder', {
+      folderId,
+      driveAccessToken,
+    });
+
   const handleRetryGoogleSheetsSync = async () => {
     if (!googleSheetsSyncError) return;
     await syncClassroomsWithGoogleSheets(googleSheetsSyncError.requests, { isRetry: true });
@@ -600,6 +607,11 @@ export default function App() {
           slideUrl: data.slideUrl ?? '',
           createdAt: data.createdAt ?? new Date(0).toISOString(),
           order: hasNumericOrder(data.order) ? data.order : undefined,
+          sourceDriveFileId: data.sourceDriveFileId,
+          convertedDriveFileId: data.convertedDriveFileId,
+          sourceModifiedTime: data.sourceModifiedTime,
+          syncedAt: data.syncedAt,
+          syncProvider: data.syncProvider === 'notebooklm-drive-folder' ? data.syncProvider : undefined,
         } satisfies LessonContent;
       });
 
@@ -1008,6 +1020,11 @@ export default function App() {
       slideUrl: content.slideUrl ?? '',
       createdAt,
       order,
+      sourceDriveFileId: content.sourceDriveFileId,
+      convertedDriveFileId: content.convertedDriveFileId,
+      sourceModifiedTime: content.sourceModifiedTime,
+      syncedAt: content.syncedAt,
+      syncProvider: content.syncProvider,
     };
 
     try {
@@ -1320,6 +1337,7 @@ export default function App() {
               onReorderContents={handleReorderContents}
               onDeleteCategory={handleDeleteCategory}
               onDeleteContent={handleDeleteContent}
+              onSyncNotebookLmFolder={handleSyncNotebookLmFolder}
               onDirtyStateChange={setIsContentLibraryDirty}
             />
           )}

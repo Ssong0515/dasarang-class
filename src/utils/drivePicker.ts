@@ -8,6 +8,7 @@ declare global {
 }
 
 const DRIVE_READONLY_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
+const DRIVE_SYNC_SCOPE = 'https://www.googleapis.com/auth/drive';
 
 function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -36,13 +37,16 @@ async function loadGis(): Promise<void> {
   await loadScript('https://accounts.google.com/gsi/client');
 }
 
-async function getAccessToken(clientId: string, hintEmail?: string): Promise<string> {
+async function getAccessToken(
+  clientId: string,
+  hintEmail?: string,
+  scope = DRIVE_READONLY_SCOPE
+): Promise<string> {
   return new Promise((resolve, reject) => {
     const tokenClient = window.google.accounts.oauth2.initTokenClient({
       client_id: clientId,
-      scope: DRIVE_READONLY_SCOPE,
+      scope,
       hint: hintEmail,
-      prompt: hintEmail ? '' : undefined,
       callback: (response: any) => {
         if (response.error) {
           reject(new Error(response.error_description || response.error));
@@ -53,6 +57,19 @@ async function getAccessToken(clientId: string, hintEmail?: string): Promise<str
     });
     tokenClient.requestAccessToken();
   });
+}
+
+const getPickerDocValue = (doc: any, fieldName: string) => {
+  const pickerField = window.google?.picker?.Document?.[fieldName];
+  return (pickerField && doc[pickerField]) || doc[fieldName.toLowerCase()] || doc[fieldName] || '';
+};
+
+export async function requestDriveSyncAccessToken(
+  clientId: string,
+  hintEmail?: string
+): Promise<string> {
+  await loadGis();
+  return getAccessToken(clientId, hintEmail, DRIVE_SYNC_SCOPE);
 }
 
 export interface DriveFolder {
@@ -92,11 +109,14 @@ export async function openDriveSlidePicker(
       .setCallback((data: any) => {
         if (data.action === window.google.picker.Action.PICKED) {
           const doc = data.docs[0];
-          const isGoogleSlides = doc.mimeType === SLIDES_MIME;
+          const id = getPickerDocValue(doc, 'ID') || doc.id;
+          const name = getPickerDocValue(doc, 'NAME') || doc.name || '선택한 슬라이드';
+          const mimeType = getPickerDocValue(doc, 'MIME_TYPE') || doc.mimeType;
+          const isGoogleSlides = mimeType === SLIDES_MIME;
           const embedUrl = isGoogleSlides
-            ? `https://docs.google.com/presentation/d/${doc.id}/embed`
-            : `https://drive.google.com/file/d/${doc.id}/preview`;
-          resolve({ id: doc.id, name: doc.name, mimeType: doc.mimeType, embedUrl });
+            ? `https://docs.google.com/presentation/d/${id}/embed`
+            : `https://drive.google.com/file/d/${id}/preview`;
+          resolve({ id, name, mimeType, embedUrl });
         } else if (data.action === window.google.picker.Action.CANCEL) {
           resolve(null);
         }
@@ -128,7 +148,9 @@ export async function openDriveFolderPicker(
       .setCallback((data: any) => {
         if (data.action === window.google.picker.Action.PICKED) {
           const doc = data.docs[0];
-          resolve({ id: doc.id, name: doc.name });
+          const id = getPickerDocValue(doc, 'ID') || doc.id;
+          const name = getPickerDocValue(doc, 'NAME') || doc.name || '선택한 Drive 폴더';
+          resolve({ id, name });
         } else if (data.action === window.google.picker.Action.CANCEL) {
           resolve(null);
         }

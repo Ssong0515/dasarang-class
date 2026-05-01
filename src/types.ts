@@ -43,6 +43,38 @@ export interface LessonContent {
   slideUrl?: string;
   createdAt: string;
   order?: number;
+  sourceDriveFileId?: string;
+  convertedDriveFileId?: string;
+  sourceModifiedTime?: string;
+  syncedAt?: string;
+  syncProvider?: 'notebooklm-drive-folder';
+}
+
+export type NotebookLmSyncItemStatus = 'created' | 'updated' | 'skipped' | 'failed';
+
+export interface NotebookLmSyncItem {
+  fileId: string;
+  fileName: string;
+  status: NotebookLmSyncItemStatus;
+  contentId?: string;
+  slideUrl?: string;
+  message?: string;
+}
+
+export interface NotebookLmFolderSyncResult {
+  ok?: boolean;
+  folder: {
+    id: string;
+    name: string;
+  };
+  summary: {
+    scanned: number;
+    created: number;
+    updated: number;
+    skipped: number;
+    failed: number;
+  };
+  items: NotebookLmSyncItem[];
 }
 
 export interface ClassroomDateRecord {
