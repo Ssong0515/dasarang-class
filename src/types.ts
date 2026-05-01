@@ -130,13 +130,7 @@ export interface AccessLog {
   loginAt: string;
 }
 
-export type GeneratedMemoDraftStyle = 'activity' | 'guidance' | 'check';
 
-export interface GeneratedMemoDraftOption {
-  style: GeneratedMemoDraftStyle;
-  label: string;
-  memo: string;
-}
 
 export interface ClassroomLoadDiagnostics {
   status: 'idle' | 'loading' | 'success' | 'empty' | 'error';

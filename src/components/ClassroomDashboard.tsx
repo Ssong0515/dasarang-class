@@ -34,7 +34,6 @@ import {
   LessonCategory,
   LessonContent,
   Classroom,
-  GeneratedMemoDraftOption,
   Student,
 } from '../types';
 import {
@@ -73,10 +72,9 @@ interface ClassroomDashboardProps {
   onSaveDateRecord: (record: ClassroomDateRecord) => void;
   onDeleteDateRecord: (recordId: string) => void;
   onGenerateMemoDraft: (
-    classroomId: string,
     date: string,
     existingMemo?: string
-  ) => Promise<GeneratedMemoDraftOption[]>;
+  ) => Promise<string>;
   onUpdateClassroom?: (classroomId: string, data: Partial<Classroom>) => void;
   onDeleteClassroom?: (classroomId: string) => void;
 }
@@ -186,10 +184,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const [studentAction, setStudentAction] = useState<StudentAction | null>(null);
   const [studentMoveTargets, setStudentMoveTargets] = useState<Record<string, string>>({});
   const [localMemo, setLocalMemo] = useState('');
-  const [memoDraftOptions, setMemoDraftOptions] = useState<GeneratedMemoDraftOption[]>([]);
-  const [selectedMemoDraftStyle, setSelectedMemoDraftStyle] = useState<
-    GeneratedMemoDraftOption['style'] | null
-  >(null);
+
   const [generationMessage, setGenerationMessage] = useState<string | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [isGeneratingMemoDraft, setIsGeneratingMemoDraft] = useState(false);
@@ -351,8 +346,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
 
   useEffect(() => {
     setLocalMemo(currentDateRecord?.memo || '');
-    setMemoDraftOptions([]);
-    setSelectedMemoDraftStyle(null);
   }, [currentDateRecord?.id, currentDateRecord?.updatedAt, selectedDate]);
 
   useEffect(() => {
@@ -465,16 +458,15 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     let nextGenerationError: string | null = null;
 
     try {
-      const drafts = await onGenerateMemoDraft(classroom.id, selectedDate, localMemo.trim());
-      setMemoDraftOptions(drafts);
-      setSelectedMemoDraftStyle(null);
-      nextGenerationMessage = '메모 초안 3개를 생성했습니다. 하나를 고른 뒤 저장하세요.';
+      const generatedMemo = await onGenerateMemoDraft(classroom.id, selectedDate, localMemo.trim());
+      setLocalMemo(generatedMemo);
+      nextGenerationMessage = '수업 메모가 생성되었습니다. 저장 버튼으로 확정하세요.';
     } catch (error) {
       setGenerationError(
-        error instanceof Error ? error.message : '수업 메모 초안 생성에 실패했습니다.'
+        error instanceof Error ? error.message : '수업 메모 생성에 실패했습니다.'
       );
       nextGenerationError =
-        error instanceof Error ? error.message : '수업 메모 초안 생성에 실패했습니다.';
+        error instanceof Error ? error.message : '수업 메모 생성에 실패했습니다.';
     } finally {
       if (nextGenerationMessage) {
         setGenerationMessage(nextGenerationMessage);
@@ -484,13 +476,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       }
       setIsGeneratingMemoDraft(false);
     }
-  };
-
-  const handleSelectMemoDraft = (draft: GeneratedMemoDraftOption) => {
-    setLocalMemo(draft.memo);
-    setSelectedMemoDraftStyle(draft.style);
-    setGenerationError(null);
-    setGenerationMessage(`"${draft.label}" 초안을 메모에 반영했습니다. 저장 버튼으로 확정하세요.`);
   };
 
   const updateAttendance = (studentId: string, status: 'Present' | 'Absent' | 'Late') => {
@@ -1358,9 +1343,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 value={localMemo}
                 onChange={(event) => {
                   const nextMemo = event.target.value;
-                  const matchedDraft = memoDraftOptions.find((draft) => draft.memo === nextMemo);
                   setLocalMemo(nextMemo);
-                  setSelectedMemoDraftStyle(matchedDraft?.style || null);
                   setGenerationMessage(null);
                 }}
                 placeholder="특이사항이나 운영 메모를 기록하세요."
@@ -1376,47 +1359,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                   {isGeneratingMemoDraft ? '메모 초안 생성 중...' : '메모 초안 생성'}
                 </button>
               </div>
-              {memoDraftOptions.length > 0 && (
-                <div className="mt-4 space-y-3">
-                  <p className="text-xs font-bold text-[#8B7E74]">
-                    초안을 선택하면 메모 칸에 반영됩니다.
-                  </p>
-                  <div className="grid gap-3">
-                    {memoDraftOptions.map((draft) => {
-                      const isSelected = selectedMemoDraftStyle === draft.style;
 
-                      return (
-                        <button
-                          key={draft.style}
-                          type="button"
-                          onClick={() => handleSelectMemoDraft(draft)}
-                          className={`rounded-2xl border px-4 py-3 text-left transition-all ${
-                            isSelected
-                              ? 'border-[#8B5E3C] bg-[#FFF5E9] shadow-sm'
-                              : 'border-[#E5E3DD] bg-[#FBFBFA] hover:border-[#D8D2C8] hover:bg-white'
-                          }`}
-                        >
-                          <div className="mb-2 flex items-center justify-between gap-3">
-                            <span
-                              className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${
-                                isSelected
-                                  ? 'bg-white text-[#8B5E3C]'
-                                  : 'bg-[#F3F2EE] text-[#8B7E74]'
-                              }`}
-                            >
-                              {draft.label}
-                            </span>
-                            {isSelected && (
-                              <span className="text-[11px] font-bold text-[#8B5E3C]">선택됨</span>
-                            )}
-                          </div>
-                          <p className="text-sm leading-relaxed text-[#4A3728]">{draft.memo}</p>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
               {generationMessage && (
                 <p className="mt-3 text-xs font-medium text-[#2D7A4D]">{generationMessage}</p>
               )}

@@ -10,6 +10,12 @@ import {
   getClassroomDateRecordId,
 } from '../src/utils/classroomDomain';
 import { getAdminDb } from './firebaseAdmin';
+import * as fs from 'fs';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // const DEFAULT_CLASS_NOTE_MODEL = 'gemini-3-flash-preview';
 const DEFAULT_CLASS_NOTE_MODEL = 'gemini-2.5-flash';
@@ -34,28 +40,7 @@ const FORBIDDEN_MEMO_PHRASES = [
   '입니다',
 ];
 
-const MEMO_DRAFT_VARIANTS = [
-  {
-    style: 'activity',
-    label: '활동중심',
-    focus:
-      'Blend the selected lesson titles and descriptions into one compact memo line that reflects the overall class flow.',
-  },
-  {
-    style: 'guidance',
-    label: '지도중심',
-    focus:
-      'Emphasize teacher guidance, caution points, pronunciation/input guidance, or instructions from the source.',
-  },
-  {
-    style: 'check',
-    label: '확인중심',
-    focus:
-      'Emphasize final checks such as saving, registration, completion, or confirmation while still mentioning the class activity briefly.',
-  },
-] as const;
 
-type MemoDraftStyle = (typeof MEMO_DRAFT_VARIANTS)[number]['style'];
 
 interface GenerateMemoDraftPayload {
   classroomId: string;
@@ -67,14 +52,8 @@ interface GenerateDailyReviewPayload {
   date: string;
 }
 
-interface MemoDraftOption {
-  style: MemoDraftStyle;
-  label: string;
-  memo: string;
-}
-
 interface GenerateMemoDraftResult {
-  drafts: MemoDraftOption[];
+  memo: string;
   classroomId: string;
   date: string;
   contentIds: string[];
@@ -218,73 +197,14 @@ const normalizeDailyReviewText = (value: string) =>
     .join('\n')
     .trim();
 
-const isMemoDraftValid = (memo: string) => {
-  if (!memo) {
-    return false;
-  }
+const buildMemoSourceBlock = (contents: MemoSourceContent[], existingMemo: string) => `Source:
+${contents.map((content, index) => `${index + 1}. Title: ${content.title}\n   Description: ${content.description}`).join('\n')}
+${existingMemo ? `Existing memo key point: ${existingMemo}` : ''}`;
 
-  if (memo.includes('\n')) {
-    return false;
-  }
+const buildMemoDraftPrompt = (contents: MemoSourceContent[], existingMemo: string) => {
+  let promptTemplate = `Write one Korean teacher memo line based only on the source below.
 
-  if (memo.length < MEMO_DRAFT_MIN_LENGTH || memo.length > MEMO_DRAFT_MAX_LENGTH) {
-    return false;
-  }
-
-  if (DATE_IN_TEXT_PATTERN.test(memo)) {
-    return false;
-  }
-
-  if (!/[가-힣]/.test(memo)) {
-    return false;
-  }
-
-  if (!MEMO_ENDING_PATTERN.test(memo)) {
-    return false;
-  }
-
-  return !FORBIDDEN_MEMO_PHRASES.some((phrase) => memo.includes(phrase));
-};
-
-const buildMemoSourceBlock = (contents: MemoSourceContent[], existingMemo: string) => `Allowed source only:
-1. Selected lesson titles from the classroom date record
-${contents.map((content, index) => `   ${index + 1}) ${content.title}`).join('\n')}
-
-2. Lesson descriptions for those selected lessons
-${contents
-    .map(
-      (content, index) =>
-        `   ${index + 1}) ${content.title}: ${content.description ? limitText(content.description, 280) : '(no description)'
-        }`
-    )
-    .join('\n')}
-
-3. Existing class memo text if present
-${existingMemo ? `   ${limitText(existingMemo, MAX_EXISTING_MEMO_SOURCE_LENGTH)}` : '   (none)'}`;
-
-const buildPreviousDraftsBlock = (previousDrafts: MemoDraftOption[]) => {
-  if (previousDrafts.length === 0) {
-    return '';
-  }
-
-  return `
-
-Previous drafts already created. This new draft must be clearly different in emphasis:
-${previousDrafts.map((draft) => `- ${draft.label}: ${draft.memo}`).join('\n')}`;
-};
-
-const buildMemoDraftPrompt = (
-  variant: (typeof MEMO_DRAFT_VARIANTS)[number],
-  contents: MemoSourceContent[],
-  existingMemo: string,
-  previousDrafts: MemoDraftOption[]
-) => `Write one Korean teacher memo line based only on the source below.
-
-Draft style: ${variant.label}
-Style focus:
-${variant.focus}
-
-Hard rules:
+Rules:
 - Output exactly one line
 - Keep it around 50 to 80 Korean characters
 - Do not write any date
@@ -295,168 +215,30 @@ Hard rules:
 - If existing class memo is present, include its key point in shortened form
 - End with one of: 진행, 함, 했음, 확인함
 - Output only the memo line, with no quotes or bullets
-- Do not invent details outside the source${buildPreviousDraftsBlock(previousDrafts)}
-
-Tone examples:
-- 자음모음 타이핑과 받침 읽기 연계 진행, 실명 입력 안내함
-- 자음모음 타이핑과 발음 확인 진행, 수료증 이미지 저장 확인함
-
-${buildMemoSourceBlock(contents, existingMemo)}`;
-
-const buildMemoRewritePrompt = (
-  variant: (typeof MEMO_DRAFT_VARIANTS)[number],
-  draft: string,
-  contents: MemoSourceContent[],
-  existingMemo: string,
-  previousDrafts: MemoDraftOption[]
-) => `The draft below is invalid. Rewrite it into a valid Korean memo line.
-
-Draft style: ${variant.label}
-Style focus:
-${variant.focus}
-
-Invalid draft:
-${draft}
-
-Rules to satisfy:
-- One line only
-- Around 50 to 80 Korean characters
-- No date
-- Memo style only
-- No explanatory, 안내문, or 보고문 tone
-- No "오늘은", "수업을 진행했다", "안내 바랍니다"
-- Weave together the selected contents naturally instead of choosing only one representative item
-- If existing class memo is present, include its key point in shortened form
-- Use only the source below
-- End with one of: 진행, 함, 했음, 확인함
-- Output only the corrected memo line${buildPreviousDraftsBlock(previousDrafts)}
-
-${buildMemoSourceBlock(contents, existingMemo)}`;
-
-const buildMemoFallbackPrompt = (
-  variant: (typeof MEMO_DRAFT_VARIANTS)[number],
-  contents: MemoSourceContent[],
-  existingMemo: string,
-  previousDrafts: MemoDraftOption[]
-) => `Return only one Korean memo line.
-
-Draft style: ${variant.label}
-Style focus:
-${variant.focus}
-
-Rules:
-- One line only
-- Around 50 to 80 Korean characters
-- No date
-- Memo style only
-- Weave together the selected contents instead of picking just one
-- If existing class memo is present, include its key point in shortened form
-- End with 진행, 함, 했음, or 확인함
-- Use only the source below${buildPreviousDraftsBlock(previousDrafts)}
-
-${buildMemoSourceBlock(contents, existingMemo)}`;
-
-const buildBulkMemoDraftPrompt = (
-  contents: MemoSourceContent[],
-  existingMemo: string
-) => `You are a teacher writing 3 alternative class memo lines based on the source below.
-
-Rules for each memo line:
-- Output exactly one line per style
-- Keep it around 50 to 80 Korean characters
-- Do not write any date
-- Memo style only, like a quick teacher note
-- Never use explanatory, 안내문, or 보고문 tone
-- Never use phrases like "오늘은", "수업을 진행했다", "안내 바랍니다"
-- Weave together the selected contents naturally instead of choosing only one representative item
-- If existing class memo is present, include its key point in shortened form
-- End with one of: 진행, 함, 했음, 확인함
 - Do not invent details outside the source
 
-The 3 styles to create:
-1. 활동중심 (activity): Blend the selected lesson titles and descriptions into one compact memo line that reflects the overall class flow.
-2. 지도중심 (guidance): Emphasize teacher guidance, caution points, pronunciation/input guidance, or instructions from the source.
-3. 확인중심 (check): Emphasize final checks such as saving, registration, completion, or confirmation while still mentioning the class activity briefly.
-
-Must return exactly a raw JSON array of objects. Do not use markdown backticks around the json. Example format:
-[
-  { "style": "activity", "memo": "..." },
-  { "style": "guidance", "memo": "..." },
-  { "style": "check", "memo": "..." }
-]
-
 Tone examples:
 - 자음모음 타이핑과 받침 읽기 연계 진행, 실명 입력 안내함
-- 자음모음 타이핑과 발음 확인 진행, 수료증 이미지 저장 확인함
-
-${buildMemoSourceBlock(contents, existingMemo)}`;
-
-const generateStrictMemoDraft = async (
-  variant: (typeof MEMO_DRAFT_VARIANTS)[number],
-  contents: MemoSourceContent[],
-  existingMemo: string,
-  previousDrafts: MemoDraftOption[]
-) => {
-  const firstDraft = normalizeMemoDraftText(
-    await generateText(buildMemoDraftPrompt(variant, contents, existingMemo, previousDrafts))
-  );
-  if (isMemoDraftValid(firstDraft)) {
-    return firstDraft;
-  }
-
-  const rewrittenDraft = normalizeMemoDraftText(
-    await generateText(
-      buildMemoRewritePrompt(variant, firstDraft, contents, existingMemo, previousDrafts)
-    )
-  );
-  if (isMemoDraftValid(rewrittenDraft)) {
-    return rewrittenDraft;
-  }
-
-  const fallbackDraft = normalizeMemoDraftText(
-    await generateText(buildMemoFallbackPrompt(variant, contents, existingMemo, previousDrafts))
-  );
-  if (isMemoDraftValid(fallbackDraft)) {
-    return fallbackDraft;
-  }
-
-  throw new ApiError(500, 'Memo draft did not match the required memo style.');
-};
-
-const generateMemoDraftOptions = async (
-  contents: MemoSourceContent[],
-  existingMemo: string
-): Promise<MemoDraftOption[]> => {
-  let parsedDrafts: { style: string; memo: string }[] = [];
+- 자음모음 타이핑과 발음 확인 진행, 수료증 이미지 저장 확인함`;
 
   try {
-    const prompt = buildBulkMemoDraftPrompt(contents, existingMemo);
-    const responseText = await generateText(prompt);
-    const jsonStr = responseText.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
-    parsedDrafts = JSON.parse(jsonStr);
-  } catch (error) {
-    console.warn('Failed to parse bulk JSON response, falling back to individual generation', error);
-  }
-
-  const drafts: MemoDraftOption[] = [];
-
-  for (const variant of MEMO_DRAFT_VARIANTS) {
-    const parsed = parsedDrafts.find(d => d.style === variant.style);
-    let memo = parsed?.memo ? normalizeMemoDraftText(parsed.memo) : '';
-
-    if (!isMemoDraftValid(memo)) {
-      memo = await generateStrictMemoDraft(variant, contents, existingMemo, drafts);
+    const promptPath = path.join(__dirname, '..', 'prompt-class-memo.md');
+    if (fs.existsSync(promptPath)) {
+      promptTemplate = fs.readFileSync(promptPath, 'utf-8').trim();
     }
-
-    drafts.push({
-      style: variant.style,
-      label: variant.label,
-      memo,
-    });
+  } catch (error) {
+    console.warn('Failed to read prompt-class-memo.md, falling back to default prompt.', error);
   }
 
-  return drafts;
+  return `${promptTemplate}\n\n${buildMemoSourceBlock(contents, existingMemo)}`;
 };
+
+const invokeMemoDraftModel = async (contents: MemoSourceContent[], existingMemo: string): Promise<string> => {
+  const prompt = buildMemoDraftPrompt(contents, existingMemo);
+  const responseText = await generateText(prompt);
+  return normalizeMemoDraftText(responseText);
+};
+
 
 const normalizeLessonContent = (snapshot: DocumentSnapshot): LessonContent | null => {
   if (!snapshot.exists) {
@@ -642,14 +424,26 @@ const summarizeAttendance = (records: AttendanceRecord[]) => {
   return `attendance present ${totals.present}, late ${totals.late}, absent ${totals.absent}`;
 };
 
-const buildDailyReviewSource = (records: DailyReviewRecordContext[]) => `Write a Korean daily class review summary for an internal admin memo.
+const buildDailyReviewSource = (records: DailyReviewRecordContext[]) => {
+  let promptTemplate = `Write a Korean daily class review summary for an internal admin memo.
 
 Rules:
 - Single sentence, approximately 40-55 Korean characters (한글 기준 40~55자 내외)
 - Concise and factual, no heading, no date, no line breaks
 - Summarize the most notable point across all classrooms (activity, guidance, or attendance)
 - Use only the information below
-- Output only the summary text, nothing else
+- Output only the summary text, nothing else`;
+
+  try {
+    const promptPath = path.join(__dirname, '..', 'prompt-daily-review.md');
+    if (fs.existsSync(promptPath)) {
+      promptTemplate = fs.readFileSync(promptPath, 'utf-8').trim();
+    }
+  } catch (error) {
+    console.warn('Failed to read prompt-daily-review.md, falling back to default prompt.', error);
+  }
+
+  return `${promptTemplate}
 
 Daily records:
 ${records
@@ -662,6 +456,7 @@ ${records
    ${record.attendanceSummary}`
     )
     .join('\n\n')}`;
+};
 
 const generateDailyReviewSummary = async (records: DailyReviewRecordContext[]) => {
   const summary = normalizeDailyReviewText(await generateText(buildDailyReviewSource(records)));
@@ -779,7 +574,7 @@ export const generateMemoDraft = async ({
     throw new ApiError(400, 'Selected contents do not have any lesson descriptions to summarize.');
   }
 
-  const drafts = await generateMemoDraftOptions(
+  const memo = await invokeMemoDraftModel(
     memoSourceContents,
     limitText(
       normalizeWhitespace(existingMemo ?? record.memo),
@@ -788,7 +583,7 @@ export const generateMemoDraft = async ({
   );
 
   return {
-    drafts,
+    memo,
     classroomId,
     date,
     contentIds,

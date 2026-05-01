@@ -11,7 +11,6 @@ import {
   ClassroomDateRecord,
   Classroom,
   DailyReview,
-  GeneratedMemoDraftOption,
   Memo,
   NotebookLmFolderSyncResult,
   Student,
@@ -80,7 +79,7 @@ type GoogleSheetsSyncErrorState = {
 };
 
 type GeneratedMemoDraftResponse = {
-  drafts: GeneratedMemoDraftOption[];
+  memo: string;
   classroomId: string;
   date: string;
   contentIds: string[];
@@ -735,7 +734,7 @@ export default function App() {
     classroomId: string,
     date: string,
     existingMemo?: string
-  ) => {
+  ): Promise<string> => {
     const response = await postAdminRequest<GeneratedMemoDraftResponse>(
       'api/classroom-date-records/generate-memo-draft',
       {
@@ -745,7 +744,7 @@ export default function App() {
       }
     );
 
-    return response.drafts;
+    return response.memo;
   };
 
   const handleGenerateDailyReview = async (date: string) => {

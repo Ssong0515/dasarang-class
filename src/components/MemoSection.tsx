@@ -78,7 +78,12 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
     [classrooms]
   );
 
-  // 날짜별로 메모가 있는 수업 기록 그룹핑 (날짜 내림차순)
+  const classroomOrderById = useMemo(
+    () => new Map(classrooms.map((c) => [c.id, c.order ?? 999])),
+    [classrooms]
+  );
+
+  // 날짜별로 메모가 있는 수업 기록 그룹핑 (날짜 내림차순, 그리고 클래스 순서대로 오름차순 정렬)
   const dateGroups = useMemo(() => {
     const recordsWithMemo = classroomDateRecords.filter((r) => r.memo.trim());
     const groups = new Map<string, ClassroomDateRecord[]>();
@@ -88,8 +93,15 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
     });
     return Array.from(groups.entries())
       .sort(([a], [b]) => new Date(b).getTime() - new Date(a).getTime())
-      .map(([date, records]) => ({ date, records }));
-  }, [classroomDateRecords]);
+      .map(([date, records]) => ({
+        date,
+        records: records.sort((a, b) => {
+          const orderA = classroomOrderById.get(a.classroomId) ?? 999;
+          const orderB = classroomOrderById.get(b.classroomId) ?? 999;
+          return orderA - orderB;
+        }),
+      }));
+  }, [classroomDateRecords, classroomOrderById]);
 
   const dailyReviewsByDate = useMemo(
     () => new Map(dailyReviews.map((r) => [r.date, r])),
