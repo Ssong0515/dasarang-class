@@ -500,34 +500,6 @@ export default function App() {
       setMemos([]);
     }
 
-    let unsubscribeDailyReviews = () => {};
-    if (user && isAdmin) {
-      const dailyReviewsQuery = query(collection(db, DAILY_REVIEWS_COLLECTION), orderBy('date', 'desc'));
-      unsubscribeDailyReviews = onSnapshot(
-        dailyReviewsQuery,
-        (snapshot) => {
-          const dailyReviewsData = snapshot.docs.map((reviewDoc) => {
-            const data = reviewDoc.data() as Partial<DailyReview>;
-            return {
-              id: reviewDoc.id,
-              date: data.date ?? '',
-              ownerUid: data.ownerUid ?? '',
-              summary: data.summary ?? '',
-              sourceRecordIds: Array.isArray(data.sourceRecordIds)
-                ? data.sourceRecordIds.filter((value): value is string => typeof value === 'string')
-                : [],
-              createdAt: data.createdAt ?? '',
-              updatedAt: data.updatedAt ?? '',
-            } satisfies DailyReview;
-          });
-
-          setDailyReviews(dailyReviewsData);
-        },
-        (error) => handleFirestoreError(error, OperationType.LIST, DAILY_REVIEWS_COLLECTION)
-      );
-    } else {
-      setDailyReviews([]);
-    }
 
     let unsubscribeClassroomDateRecords = () => {};
     if (user) {
@@ -622,12 +594,44 @@ export default function App() {
       unsubscribeClassrooms();
       unsubscribeStudents();
       unsubscribeMemos();
-      unsubscribeDailyReviews();
       unsubscribeClassroomDateRecords();
       unsubscribeCategories();
       unsubscribeContents();
     };
   }, [user]);
+
+  // dailyReviews 리스너는 isAdmin 변경에도 반응해야 하므로 별도 useEffect로 분리
+  useEffect(() => {
+    if (!user || !isAdmin) {
+      setDailyReviews([]);
+      return;
+    }
+
+    const dailyReviewsQuery = query(collection(db, DAILY_REVIEWS_COLLECTION), orderBy('date', 'desc'));
+    const unsubscribeDailyReviews = onSnapshot(
+      dailyReviewsQuery,
+      (snapshot) => {
+        const dailyReviewsData = snapshot.docs.map((reviewDoc) => {
+          const data = reviewDoc.data() as Partial<DailyReview>;
+          return {
+            id: reviewDoc.id,
+            date: data.date ?? '',
+            ownerUid: data.ownerUid ?? '',
+            summary: data.summary ?? '',
+            sourceRecordIds: Array.isArray(data.sourceRecordIds)
+              ? data.sourceRecordIds.filter((value): value is string => typeof value === 'string')
+              : [],
+            createdAt: data.createdAt ?? '',
+            updatedAt: data.updatedAt ?? '',
+          } satisfies DailyReview;
+        });
+        setDailyReviews(dailyReviewsData);
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, DAILY_REVIEWS_COLLECTION)
+    );
+
+    return () => unsubscribeDailyReviews();
+  }, [user, isAdmin]);
 
   const handleGoogleSignIn = async () => {
     setIsSigningIn(true);
@@ -745,12 +749,16 @@ export default function App() {
   };
 
   const handleGenerateDailyReview = async (date: string) => {
-    const response = await postAdminRequest<GeneratedDailyReviewResponse>(
-      'api/daily-reviews/generate',
-      { date }
-    );
-
-    return response.summary;
+    try {
+      const response = await postAdminRequest<GeneratedDailyReviewResponse>(
+        'api/daily-reviews/generate',
+        { date }
+      );
+      return response.summary;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '하루 전체 평 생성에 실패했습니다.';
+      throw new Error(message);
+    }
   };
 
   const handleUpdateDailyReview = async (id: string, summary: string) => {

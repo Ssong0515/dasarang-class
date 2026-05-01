@@ -71,6 +71,7 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
   const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
   const [savingReviewId, setSavingReviewId] = useState<string | null>(null);
+  const [generateError, setGenerateError] = useState<string | null>(null);
 
   const classroomNamesById = useMemo(
     () => new Map(classrooms.map((c) => [c.id, c.name])),
@@ -115,8 +116,14 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
   const handleGenerateClick = async (date: string) => {
     if (!onGenerateDailyReview || generatingDate) return;
     setGeneratingDate(date);
+    setGenerateError(null);
     try {
       await onGenerateDailyReview(date);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '하루 전체 평 생성에 실패했습니다.';
+      setGenerateError(message);
+      // 5초 후 자동으로 에러 메시지 숨김
+      setTimeout(() => setGenerateError(null), 5000);
     } finally {
       setGeneratingDate(null);
     }
@@ -221,6 +228,28 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
             </button>
           ))}
         </div>
+
+        {/* 생성 에러 토스트 */}
+        <AnimatePresence>
+          {generateError && (
+            <motion.div
+              key="generate-error"
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="mb-4 flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+            >
+              <X size={15} className="shrink-0 text-red-500" />
+              <span className="flex-1">{generateError}</span>
+              <button
+                onClick={() => setGenerateError(null)}
+                className="rounded-lg p-1 hover:bg-red-100"
+              >
+                <X size={13} />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <section className="space-y-6">
           <AnimatePresence mode="wait">
