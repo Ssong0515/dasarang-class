@@ -1,19 +1,22 @@
 import React from 'react';
 import { Bell, Settings } from 'lucide-react';
 
-type AdminTab = 'home' | 'memo' | 'classroom-management' | 'content-library';
+type AdminTab = 'home' | 'memo' | 'classroom-management' | 'content-library' | 'student-access';
 
 const TAB_LABELS: Record<AdminTab, string> = {
   home: '대시보드',
   memo: '메모장',
   'classroom-management': '교실 관리',
   'content-library': '콘텐츠 라이브러리',
+  'student-access': '접근 아이디',
 };
 
 interface HeaderProps {
   user: any;
   activeTab?: AdminTab;
 }
+
+const DEV_BADGE = import.meta.env.DEV;
 
 export const Header: React.FC<HeaderProps> = ({ user, activeTab = 'home' }) => {
   return (
@@ -22,11 +25,18 @@ export const Header: React.FC<HeaderProps> = ({ user, activeTab = 'home' }) => {
         <span className="text-[#A89F94]">다사랑 교실</span>
         <span className="text-[#A89F94]">/</span>
         <span className="text-[#8B5E3C] border-b-2 border-[#8B5E3C] pb-0.5">{TAB_LABELS[activeTab]}</span>
+        {DEV_BADGE && (
+          <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-amber-600">
+            DEV
+          </span>
+        )}
       </div>
 
       <div className="flex items-center gap-6">
         {/* User Name */}
-        <span className="text-sm font-bold text-[#4A3728]">{user.displayName || user.email}</span>
+        <span className="text-sm font-bold text-[#4A3728]">
+          {user?.displayName || user?.email || (DEV_BADGE ? 'Dev Admin' : '')}
+        </span>
 
         {/* Notifications */}
         <button className="p-2 text-[#8B7E74] hover:bg-[#F3F2EE] rounded-full transition-colors relative">
@@ -41,15 +51,17 @@ export const Header: React.FC<HeaderProps> = ({ user, activeTab = 'home' }) => {
         {/* Profile */}
         <div className="flex items-center gap-3 pl-4 border-l border-[#E5E3DD]">
           <div className="w-10 h-10 rounded-xl overflow-hidden border-2 border-[#EBD9C1] bg-[#FFF5E9] flex items-center justify-center">
-            {user.photoURL ? (
-              <img 
-                src={user.photoURL} 
-                alt="Profile" 
+            {user?.photoURL ? (
+              <img
+                src={user.photoURL}
+                alt="Profile"
                 className="w-full h-full object-cover"
                 referrerPolicy="no-referrer"
               />
             ) : (
-              <span className="text-[#8B5E3C] font-bold">{user.email?.[0].toUpperCase()}</span>
+              <span className="text-[#8B5E3C] font-bold">
+                {user?.email?.[0].toUpperCase() ?? (DEV_BADGE ? 'D' : '?')}
+              </span>
             )}
           </div>
         </div>

@@ -130,6 +130,15 @@ export interface AccessLog {
   loginAt: string;
 }
 
+export interface StudentAccess {
+  id: string;
+  email: string;
+  memo?: string;
+  ownerUid: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 
 
 export interface ClassroomLoadDiagnostics {

@@ -5,6 +5,7 @@ import {
   StickyNote,
   LogOut,
   Library,
+  KeyRound,
   Plus,
   GripVertical,
   ChevronLeft,
@@ -42,8 +43,8 @@ const getDefaultDesktopCollapsed = (viewportMode: ViewportMode) => {
 interface SidebarProps {
   classrooms: Classroom[];
   activeClassroomId?: string;
-  activeTab: 'home' | 'memo' | 'classroom-management' | 'content-library';
-  onTabChange: (tab: 'home' | 'memo' | 'classroom-management' | 'content-library') => void;
+  activeTab: 'home' | 'memo' | 'classroom-management' | 'content-library' | 'student-access';
+  onTabChange: (tab: 'home' | 'memo' | 'classroom-management' | 'content-library' | 'student-access') => void;
   onManageClassroom: (classroom: Classroom) => void;
   onLogout: () => void;
   onSwitchToStudent: () => void;
@@ -279,6 +280,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
             isActive={isStudentView}
             extraClassName="mt-2"
             onClick={onSwitchToStudent}
+          />
+
+          <SidebarNavButton
+            icon={<KeyRound size={20} />}
+            label="접근 아이디"
+            isCollapsed={isCollapsed}
+            isActive={activeTab === 'student-access'}
+            extraClassName="mt-2"
+            onClick={() => onTabChange('student-access')}
           />
         </div>
 

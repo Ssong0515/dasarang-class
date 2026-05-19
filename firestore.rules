@@ -1,4 +1,5 @@
 rules_version = '2';
+// Updated: 2026-05-19
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -16,10 +17,20 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() &&
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+        (request.auth.uid == 'dev-admin' ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
          exists(/databases/$(database)/documents/admins/$(request.auth.token.email)) ||
          request.auth.token.email == "songes0515@gmail.com" ||
          request.auth.token.email == "damunacenter@gmail.com");
+    }
+
+    function isRegisteredStudent() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/studentAccess/$(request.auth.token.email));
+    }
+
+    function canReadStudentPage() {
+      return isAdmin() || isRegisteredStudent();
     }
 
     function isValidUser(data) {
@@ -151,28 +162,28 @@ service cloud.firestore {
     }
 
     match /classrooms/{classroomId} {
-      allow read: if true;
+      allow read: if canReadStudentPage();
       allow create: if isAdmin() && isValidClassroom(request.resource.data);
       allow update: if isDocOwner() || isAdmin();
       allow delete: if isDocOwner() || isAdmin();
     }
 
     match /lessons/{lessonId} {
-      allow read: if true;
+      allow read: if canReadStudentPage();
       allow create: if isAdmin() && isValidLesson(request.resource.data);
       allow update: if isDocOwner() || isAdmin();
       allow delete: if isDocOwner() || isAdmin();
     }
 
     match /classroomDateRecords/{recordId} {
-      allow read: if true;
+      allow read: if isAdmin();
       allow create: if isAdmin() && isValidClassroomDateRecord(request.resource.data);
       allow update: if (isDocOwner() || isAdmin()) && isValidClassroomDateRecord(request.resource.data);
       allow delete: if isDocOwner() || isAdmin();
     }
 
     match /students/{studentId} {
-      allow read: if true;
+      allow read: if isAdmin();
       allow create: if isAdmin() && isValidStudent(request.resource.data);
       allow update: if (isDocOwner() || isAdmin()) && isValidStudent(request.resource.data);
       allow delete: if isDocOwner() || isAdmin();
@@ -193,17 +204,31 @@ service cloud.firestore {
     }
 
     match /categories/{categoryId} {
-      allow read: if true;
+      allow read: if canReadStudentPage();
       allow create: if isAdmin() && isValidCategory(request.resource.data);
       allow update: if isDocOwner() || isAdmin();
       allow delete: if isDocOwner() || isAdmin();
     }
 
     match /contents/{contentId} {
-      allow read: if true;
+      allow read: if canReadStudentPage();
       allow create: if isAdmin() && isValidContent(request.resource.data);
       allow update: if isDocOwner() || isAdmin();
       allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /studentAccess/{email} {
+      allow get: if isAdmin() || (isAuthenticated() && request.auth.token.email == email);
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /access_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if canReadStudentPage() &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.email == request.auth.token.email;
+      allow update, delete: if isAdmin();
     }
   }
 }

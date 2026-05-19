@@ -19,7 +19,8 @@ import {
   validateGenerateMemoDraftPayload,
 } from './server/geminiClassNotes';
 import { translateText, validateTranslatePayload } from './server/geminiTranslate';
-import { verifyAdminIdToken } from './server/firebaseAdmin';
+import { ADMIN_EMAIL, getAdminDb, getFirebaseAdminApp, verifyAdminIdToken, verifyStudentOrAdminIdToken } from './server/firebaseAdmin';
+import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { uploadStudentWork } from './server/googleDriveUpload';
 import {
   syncNotebookLmPptxFolder,
@@ -128,9 +129,47 @@ async function startServer() {
     }
   };
 
+  const requireStudentOrAdmin: express.RequestHandler = async (req, res, next) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        res.status(401).json({ error: 'Authorization header is required.' });
+        return;
+      }
+
+      const idToken = authHeader.slice('Bearer '.length).trim();
+      const decodedToken = await verifyStudentOrAdminIdToken(idToken);
+      res.locals.viewerUid = decodedToken.uid;
+      next();
+    } catch (error) {
+      res.status(401).json({
+        error: error instanceof Error ? error.message : 'Unauthorized',
+      });
+    }
+  };
+
+  // Dev-only: issue a Firebase custom token so local dev works without Google login
+  if (!isProduction) {
+    app.get(withBasePath(APP_BASE_PATH, '/api/dev/token'), async (_req, res) => {
+      try {
+        const adminApp = getFirebaseAdminApp();
+        // Ensure the dev-admin user document exists so Firestore rules recognize it as admin
+        await getAdminDb().collection('users').doc('dev-admin').set(
+          { role: 'admin', email: ADMIN_EMAIL },
+          { merge: true }
+        );
+        const token = await getAdminAuth(adminApp).createCustomToken('dev-admin');
+        res.json({ token });
+      } catch (error) {
+        res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to create dev token' });
+      }
+    });
+  }
+
   // API routes
   app.post(
     withBasePath(APP_BASE_PATH, '/api/drive/upload'),
+    requireStudentOrAdmin,
     upload.single('file'),
     async (req, res) => {
       try {
@@ -210,7 +249,7 @@ async function startServer() {
     }
   });
 
-  app.post(withBasePath(APP_BASE_PATH, '/api/translate'), async (req, res) => {
+  app.post(withBasePath(APP_BASE_PATH, '/api/translate'), requireStudentOrAdmin, async (req, res) => {
     try {
       const payload = validateTranslatePayload(req.body);
       const translatedText = await translateText(payload);

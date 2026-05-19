@@ -30,6 +30,7 @@ const CONTENT_MENU_MIN_HEIGHT = 160;
 interface StudentPageProps {
   onBackToAdmin?: () => void;
   onLogin?: () => void;
+  getAuthToken?: () => Promise<string | null>;
   isAdmin?: boolean;
   embeddedInAdminShell?: boolean;
   classrooms?: Classroom[];
@@ -212,12 +213,14 @@ const getClassroomTranslationCacheKey = (
 const translateText = async (
   text: string,
   targetLanguage: TranslationLanguage,
-  signal: AbortSignal
+  signal: AbortSignal,
+  idToken?: string | null
 ) => {
   const response = await fetch(resolveAppPath('api/translate'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
     },
     body: JSON.stringify({
       text,
@@ -261,6 +264,7 @@ const calculateContentDropdownPosition = (button: HTMLElement): ContentDropdownP
 export const StudentPage: React.FC<StudentPageProps> = ({
   onBackToAdmin,
   onLogin,
+  getAuthToken,
   isAdmin,
   embeddedInAdminShell = false,
   classrooms = [],
@@ -315,11 +319,22 @@ export const StudentPage: React.FC<StudentPageProps> = ({
     setUploadState('uploading');
     setUploadError('');
     try {
+      const idToken = await getAuthToken?.();
+      if (!idToken) {
+        throw new Error('로그인이 필요합니다.');
+      }
+
       const formData = new FormData();
       formData.append('file', uploadFile);
       formData.append('classroomId', activeClassroomId);
       formData.append('studentName', uploadStudentName.trim());
-      const res = await fetch(resolveAppPath('/api/drive/upload'), { method: 'POST', body: formData });
+      const res = await fetch(resolveAppPath('/api/drive/upload'), {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: formData,
+      });
       const data = await res.json() as { ok?: boolean; fileName?: string; webViewLink?: string; error?: string };
       if (!res.ok || !data.ok) throw new Error(data.error || '업로드 실패');
       setUploadResult({ fileName: data.fileName!, webViewLink: data.webViewLink! });
@@ -556,6 +571,11 @@ export const StudentPage: React.FC<StudentPageProps> = ({
     }
 
     void (async () => {
+      const idToken = await getAuthToken?.();
+      if (!idToken) {
+        return;
+      }
+
       const results = await Promise.allSettled(
         pendingClassrooms.map(async (classroom) => ({
           classroomId: classroom.id,
@@ -564,7 +584,12 @@ export const StudentPage: React.FC<StudentPageProps> = ({
             classroom.name,
             targetLanguage
           ),
-          translatedName: await translateText(classroom.name, targetLanguage, controller.signal),
+          translatedName: await translateText(
+            classroom.name,
+            targetLanguage,
+            controller.signal,
+            idToken
+          ),
         }))
       );
 
@@ -603,7 +628,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
     });
 
     return () => controller.abort();
-  }, [activeClassroomId, classrooms, lang]);
+  }, [activeClassroomId, classrooms, getAuthToken, lang]);
 
   return (
     <div
@@ -842,7 +867,9 @@ export const StudentPage: React.FC<StudentPageProps> = ({
                     {getClassroomDisplayName(classroom)}
                   </h3>
                   <p className="text-sm text-[#A89F94]">
-                    {classroomContentIds.size}개 콘텐츠 · {classroom.students?.length || 0}명 학생
+                    {isAdmin
+                      ? `${classroomContentIds.size}개 콘텐츠 · ${classroom.students?.length || 0}명 학생`
+                      : `${classroomContentIds.size}개 콘텐츠`}
                   </p>
                 </motion.button>
               );

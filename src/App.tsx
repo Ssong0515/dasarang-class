@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DocumentData, QuerySnapshot } from 'firebase/firestore';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
@@ -6,6 +6,7 @@ import { Dashboard } from './components/Dashboard';
 import { MemoSection } from './components/MemoSection';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { StudentPage } from './components/StudentPage';
+import { StudentAccessManager } from './components/StudentAccessManager';
 import {
   AccessLog,
   ClassroomDateRecord,
@@ -14,6 +15,7 @@ import {
   Memo,
   NotebookLmFolderSyncResult,
   Student,
+  StudentAccess,
   LessonCategory,
   LessonContent,
 } from './types';
@@ -24,6 +26,7 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
   signInWithCredential,
+  signInWithCustomToken,
   signOut,
   onAuthStateChanged,
   collection,
@@ -65,6 +68,11 @@ import {
   sanitizeStudentForStorage,
   sortStudents,
 } from './utils/students';
+import {
+  isValidStudentAccessId,
+  normalizeStudentAccessId,
+  STUDENT_ACCESS_COLLECTION,
+} from './utils/studentAccess';
 
 type GoogleSheetsSyncRequest = {
   classroomId: string;
@@ -98,7 +106,7 @@ type ContentReorderUpdate = {
   order: number;
 };
 
-type AdminTab = 'home' | 'memo' | 'classroom-management' | 'content-library';
+type AdminTab = 'home' | 'memo' | 'classroom-management' | 'content-library' | 'student-access';
 
 const UNCATEGORIZED_CATEGORY_ID = null;
 const MISC_CATEGORY_NAME = '기타';
@@ -191,6 +199,8 @@ const getStudentsByClassroomId = (students: Student[]) => {
   return studentsByClassroomId;
 };
 
+const DEV_BYPASS = import.meta.env.DEV;
+
 export default function App() {
   const [user, setUser] = useState<any>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
@@ -203,6 +213,7 @@ export default function App() {
   const [contents, setContents] = useState<LessonContent[]>([]);
   const [activeTab, setActiveTab] = useState<AdminTab>('home');
   const [viewMode, setViewMode] = useState<'admin' | 'student'>('student');
+  const [isDevSigningIn, setIsDevSigningIn] = useState(DEV_BYPASS);
   const [activeClassroomId, setActiveClassroomId] = useState<string | null>(null);
   const [isContentLibraryDirty, setIsContentLibraryDirty] = useState(false);
   const [googleSheetsSyncError, setGoogleSheetsSyncError] = useState<GoogleSheetsSyncErrorState | null>(null);
@@ -215,8 +226,16 @@ export default function App() {
 
   // Admins (Firestore-driven)
   const [adminEmails, setAdminEmails] = useState<string[] | null>(null);
-  const isAdmin = adminEmails !== null && adminEmails.includes(user?.email ?? '');
-  const isAppReady = isAuthReady && adminEmails !== null;
+  const normalizedUserEmail = normalizeStudentAccessId(user?.email);
+  const isAdmin = DEV_BYPASS || (adminEmails !== null && adminEmails.includes(normalizedUserEmail));
+  const [studentAccessEntries, setStudentAccessEntries] = useState<StudentAccess[]>([]);
+  const [isStudentAccessAllowed, setIsStudentAccessAllowed] = useState(false);
+  const [isStudentAccessCheckReady, setIsStudentAccessCheckReady] = useState(true);
+  const canAccessStudentPage = isAdmin || isStudentAccessAllowed;
+  const isAppReady =
+    isAuthReady &&
+    adminEmails !== null &&
+    (!user || isAdmin || isStudentAccessCheckReady);
 
   // Access Logs (admin-only)
   const [accessLogs, setAccessLogs] = useState<AccessLog[]>([]);
@@ -241,6 +260,10 @@ export default function App() {
     () => classroomsWithStudents.find((classroom) => classroom.id === activeClassroomId) || null,
     [classroomsWithStudents, activeClassroomId]
   );
+  const getUserIdToken = useCallback(async () => {
+    if (!user) return null;
+    return user.getIdToken();
+  }, [user]);
 
   const confirmContentLibraryNavigation = () => {
     if (activeTab !== 'content-library' || !isContentLibraryDirty) {
@@ -333,6 +356,39 @@ export default function App() {
       driveAccessToken,
     });
 
+  const handleAddStudentAccess = async (rawEmail: string, memo: string) => {
+    if (!user || !isAdmin) return;
+
+    const email = normalizeStudentAccessId(rawEmail);
+    if (!isValidStudentAccessId(email)) {
+      throw new Error('올바른 이메일 형식의 아이디를 입력하세요.');
+    }
+
+    const timestamp = new Date().toISOString();
+    await setDoc(
+      doc(db, STUDENT_ACCESS_COLLECTION, email),
+      {
+        email,
+        memo: memo.trim(),
+        ownerUid: user.uid,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+      { merge: true }
+    );
+  };
+
+  const handleDeleteStudentAccess = async (rawEmail: string) => {
+    if (!user || !isAdmin) return;
+
+    const email = normalizeStudentAccessId(rawEmail);
+    if (!isValidStudentAccessId(email)) {
+      throw new Error('삭제할 아이디를 찾을 수 없습니다.');
+    }
+
+    await deleteDoc(doc(db, STUDENT_ACCESS_COLLECTION, email));
+  };
+
   const handleRetryGoogleSheetsSync = async () => {
     if (!googleSheetsSyncError) return;
     await syncClassroomsWithGoogleSheets(googleSheetsSyncError.requests, { isRetry: true });
@@ -343,7 +399,9 @@ export default function App() {
     const FALLBACK_ADMINS = ['songes0515@gmail.com', 'damunacenter@gmail.com'];
     getDocs(collection(db, 'admins'))
       .then((snapshot) => {
-        const emails = snapshot.docs.map((d) => d.id);
+        const emails = snapshot.docs
+          .map((d) => normalizeStudentAccessId(d.id))
+          .filter(Boolean);
         setAdminEmails(emails.length > 0 ? emails : FALLBACK_ADMINS);
       })
       .catch(() => {
@@ -363,27 +421,118 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // Dev auto sign-in: get a custom token from the local server and sign in silently
+  useEffect(() => {
+    if (!DEV_BYPASS) return;
+
+    fetch(resolveAppPath('api/dev/token'))
+      .then((r) => r.json() as Promise<{ token?: string }>)
+      .then(({ token }) => {
+        if (token) return signInWithCustomToken(auth, token);
+      })
+      .catch((err) => console.warn('[dev] Auto sign-in failed:', err))
+      .finally(() => setIsDevSigningIn(false));
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthReady || adminEmails === null) {
+      return;
+    }
+
+    if (!user) {
+      setIsStudentAccessAllowed(false);
+      setIsStudentAccessCheckReady(true);
+      return;
+    }
+
+    if (isAdmin) {
+      setIsStudentAccessAllowed(true);
+      setIsStudentAccessCheckReady(true);
+      return;
+    }
+
+    const email = normalizeStudentAccessId(user.email);
+    if (!email) {
+      setIsStudentAccessAllowed(false);
+      setIsStudentAccessCheckReady(true);
+      return;
+    }
+
+    setIsStudentAccessAllowed(false);
+    setIsStudentAccessCheckReady(false);
+
+    const unsubscribe = onSnapshot(
+      doc(db, STUDENT_ACCESS_COLLECTION, email),
+      (snapshot) => {
+        setIsStudentAccessAllowed(snapshot.exists());
+        setIsStudentAccessCheckReady(true);
+      },
+      () => {
+        setIsStudentAccessAllowed(false);
+        setIsStudentAccessCheckReady(true);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [adminEmails, isAdmin, isAuthReady, user]);
+
   // Set viewMode once we know both user & adminEmails
   useEffect(() => {
-    if (adminEmails === null) return;
-    if (user?.email && adminEmails.includes(user.email)) {
+    if (!user) return;
+    if (isAdmin) {
       setViewMode('admin');
-    } else if (user) {
+    } else {
       setViewMode('student');
     }
-  }, [user, adminEmails]);
+  }, [user, isAdmin]);
 
   // Log non-admin access
   useEffect(() => {
-    if (!user || adminEmails === null || isAdmin || accessLoggedRef.current) return;
+    if (
+      !user ||
+      adminEmails === null ||
+      isAdmin ||
+      !canAccessStudentPage ||
+      !isStudentAccessCheckReady ||
+      accessLoggedRef.current
+    ) return;
     accessLoggedRef.current = true;
     void addDoc(collection(db, 'access_logs'), {
       email: user.email ?? '',
       uid: user.uid,
       displayName: user.displayName ?? '',
       loginAt: new Date().toISOString(),
-    });
-  }, [user, adminEmails, isAdmin]);
+    }).catch((error) => console.error('Failed to write access log', error));
+  }, [user, adminEmails, isAdmin, canAccessStudentPage, isStudentAccessCheckReady]);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setStudentAccessEntries([]);
+      return;
+    }
+
+    const unsubscribe = onSnapshot(
+      collection(db, STUDENT_ACCESS_COLLECTION),
+      (snapshot) => {
+        setStudentAccessEntries(
+          snapshot.docs.map((accessDoc) => {
+            const data = accessDoc.data() as Partial<StudentAccess>;
+            return {
+              id: accessDoc.id,
+              email: normalizeStudentAccessId(data.email) || accessDoc.id,
+              memo: typeof data.memo === 'string' ? data.memo : undefined,
+              ownerUid: data.ownerUid ?? '',
+              createdAt: data.createdAt ?? '',
+              updatedAt: data.updatedAt ?? '',
+            } satisfies StudentAccess;
+          })
+        );
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, STUDENT_ACCESS_COLLECTION)
+    );
+
+    return () => unsubscribe();
+  }, [isAdmin]);
 
   // Load access logs (admin only)
   useEffect(() => {
@@ -428,6 +577,17 @@ export default function App() {
 
   // Data Listeners
   useEffect(() => {
+    if (!canAccessStudentPage) {
+      setClassrooms([]);
+      setStudents([]);
+      setMemos([]);
+      setDailyReviews([]);
+      setClassroomDateRecords([]);
+      setCategories([]);
+      setContents([]);
+      return;
+    }
+
     const normalizeClassroomSnapshot = (snapshot: QuerySnapshot<DocumentData>) =>
       snapshot.docs.map((classroomDoc) => {
         const data = classroomDoc.data() as Partial<Classroom>;
@@ -454,35 +614,40 @@ export default function App() {
       (error) => handleFirestoreError(error, OperationType.LIST, CLASSROOMS_COLLECTION)
     );
 
-    const studentsQuery = query(collection(db, 'students'));
-    const unsubscribeStudents = onSnapshot(
-      studentsQuery,
-      (snapshot) => {
-        const nextStudents = snapshot.docs.map((studentDoc) =>
-          normalizeStudentRecord({
-            id: studentDoc.id,
-            ...(studentDoc.data() as Partial<Student>),
-          })
-        );
+    let unsubscribeStudents = () => {};
+    if (isAdmin) {
+      const studentsQuery = query(collection(db, 'students'));
+      unsubscribeStudents = onSnapshot(
+        studentsQuery,
+        (snapshot) => {
+          const nextStudents = snapshot.docs.map((studentDoc) =>
+            normalizeStudentRecord({
+              id: studentDoc.id,
+              ...(studentDoc.data() as Partial<Student>),
+            })
+          );
 
-        if (import.meta.env.DEV) {
-          const incomplete = nextStudents.filter((s) => !s.classroomId || s.order === undefined);
-          if (incomplete.length > 0) {
-            console.warn(
-              '[dev] Students missing classroomId or order:',
-              incomplete.map((s) => ({ id: s.id, name: s.name, classroomId: s.classroomId, order: s.order }))
-            );
+          if (import.meta.env.DEV) {
+            const incomplete = nextStudents.filter((s) => !s.classroomId || s.order === undefined);
+            if (incomplete.length > 0) {
+              console.warn(
+                '[dev] Students missing classroomId or order:',
+                incomplete.map((s) => ({ id: s.id, name: s.name, classroomId: s.classroomId, order: s.order }))
+              );
+            }
           }
-        }
 
-        setStudents(sortStudents(nextStudents));
-      },
-      (error) => handleFirestoreError(error, OperationType.LIST, 'students')
-    );
+          setStudents(sortStudents(nextStudents));
+        },
+        (error) => handleFirestoreError(error, OperationType.LIST, 'students')
+      );
+    } else {
+      setStudents([]);
+    }
 
     // Memos Listener (Requires auth)
     let unsubscribeMemos = () => {};
-    if (user) {
+    if (user && isAdmin) {
       const memosQuery = query(
         collection(db, 'memos'),
         where('ownerUid', '==', user.uid),
@@ -501,7 +666,7 @@ export default function App() {
 
 
     let unsubscribeClassroomDateRecords = () => {};
-    if (user) {
+    if (user && isAdmin) {
       const normalizeClassroomDateRecordSnapshot = (snapshot: QuerySnapshot<DocumentData>) =>
         snapshot.docs.map((recordDoc) => {
           const data = recordDoc.data() as Partial<ClassroomDateRecord>;
@@ -597,7 +762,7 @@ export default function App() {
       unsubscribeCategories();
       unsubscribeContents();
     };
-  }, [user]);
+  }, [user, isAdmin, canAccessStudentPage]);
 
   // dailyReviews 리스너는 isAdmin 변경에도 반응해야 하므로 별도 useEffect로 분리
   useEffect(() => {
@@ -1181,7 +1346,7 @@ export default function App() {
   };
 
   const renderContent = () => {
-    if (!isAppReady) {
+    if (!isAppReady || isDevSigningIn) {
       return (
         <div className="h-screen flex items-center justify-center bg-[#FBFBFA]">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#8B5E3C]"></div>
@@ -1229,10 +1394,43 @@ export default function App() {
       );
     }
 
+    if (!canAccessStudentPage) {
+      return (
+        <div className="h-screen flex flex-col items-center justify-center bg-[#FBFBFA] p-8">
+          <div className="max-w-md w-full rounded-[40px] border border-[#E5E3DD] bg-white p-10 text-center shadow-xl shadow-[#8B5E3C]/5">
+            <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50 text-red-500">
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 9v4" />
+                <path d="M12 17h.01" />
+                <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+              </svg>
+            </div>
+            <h1 className="mb-3 font-serif text-3xl font-bold text-[#4A3728]">
+              등록되지 않은 아이디입니다
+            </h1>
+            <p className="mb-2 text-sm font-medium text-[#8B7E74]">
+              {user.email}
+            </p>
+            <p className="mb-8 text-sm leading-relaxed text-[#8B7E74]">
+              관리자에게 학생 페이지 접근 아이디 등록을 요청하세요.
+            </p>
+            <button
+              type="button"
+              onClick={() => void handleLogout()}
+              className="w-full rounded-2xl border-2 border-[#E5E3DD] bg-white px-6 py-4 text-sm font-bold text-[#4A3728] transition-all hover:border-[#8B5E3C] hover:bg-[#F3F2EE]"
+            >
+              다른 계정으로 로그인
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     if (!isAdmin) {
       return (
         <StudentPage
           isAdmin={false}
+          getAuthToken={getUserIdToken}
           classrooms={classroomsWithStudents}
           categories={categories}
           contents={contents}
@@ -1270,6 +1468,7 @@ export default function App() {
               embeddedInAdminShell
               isAdmin={isAdmin}
               onBackToAdmin={() => setViewMode('admin')}
+              getAuthToken={getUserIdToken}
               classrooms={classroomsWithStudents}
               categories={categories}
               contents={contents}
@@ -1346,6 +1545,13 @@ export default function App() {
               onDeleteContent={handleDeleteContent}
               onSyncNotebookLmFolder={handleSyncNotebookLmFolder}
               onDirtyStateChange={setIsContentLibraryDirty}
+            />
+          )}
+          {activeTab === 'student-access' && (
+            <StudentAccessManager
+              entries={studentAccessEntries}
+              onAdd={handleAddStudentAccess}
+              onDelete={handleDeleteStudentAccess}
             />
           )}
             </>

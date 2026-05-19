@@ -5,7 +5,11 @@
       "mcp__Claude_Preview__preview_start",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(git pull *)",
+      "Bash(firebase deploy *)",
+      "PowerShell(Get-Command firebase -ErrorAction SilentlyContinue)",
+      "Bash(npx firebase-tools *)"
     ]
   }
 }

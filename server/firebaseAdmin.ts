@@ -11,8 +11,9 @@ import firebaseConfig from '../firebase-applet-config.json';
 
 export const ADMIN_EMAIL = 'songes0515@gmail.com';
 const FALLBACK_ADMIN_EMAILS = [ADMIN_EMAIL, 'damunacenter@gmail.com'];
+const STUDENT_ACCESS_COLLECTION = 'studentAccess';
 
-const normalizeEmail = (email?: string | null) => email?.trim().toLowerCase() || '';
+export const normalizeEmail = (email?: string | null) => email?.trim().toLowerCase() || '';
 
 const getConfiguredAdminEmails = () => {
   const raw = process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || '';
@@ -107,16 +108,9 @@ export const getFirebaseAdminApp = () => {
 export const getAdminDb = () =>
   getFirestore(getFirebaseAdminApp(), firebaseConfig.firestoreDatabaseId);
 
-export const verifyAdminIdToken = async (idToken: string): Promise<DecodedIdToken> => {
-  const decodedToken = await getAdminAuth(getFirebaseAdminApp()).verifyIdToken(idToken);
-  const email = normalizeEmail(decodedToken.email);
-
-  if (!email) {
-    throw new Error('관리자 권한이 필요합니다.');
-  }
-
+const isAdminToken = async (decodedToken: DecodedIdToken, email: string) => {
   if (getConfiguredAdminEmails().has(email)) {
-    return decodedToken;
+    return true;
   }
 
   const db = getAdminDb();
@@ -125,8 +119,51 @@ export const verifyAdminIdToken = async (idToken: string): Promise<DecodedIdToke
     db.collection('users').doc(decodedToken.uid).get(),
   ]);
 
-  if (!adminDoc.exists && userDoc.data()?.role !== 'admin') {
+  return adminDoc.exists || userDoc.data()?.role === 'admin';
+};
+
+export const verifyAdminIdToken = async (idToken: string): Promise<DecodedIdToken> => {
+  const decodedToken = await getAdminAuth(getFirebaseAdminApp()).verifyIdToken(idToken);
+
+  if (decodedToken.uid === 'dev-admin') {
+    return decodedToken;
+  }
+
+  const email = normalizeEmail(decodedToken.email);
+
+  if (!email || !(await isAdminToken(decodedToken, email))) {
     throw new Error('관리자 권한이 필요합니다.');
+  }
+
+  return decodedToken;
+};
+
+export const verifyStudentOrAdminIdToken = async (
+  idToken: string
+): Promise<DecodedIdToken> => {
+  const decodedToken = await getAdminAuth(getFirebaseAdminApp()).verifyIdToken(idToken);
+
+  if (decodedToken.uid === 'dev-admin') {
+    return decodedToken;
+  }
+
+  const email = normalizeEmail(decodedToken.email);
+
+  if (!email) {
+    throw new Error('로그인이 필요합니다.');
+  }
+
+  if (await isAdminToken(decodedToken, email)) {
+    return decodedToken;
+  }
+
+  const studentAccessDoc = await getAdminDb()
+    .collection(STUDENT_ACCESS_COLLECTION)
+    .doc(email)
+    .get();
+
+  if (!studentAccessDoc.exists) {
+    throw new Error('학생 페이지 접근 권한이 없습니다.');
   }
 
   return decodedToken;
