@@ -236,6 +236,17 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     () => new Map(contents.map((content) => [content.id, content])),
     [contents]
   );
+  const contentsByCategory = useMemo(() => {
+    const grouped = new Map<string, LessonContent[]>();
+    for (const content of assignedContents) {
+      const catId = content.categoryId!;
+      if (!grouped.has(catId)) grouped.set(catId, []);
+      grouped.get(catId)!.push(content);
+    }
+    return categories
+      .filter((cat) => grouped.has(cat.id))
+      .map((cat) => ({ category: cat, catContents: grouped.get(cat.id)! }));
+  }, [assignedContents, categories]);
   const currentDateRecordContentIds = currentDateRecord
     ? normalizeClassroomDateRecordContentIds(currentDateRecord)
     : [];
@@ -1053,23 +1064,32 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
             )}
 
             {assignedContents.length > 0 ? (
-              <div className="flex flex-wrap gap-3">
-                {assignedContents.map((content) => {
-                  const isRecorded = currentDateRecordedContentIdSet.has(content.id);
-                  return (
-                    <button
-                      key={content.id}
-                      onClick={() => handleToggleDateRecordContent(content)}
-                      className={`rounded-full border px-5 py-3 text-left text-sm font-bold transition-all ${
-                        isRecorded
-                          ? 'border-[#CFE0FF] bg-[#EAF2FF] text-[#2F5EA8] shadow-sm'
-                          : 'border-[#D7EBD9] bg-[#F2FBF3] text-[#2F7A4D] hover:-translate-y-0.5 hover:bg-[#E3F6E6] hover:shadow-sm'
-                      }`}
-                    >
-                      {content.title}
-                    </button>
-                  );
-                })}
+              <div className="space-y-5">
+                {contentsByCategory.map(({ category, catContents }) => (
+                  <div key={category.id}>
+                    <p className="mb-2 text-xs font-bold uppercase tracking-wider text-[#8B7E74]">
+                      {category.name}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {catContents.map((content) => {
+                        const isRecorded = currentDateRecordedContentIdSet.has(content.id);
+                        return (
+                          <button
+                            key={content.id}
+                            onClick={() => handleToggleDateRecordContent(content)}
+                            className={`rounded-full border px-5 py-3 text-left text-sm font-bold transition-all ${
+                              isRecorded
+                                ? 'border-[#CFE0FF] bg-[#EAF2FF] text-[#2F5EA8] shadow-sm'
+                                : 'border-[#D7EBD9] bg-[#F2FBF3] text-[#2F7A4D] hover:-translate-y-0.5 hover:bg-[#E3F6E6] hover:shadow-sm'
+                            }`}
+                          >
+                            {content.title}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : (
               <div className="rounded-[28px] border border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-6 py-8 text-sm text-[#8B7E74]">
