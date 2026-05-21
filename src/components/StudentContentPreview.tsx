@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronDown, FileText, Maximize2, Presentation } from 'lucide-react';
+import { ChevronDown, FileText, Maximize2, Minimize2, Presentation } from 'lucide-react';
 import { LessonContent } from '../types';
 
 const toSlideEmbedUrl = (url: string): string => {
@@ -19,6 +19,7 @@ interface SlideEmbedProps {
 export const SlideEmbed: React.FC<SlideEmbedProps> = ({ slideUrl, title, roundedBottom = false }) => {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [isHovered, setIsHovered] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
 
   const handleFullscreen = () => {
     const el = iframeRef.current;
@@ -28,37 +29,93 @@ export const SlideEmbed: React.FC<SlideEmbedProps> = ({ slideUrl, title, rounded
     }
   };
 
+  useEffect(() => {
+    if (isMaximized) {
+      document.body.classList.add('has-maximized-slide');
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.classList.remove('has-maximized-slide');
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.classList.remove('has-maximized-slide');
+      document.body.style.overflow = '';
+    };
+  }, [isMaximized]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsMaximized(false);
+      }
+    };
+    if (isMaximized) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isMaximized]);
+
   return (
     <>
-      <div className="border-b border-[#F3F2EE] px-5 py-3 sm:px-8">
-        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.15em] text-[#A89F94]">
-          <Presentation size={13} />
-          슬라이드
+      {!isMaximized && (
+        <div className="border-b border-[#F3F2EE] px-5 py-3 sm:px-8">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.15em] text-[#A89F94]">
+            <Presentation size={13} />
+            슬라이드
+          </div>
         </div>
-      </div>
+      )}
       <div
-        className={`relative w-full overflow-hidden ${roundedBottom ? 'rounded-b-[32px]' : ''}`}
-        style={{ paddingBottom: '56.25%' }}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
+        className={
+          isMaximized
+            ? "maximized-slide-container fixed inset-0 z-[9999] bg-black flex items-center justify-center"
+            : `relative w-full overflow-hidden ${roundedBottom ? 'rounded-b-[32px]' : ''}`
+        }
+        style={isMaximized ? undefined : { paddingBottom: '56.25%' }}
+        onMouseEnter={() => !isMaximized && setIsHovered(true)}
+        onMouseLeave={() => !isMaximized && setIsHovered(false)}
       >
         <iframe
           ref={iframeRef}
           src={toSlideEmbedUrl(slideUrl)}
           title={`${title} 슬라이드`}
-          className="absolute inset-0 h-full w-full"
+          className={isMaximized ? "w-full h-full border-none" : "absolute inset-0 h-full w-full"}
           style={{ border: 'none' }}
           allowFullScreen
         />
-        {isHovered && (
+        {!isMaximized && isHovered && (
+          <div className="absolute right-3 top-3 z-10 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setIsMaximized(true)}
+              title="브라우저 창 전체화면"
+              className="flex items-center gap-1.5 rounded-xl bg-black/60 px-3 py-2 text-[11px] sm:text-xs font-bold text-white backdrop-blur-sm transition-all hover:bg-black/80 shadow-md cursor-pointer"
+            >
+              <Maximize2 size={13} />
+              창 전체화면
+            </button>
+            <button
+              type="button"
+              onClick={handleFullscreen}
+              title="모니터 전체화면"
+              className="flex items-center gap-1.5 rounded-xl bg-black/60 px-3 py-2 text-[11px] sm:text-xs font-bold text-white backdrop-blur-sm transition-all hover:bg-black/80 shadow-md cursor-pointer"
+            >
+              <Presentation size={13} />
+              모니터 전체화면
+            </button>
+          </div>
+        )}
+        {isMaximized && (
           <button
             type="button"
-            onClick={handleFullscreen}
-            title="슬라이드 전체화면"
-            className="absolute right-3 top-3 z-10 flex items-center gap-1.5 rounded-xl bg-black/50 px-3 py-2 text-xs font-bold text-white backdrop-blur-sm transition-all hover:bg-black/70"
+            onClick={() => setIsMaximized(false)}
+            title="창 전체화면 종료 (Esc)"
+            className="absolute right-4 top-4 z-[10000] flex items-center gap-1.5 rounded-xl bg-white/20 px-4 py-2.5 text-xs font-bold text-white backdrop-blur-sm transition-all hover:bg-white/30 cursor-pointer"
           >
-            <Maximize2 size={13} />
-            전체화면
+            <Minimize2 size={14} />
+            창 전체화면 종료 (Esc)
           </button>
         )}
       </div>

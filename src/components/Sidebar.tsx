@@ -251,7 +251,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             icon={<LayoutGrid size={20} />}
             label="대시보드"
             isCollapsed={isCollapsed}
-            isActive={activeTab === 'home'}
+            isActive={!isStudentView && activeTab === 'home'}
             onClick={() => onTabChange('home')}
           />
 
@@ -259,7 +259,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             icon={<Library size={20} />}
             label="콘텐츠"
             isCollapsed={isCollapsed}
-            isActive={activeTab === 'content-library'}
+            isActive={!isStudentView && activeTab === 'content-library'}
             extraClassName="mt-2"
             onClick={() => onTabChange('content-library')}
           />
@@ -268,7 +268,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             icon={<StickyNote size={20} />}
             label="메모장"
             isCollapsed={isCollapsed}
-            isActive={activeTab === 'memo'}
+            isActive={!isStudentView && activeTab === 'memo'}
             extraClassName="mt-2"
             onClick={() => onTabChange('memo')}
           />
@@ -286,7 +286,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             icon={<KeyRound size={20} />}
             label="접근 아이디"
             isCollapsed={isCollapsed}
-            isActive={activeTab === 'student-access'}
+            isActive={!isStudentView && activeTab === 'student-access'}
             extraClassName="mt-2"
             onClick={() => onTabChange('student-access')}
           />
@@ -297,7 +297,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {localClassrooms.map((classroom) => {
               const SideIcon = getClassroomIconComponent(classroom.icon);
               const isActive =
-                activeTab === 'classroom-management' && classroom.id === activeClassroomId;
+                !isStudentView && activeTab === 'classroom-management' && classroom.id === activeClassroomId;
 
               return (
                 <Reorder.Item

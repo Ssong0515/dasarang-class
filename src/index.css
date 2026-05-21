@@ -28,3 +28,16 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #DEDCD5;
 }
+
+/* 
+  Reset transforms on ancestors of the maximized slide container
+  to prevent them from forming containing blocks for fixed positioning.
+*/
+body.has-maximized-slide *:has(.maximized-slide-container) {
+  transform: none !important;
+  will-change: auto !important;
+  filter: none !important;
+  perspective: none !important;
+  contain: none !important;
+}
+
