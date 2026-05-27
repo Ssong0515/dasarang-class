@@ -349,10 +349,14 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   const homeTranslationRequestIdRef = useRef(0);
   const hasManagedHistoryEntryRef = useRef(false);
 
+  // Set to true to restore the classroom selection home screen
+  const SHOW_CLASSROOM_SELECTION = false;
+
   const homeT = translations[lang];
   const detailT = translations.KO;
   const currentT = activeClassroomId ? detailT : homeT;
   const activeClassroom = classrooms.find((classroom) => classroom.id === activeClassroomId);
+  const isContentViewActive = !SHOW_CLASSROOM_SELECTION || Boolean(activeClassroomId);
 
   const categorizedContents = contents.filter((content) => content.categoryId !== null);
   const categorizedContentIds = new Set(categorizedContents.map((content) => content.id));
@@ -644,7 +648,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
         >
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              {activeClassroomId && (
+              {SHOW_CLASSROOM_SELECTION && activeClassroomId && (
                 <button
                   onClick={handleGoHome}
                   className="rounded-xl p-2 text-[#8B7E74] transition-all hover:bg-[#F3F2EE] hover:text-[#4A3728]"
@@ -654,10 +658,10 @@ export const StudentPage: React.FC<StudentPageProps> = ({
               )}
               <div className="flex flex-col">
                 <h1 className="font-serif text-2xl font-bold text-[#141414]">
-                  {activeClassroom ? activeClassroom.name : currentT.title}
+                  {SHOW_CLASSROOM_SELECTION && activeClassroom ? activeClassroom.name : currentT.title}
                 </h1>
                 <p className="text-xs font-medium text-[#8B7E74]">
-                  {activeClassroom
+                  {SHOW_CLASSROOM_SELECTION && activeClassroom
                     ? `${visibleAssignedContentIds.size}개의 학습 콘텐츠`
                     : currentT.subtitle}
                 </p>
@@ -724,7 +728,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
             </div>
           </div>
 
-          {activeClassroomId && contentsByCategory.length > 0 && (
+          {isContentViewActive && contentsByCategory.length > 0 && (
             <div className="flex flex-wrap items-center gap-2 border-t border-[#F0ECE6] pt-1">
               {contentsByCategory.map((group) => {
                 const isDropdownOpen = openDropdown === group.category.id;
@@ -814,7 +818,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
         </div>
       </header>
 
-      {!activeClassroomId ? (
+      {SHOW_CLASSROOM_SELECTION && !activeClassroomId ? (
         <main className="mx-auto max-w-5xl p-8">
           <motion.section
             initial={{ opacity: 0, y: 20 }}

@@ -10,6 +10,7 @@ import {
   getClassroomDateRecordId,
 } from '../src/utils/classroomDomain';
 import { getAdminDb } from './firebaseAdmin';
+import { normalizeGeminiErrorMessage } from './geminiClient';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -131,6 +132,7 @@ const generateText = async (prompt: string) => {
 
   let attempt = 0;
   let retryDelay = 400;
+  let lastError: unknown = null;
 
   while (attempt < 3) {
     try {
@@ -146,10 +148,12 @@ const generateText = async (prompt: string) => {
 
       return text;
     } catch (error) {
+      lastError = error;
       attempt += 1;
 
       if (attempt >= 3 || !isRetryableModelError(error)) {
-        throw error;
+        const normalizedMessage = normalizeGeminiErrorMessage(error);
+        throw new ApiError(500, normalizedMessage);
       }
 
       const message = error instanceof Error ? error.message : String(error);
@@ -163,7 +167,8 @@ const generateText = async (prompt: string) => {
     }
   }
 
-  throw new ApiError(500, 'Gemini request failed.');
+  const normalizedMessage = normalizeGeminiErrorMessage(lastError);
+  throw new ApiError(500, normalizedMessage);
 };
 
 const normalizeGeneratedText = (value: string) =>

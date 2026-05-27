@@ -1,4 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
+import { normalizeGeminiErrorMessage } from './geminiClient';
 
 const SUPPORTED_LANGUAGES = {
   EN: 'English',
@@ -65,16 +66,20 @@ export const validateTranslatePayload = (payload: unknown): TranslatePayload => 
 };
 
 export const translateText = async ({ text, targetLanguage }: TranslatePayload) => {
-  const ai = new GoogleGenAI({ apiKey: getApiKey() });
-  const response = await ai.models.generateContent({
-    model: process.env.GEMINI_TRANSLATION_MODEL || DEFAULT_TRANSLATION_MODEL,
-    contents: buildPrompt(text, targetLanguage),
-  });
+  try {
+    const ai = new GoogleGenAI({ apiKey: getApiKey() });
+    const response = await ai.models.generateContent({
+      model: process.env.GEMINI_TRANSLATION_MODEL || DEFAULT_TRANSLATION_MODEL,
+      contents: buildPrompt(text, targetLanguage),
+    });
 
-  const translatedText = response.text?.trim();
-  if (!translatedText) {
-    throw new Error('Translation response was empty.');
+    const translatedText = response.text?.trim();
+    if (!translatedText) {
+      throw new Error('Translation response was empty.');
+    }
+
+    return translatedText;
+  } catch (error) {
+    throw new Error(normalizeGeminiErrorMessage(error));
   }
-
-  return translatedText;
 };

@@ -133,6 +133,9 @@ const iframeResponsiveStyleTag = `
       margin: 0;
       width: 100%;
       max-width: none;
+    }
+
+    body {
       overflow-x: hidden;
     }
 
@@ -140,9 +143,13 @@ const iframeResponsiveStyleTag = `
       box-sizing: border-box;
     }
 
-    img, video, iframe, canvas, svg {
+    img, video, iframe, svg {
       max-width: 100% !important;
       height: auto;
+    }
+
+    canvas {
+      max-width: 100% !important;
     }
 
     body > :is(main, section, article, [class*="container"], [class*="wrapper"], [class*="content"], [class*="inner"], [style*="max-width"]),
@@ -159,13 +166,22 @@ const iframeResponsiveStyleTag = `
 const iframeHeightScriptTag = `
   <script>
     function sendHeight() {
-      var h = document.documentElement.scrollHeight;
+      var h = Math.max(
+        document.body ? document.body.scrollHeight : 0,
+        document.body ? document.body.offsetHeight : 0,
+        document.documentElement.scrollHeight,
+        document.documentElement.offsetHeight
+      );
       window.parent.postMessage({ type: 'iframe-height', height: h }, '*');
     }
 
     window.addEventListener('load', function () { setTimeout(sendHeight, 100); });
+    if (window.ResizeObserver) {
+      new ResizeObserver(sendHeight).observe(document.documentElement);
+    }
     new MutationObserver(sendHeight).observe(document.body, { childList: true, subtree: true, attributes: true });
     window.addEventListener('resize', sendHeight);
+    setTimeout(sendHeight, 100);
     setTimeout(sendHeight, 300);
     setTimeout(sendHeight, 1000);
   <\/script>
@@ -257,16 +273,24 @@ export const StudentContentPreviewFrame: React.FC<StudentContentPreviewFrameProp
       ref={iframeRef}
       srcDoc={srcDoc}
       className={className}
-      style={autoHeight ? { border: 'none', overflow: 'hidden' } : { border: 'none' }}
+      style={autoHeight ? { border: 'none', overflow: 'hidden', height: '600px' } : { border: 'none' }}
       scrolling={autoHeight ? 'no' : undefined}
       sandbox="allow-scripts allow-same-origin"
       title={title}
       onLoad={autoHeight ? (event) => {
         const iframe = event.target as HTMLIFrameElement;
         try {
-          const nextHeight = iframe.contentDocument?.documentElement.scrollHeight;
-          if (nextHeight) {
-            iframe.style.height = `${nextHeight}px`;
+          const doc = iframe.contentDocument;
+          if (doc) {
+            const nextHeight = Math.max(
+              doc.body?.scrollHeight ?? 0,
+              doc.body?.offsetHeight ?? 0,
+              doc.documentElement.scrollHeight,
+              doc.documentElement.offsetHeight
+            );
+            if (nextHeight) {
+              iframe.style.height = `${nextHeight}px`;
+            }
           }
         } catch (_) {
           // Cross-document access can fail for sandboxed content. The postMessage path still handles updates.

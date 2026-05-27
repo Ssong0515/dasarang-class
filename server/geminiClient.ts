@@ -4,7 +4,7 @@ const GEMINI_API_KEY_PLACEHOLDER = 'MY_GEMINI_API_KEY';
 const DEFAULT_GEMINI_MODEL = 'gemini-2.0-flash';
 
 const INVALID_KEY_PATTERN =
-  /api key not valid|please pass a valid api key|invalid api key|api_key_invalid/i;
+  /api key not valid|please pass a valid api key|invalid api key|api_key_invalid|api key expired|renew the api key/i;
 const QUOTA_PATTERN = /quota|rate limit|resource exhausted|429/i;
 const OVERLOAD_PATTERN = /503|unavailable|overloaded|temporarily unavailable|high demand/i;
 const NETWORK_PATTERN = /network|fetch failed|timed out|timeout|econnreset|enotfound|socket hang up/i;
@@ -79,7 +79,7 @@ export const normalizeGeminiErrorMessage = (
   }
 
   if (INVALID_KEY_PATTERN.test(rawMessage)) {
-    return 'Gemini API 키가 유효하지 않습니다. 로컬 .env의 GEMINI_API_KEY를 새 키로 업데이트하세요.';
+    return 'Gemini API 키가 만료되었거나 유효하지 않습니다. 로컬 .env의 GEMINI_API_KEY를 새 키로 업데이트하세요.';
   }
 
   if (QUOTA_PATTERN.test(rawMessage)) {

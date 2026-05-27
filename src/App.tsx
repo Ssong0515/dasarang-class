@@ -74,6 +74,16 @@ import {
   STUDENT_ACCESS_COLLECTION,
 } from './utils/studentAccess';
 
+const removeUndefinedFields = <T extends Record<string, any>>(obj: T): T => {
+  const result = { ...obj };
+  Object.keys(result).forEach((key) => {
+    if (result[key] === undefined) {
+      delete result[key];
+    }
+  });
+  return result;
+};
+
 type GoogleSheetsSyncRequest = {
   classroomId: string;
   mode?: 'upsert' | 'delete';
@@ -216,6 +226,7 @@ export default function App() {
   const [isDevSigningIn, setIsDevSigningIn] = useState(DEV_BYPASS);
   const [activeClassroomId, setActiveClassroomId] = useState<string | null>(null);
   const [isContentLibraryDirty, setIsContentLibraryDirty] = useState(false);
+  const [selectedContentIdInLibrary, setSelectedContentIdInLibrary] = useState<string | null>(null);
   const [googleSheetsSyncError, setGoogleSheetsSyncError] = useState<GoogleSheetsSyncErrorState | null>(null);
   const [isRetryingGoogleSheetsSync, setIsRetryingGoogleSheetsSync] = useState(false);
 
@@ -1085,7 +1096,7 @@ export default function App() {
     if (!user) return;
     try {
       const previousClassroom = classrooms.find((classroom) => classroom.id === classroomId);
-      await setDoc(doc(db, CLASSROOMS_COLLECTION, classroomId), data, { merge: true });
+      await setDoc(doc(db, CLASSROOMS_COLLECTION, classroomId), removeUndefinedFields(data), { merge: true });
       triggerGoogleSheetsSync([{
         classroomId,
         mode: 'upsert',
@@ -1150,13 +1161,13 @@ export default function App() {
     if (!user) return;
     try {
       if (category.id) {
-        await setDoc(doc(db, 'categories', category.id), { ...category, ownerUid: user.uid }, { merge: true });
+        await setDoc(doc(db, 'categories', category.id), removeUndefinedFields({ ...category, ownerUid: user.uid }), { merge: true });
       } else {
-        await addDoc(collection(db, 'categories'), {
+        await addDoc(collection(db, 'categories'), removeUndefinedFields({
           ...category,
           ownerUid: user.uid,
           order: category.order ?? categories.length,
-        });
+        }));
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'categories');
@@ -1182,7 +1193,7 @@ export default function App() {
       content.id
         ? content.order
         : content.order ?? contents.filter((item) => (item.categoryId ?? null) === categoryId).length;
-    const savedContent: LessonContent = {
+    const savedContent: LessonContent = removeUndefinedFields({
       id: contentRef.id,
       categoryId,
       ownerUid: user.uid,
@@ -1197,12 +1208,12 @@ export default function App() {
       sourceModifiedTime: content.sourceModifiedTime,
       syncedAt: content.syncedAt,
       syncProvider: content.syncProvider,
-    };
+    });
 
     try {
       await setDoc(
         contentRef,
-        {
+        removeUndefinedFields({
           ...content,
           categoryId,
           title: content.title.trim(),
@@ -1210,7 +1221,7 @@ export default function App() {
           order,
           ownerUid: user.uid,
           createdAt,
-        },
+        }),
         { merge: true }
       );
 
@@ -1530,6 +1541,11 @@ export default function App() {
               onGenerateMemoDraft={handleGenerateMemoDraft}
               onUpdateClassroom={handleUpdateClassroom}
               onDeleteClassroom={handleDeleteClassroom}
+              onNavigateToContent={(contentId) => {
+                setSelectedContentIdInLibrary(contentId);
+                setActiveTab('content-library');
+                setViewMode('admin');
+              }}
             />
           )}
           {activeTab === 'content-library' && (
@@ -1545,6 +1561,8 @@ export default function App() {
               onDeleteContent={handleDeleteContent}
               onSyncNotebookLmFolder={handleSyncNotebookLmFolder}
               onDirtyStateChange={setIsContentLibraryDirty}
+              initialSelectedContentId={selectedContentIdInLibrary}
+              onClearInitialSelectedContentId={() => setSelectedContentIdInLibrary(null)}
             />
           )}
           {activeTab === 'student-access' && (

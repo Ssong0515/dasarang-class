@@ -77,6 +77,7 @@ interface ClassroomDashboardProps {
   ) => Promise<string>;
   onUpdateClassroom?: (classroomId: string, data: Partial<Classroom>) => void;
   onDeleteClassroom?: (classroomId: string) => void;
+  onNavigateToContent?: (contentId: string) => void;
 }
 
 type Tab = 'dashboard' | 'students' | 'settings';
@@ -168,6 +169,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   onGenerateMemoDraft,
   onUpdateClassroom,
   onDeleteClassroom,
+  onNavigateToContent,
 }) => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [selectedCategory, setSelectedCategory] = useState<string>(categories[0]?.id || '');
@@ -1044,11 +1046,17 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               <div className="mb-8 flex flex-wrap items-center gap-2 border-b border-[#E5E3DD] pb-8">
                 {currentDateRecordedContents.map((content) => (
                   <div key={content.id} className="group relative inline-flex">
-                    <button className="cursor-default rounded-full border border-[#CFE0FF] bg-[#EAF2FF] px-5 py-3 pr-10 text-left text-sm font-bold text-[#2F5EA8] shadow-sm">
+                    <button
+                      onClick={() => onNavigateToContent?.(content.id)}
+                      className="cursor-pointer rounded-full border border-[#CFE0FF] bg-[#EAF2FF] px-5 py-3 pr-10 text-left text-sm font-bold text-[#2F5EA8] shadow-sm hover:bg-[#D6E6FF] hover:border-[#A3C4FF] transition-all"
+                    >
                       {content.title}
                     </button>
                     <button
-                      onClick={() => handleToggleDateRecordContent(content)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleToggleDateRecordContent(content);
+                      }}
                       className="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-white/70 text-[#2F5EA8] opacity-0 transition-all hover:bg-[#D9534F] hover:text-white group-hover:opacity-100"
                       title="기록에서 제거"
                     >
