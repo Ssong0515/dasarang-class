@@ -221,6 +221,10 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     () => new Set(classroomDateRecords.map((record) => record.date)),
     [classroomDateRecords]
   );
+  const memoDateSet = useMemo(
+    () => new Set(classroomDateRecords.filter((record) => record.memo?.trim()).map((record) => record.date)),
+    [classroomDateRecords]
+  );
   const categorizedContents = useMemo(
     () => contents.filter((content) => content.categoryId !== null),
     [contents]
@@ -1319,6 +1323,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 const isSelected = dateStr === selectedDate;
                 const isToday = dateStr === getLocalDateString(new Date());
                 const isActive = activeDateSet.has(dateStr);
+                const hasMemo = memoDateSet.has(dateStr);
 
                 return (
                   <button
@@ -1333,8 +1338,14 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                     }`}
                   >
                     {date.getDate()}
-                    {isActive && !isSelected && (
-                      <div className="absolute bottom-1 h-1 w-1 rounded-full bg-[#8B5E3C]" />
+                    {isActive && (
+                      <div
+                        className={`absolute bottom-1 h-1.5 w-1.5 rounded-full transition-all ${
+                          hasMemo
+                            ? isSelected ? 'bg-white' : 'bg-[#8B5E3C]'
+                            : isSelected ? 'border border-white' : 'border border-[#8B5E3C]'
+                        }`}
+                      />
                     )}
                   </button>
                 );
