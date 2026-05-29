@@ -211,6 +211,39 @@ const getStudentsByClassroomId = (students: Student[]) => {
 
 const DEV_BYPASS = import.meta.env.DEV;
 
+// ── URL 라우팅 헬퍼 ──────────────────────────────────────────────────────────
+
+const getPathFromAppState = (
+  vm: 'admin' | 'student',
+  tab: AdminTab,
+  classroomId: string | null
+): string => {
+  if (vm === 'student') return '/student';
+  switch (tab) {
+    case 'memo':                return '/memo';
+    case 'classroom-management': return classroomId ? `/classroom/${classroomId}` : '/';
+    case 'content-library':     return '/content-library';
+    case 'student-access':      return '/student-access';
+    default:                    return '/';
+  }
+};
+
+const parsePathToAppState = (
+  pathname: string
+): { viewMode: 'admin' | 'student'; activeTab: AdminTab; activeClassroomId: string | null } => {
+  if (pathname.startsWith('/student'))     return { viewMode: 'student',  activeTab: 'home',                  activeClassroomId: null };
+  if (pathname === '/memo')                return { viewMode: 'admin',    activeTab: 'memo',                  activeClassroomId: null };
+  if (pathname.startsWith('/classroom/')) {
+    const id = pathname.slice('/classroom/'.length).split('/')[0];
+    return { viewMode: 'admin', activeTab: 'classroom-management', activeClassroomId: id || null };
+  }
+  if (pathname === '/content-library')     return { viewMode: 'admin',    activeTab: 'content-library',       activeClassroomId: null };
+  if (pathname === '/student-access')      return { viewMode: 'admin',    activeTab: 'student-access',        activeClassroomId: null };
+  return                                          { viewMode: 'admin',    activeTab: 'home',                  activeClassroomId: null };
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function App() {
   const [user, setUser] = useState<any>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
@@ -227,6 +260,12 @@ export default function App() {
   const [activeClassroomId, setActiveClassroomId] = useState<string | null>(null);
   const [isContentLibraryDirty, setIsContentLibraryDirty] = useState(false);
   const [selectedContentIdInLibrary, setSelectedContentIdInLibrary] = useState<string | null>(null);
+
+  // URL 라우팅 – 초기 경로 저장, 동기화 활성화 플래그
+  const initialPathRef = useRef(window.location.pathname);
+  const initialPathAppliedRef = useRef(false);
+  const urlSyncEnabledRef = useRef(false);
+  const isPopstateRef = useRef(false);
   const [googleSheetsSyncError, setGoogleSheetsSyncError] = useState<GoogleSheetsSyncErrorState | null>(null);
   const [isRetryingGoogleSheetsSync, setIsRetryingGoogleSheetsSync] = useState(false);
 
@@ -496,6 +535,61 @@ export default function App() {
       setViewMode('student');
     }
   }, [user, isAdmin]);
+
+  // ── URL 라우팅 ────────────────────────────────────────────────────────────
+
+  // 1) 인증 준비 완료 후 초기 URL 경로 적용 (1회)
+  useEffect(() => {
+    if (!isAppReady || !user || initialPathAppliedRef.current) return;
+    initialPathAppliedRef.current = true;
+    urlSyncEnabledRef.current = true;
+
+    if (!isAdmin) return; // 비관리자는 항상 학생 뷰
+
+    const parsed = parsePathToAppState(initialPathRef.current);
+    if (parsed.viewMode === 'student') {
+      setViewMode('student');
+    } else {
+      setActiveTab(parsed.activeTab);
+      if (parsed.activeClassroomId) setActiveClassroomId(parsed.activeClassroomId);
+    }
+  }, [isAppReady, user, isAdmin]);
+
+  // 2) 상태 변경 → URL 동기화
+  useEffect(() => {
+    if (!urlSyncEnabledRef.current || isPopstateRef.current) return;
+    const path = getPathFromAppState(viewMode, activeTab, activeClassroomId);
+    if (window.location.pathname !== path) {
+      window.history.pushState(null, '', path);
+    }
+  }, [viewMode, activeTab, activeClassroomId]);
+
+  // 3) 브라우저 뒤로/앞으로 버튼 처리
+  useEffect(() => {
+    const isAdminSnapshot = isAdmin; // 클로저용 스냅샷
+
+    const handlePopstate = () => {
+      isPopstateRef.current = true;
+      const parsed = parsePathToAppState(window.location.pathname);
+
+      if (isAdminSnapshot) {
+        if (parsed.viewMode === 'student') {
+          setViewMode('student');
+        } else {
+          setViewMode('admin');
+          setActiveTab(parsed.activeTab);
+          setActiveClassroomId(parsed.activeClassroomId);
+        }
+      }
+
+      requestAnimationFrame(() => { isPopstateRef.current = false; });
+    };
+
+    window.addEventListener('popstate', handlePopstate);
+    return () => window.removeEventListener('popstate', handlePopstate);
+  }, [isAdmin]);
+
+  // ─────────────────────────────────────────────────────────────────────────
 
   // Log non-admin access
   useEffect(() => {

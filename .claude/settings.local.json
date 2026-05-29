@@ -9,7 +9,26 @@
       "Bash(git pull *)",
       "Bash(firebase deploy *)",
       "PowerShell(Get-Command firebase -ErrorAction SilentlyContinue)",
-      "Bash(npx firebase-tools *)"
+      "Bash(npx firebase-tools *)",
+      "Bash(firebase apphosting:backends:list --project gen-lang-client-0507712225)",
+      "Bash(firebase apphosting:rollouts:list dasarang-class-1 --project gen-lang-client-0507712225 --location asia-east1)",
+      "WebFetch(domain:class.damuna.org)",
+      "Bash(gh run *)",
+      "WebFetch(domain:dasarang-class-1--gen-lang-client-0507712225.asia-east1.hosted.app)",
+      "Bash(firebase apphosting:rollouts:list --project gen-lang-client-0507712225)",
+      "Bash(npx tsc *)",
+      "Bash(firebase apphosting:rollouts:list dasarang-class-1 --project gen-lang-client-0507712225)",
+      "Bash(firebase apphosting *)",
+      "Bash(firebase apphosting:builds:list --project gen-lang-client-0507712225)",
+      "Bash(firebase --help)",
+      "Bash(firebase apphosting:backends:get dasarang-class-1 --project gen-lang-client-0507712225)",
+      "PowerShell(Get-Command gh -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-Command gh.exe -ErrorAction SilentlyContinue)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"https://class.damuna.org/assets/\")",
+      "Bash(curl -s \"https://class.damuna.org/\")",
+      "Bash(curl -s \"https://class.damuna.org/assets/index-BDgKAQev.js\")",
+      "Bash(firebase apphosting:rollouts:create dasarang-class-1 --project gen-lang-client-0507712225 --help)",
+      "Bash(firebase apphosting:rollouts:create dasarang-class-1 --project gen-lang-client-0507712225 --git-branch main --force)"
     ]
   }
 }
