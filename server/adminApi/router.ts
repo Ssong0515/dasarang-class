@@ -6,6 +6,7 @@ import {
   listCalendarEvents,
   upsertCalendarEvent,
 } from './calendarSync';
+import { assignCurriculumDatesFromCalendar, listCalendarClasses } from './calendarClasses';
 import { buildOpenApiDocument } from './openapi';
 import { AdminApiError, isResourceName } from './resources';
 import {
@@ -191,6 +192,33 @@ export const createAdminApiRouter = () => {
       res.json(await fullResync());
     } catch (error) {
       sendError(res, error, '달력 재동기화에 실패했습니다.');
+    }
+  });
+
+  router.get('/calendar/classes', async (_req, res) => {
+    try {
+      res.json({ items: await listCalendarClasses() });
+    } catch (error) {
+      sendError(res, error, '참고 시간표 조회에 실패했습니다.');
+    }
+  });
+
+  router.post('/calendar/assign-curriculum-dates', async (req, res) => {
+    try {
+      const { classroomId, calendarClassId, overwrite } = (req.body || {}) as {
+        classroomId?: string;
+        calendarClassId?: string;
+        overwrite?: boolean;
+      };
+      res.json(
+        await assignCurriculumDatesFromCalendar({
+          classroomId: classroomId || '',
+          calendarClassId,
+          overwrite,
+        })
+      );
+    } catch (error) {
+      sendError(res, error, '회차 날짜 배정에 실패했습니다.');
     }
   });
 

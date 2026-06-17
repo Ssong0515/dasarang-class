@@ -29,6 +29,10 @@ import {
 import { createAdminApiRouter } from './server/adminApi/router';
 import { handleMcpPostRequest, handleMcpUnsupportedMethod } from './server/adminApi/mcp';
 import { syncRecordToCalendarSafe } from './server/adminApi/calendarSync';
+import {
+  assignCurriculumDatesFromCalendar,
+  listCalendarClasses,
+} from './server/adminApi/calendarClasses';
 import { createPostFromUpload, listPublicStudentPosts } from './server/adminApi/studentPosts';
 import multer from 'multer';
 
@@ -259,6 +263,46 @@ async function startServer() {
     const result = await syncRecordToCalendarSafe(recordId.trim());
     res.json({ ok: result !== null, result });
   });
+
+  // calendar의 참고 시간표 목록 (교실 연결 드롭다운용)
+  app.get(withBasePath(APP_BASE_PATH, '/api/calendar/classes'), requireAdmin, async (_req, res) => {
+    try {
+      res.json({ items: await listCalendarClasses() });
+    } catch (error) {
+      res.status(500).json({
+        error: error instanceof Error ? error.message : '참고 시간표 조회에 실패했습니다.',
+      });
+    }
+  });
+
+  // 연결된 시간표의 수업 날짜들을 커리큘럼 회차에 자동 배정
+  app.post(
+    withBasePath(APP_BASE_PATH, '/api/calendar/assign-curriculum-dates'),
+    requireAdmin,
+    async (req, res) => {
+      try {
+        const { classroomId, calendarClassId, overwrite } = (req.body || {}) as {
+          classroomId?: string;
+          calendarClassId?: string;
+          overwrite?: boolean;
+        };
+        const result = await assignCurriculumDatesFromCalendar({
+          classroomId: classroomId || '',
+          calendarClassId,
+          overwrite,
+        });
+        res.json({ ok: true, ...result });
+      } catch (error) {
+        const statusCode =
+          error && typeof error === 'object' && 'statusCode' in error
+            ? (error as { statusCode: number }).statusCode
+            : 500;
+        res.status(statusCode).json({
+          error: error instanceof Error ? error.message : '회차 날짜 배정에 실패했습니다.',
+        });
+      }
+    }
+  );
 
   app.post(withBasePath(APP_BASE_PATH, '/api/notebooklm/sync-folder'), requireAdmin, async (req, res) => {
     try {

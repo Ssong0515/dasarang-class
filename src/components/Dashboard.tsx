@@ -54,7 +54,7 @@ interface DashboardProps {
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
-  classrooms = [],
+  classrooms: allClassrooms = [],
   classroomLoadDiagnostics,
   onManageClassroom,
   onGoToLibrary,
@@ -63,6 +63,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
   accessLogs = [],
 }) => {
   const isDev = import.meta.env.DEV;
+  // 숨긴 클래스는 홈 목록에서 제외
+  const classrooms = allClassrooms.filter((classroom) => !classroom.hidden);
   const firstClassroom = classrooms[0];
   const lastClassroom = classrooms[classrooms.length - 1];
 

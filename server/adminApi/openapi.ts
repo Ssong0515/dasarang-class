@@ -343,6 +343,47 @@ export const buildOpenApiDocument = () => {
           },
         },
       },
+      '/api/gpt/calendar/classes': {
+        get: {
+          operationId: 'listCalendarClasses',
+          summary: 'calendar.damuna.org 참고 시간표(classes) 목록',
+          description: '각 수업의 반복 일정(요일=월0…토5, 시간)·기간. 교실에 연결할 calendarClassId 선택에 사용.',
+          responses: {
+            '200': { description: '시간표 목록', content: { 'application/json': { schema: genericObjectSchema } } },
+            '401': errorResponse,
+          },
+        },
+      },
+      '/api/gpt/calendar/assign-curriculum-dates': {
+        post: {
+          operationId: 'assignCurriculumDates',
+          summary: '참고 시간표 날짜를 교실 커리큘럼 회차에 자동 배정',
+          description:
+            '교실에 연결된 calendarClassId의 실제 수업 날짜들을 커리큘럼 회차에 순서대로 채운다(1회차→첫 수업일…). done/skipped 회차는 건너뛴다.',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['classroomId'],
+                  properties: {
+                    classroomId: { type: 'string' },
+                    calendarClassId: { type: 'string', description: '미지정 시 교실에 저장된 연결 사용' },
+                    overwrite: { type: 'boolean', description: '기존 plannedDate 덮어쓰기 (기본 true)' },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            '200': { description: '배정 결과', content: { 'application/json': { schema: genericObjectSchema } } },
+            '400': errorResponse,
+            '404': errorResponse,
+            '401': errorResponse,
+          },
+        },
+      },
       '/api/gpt/student-posts/{id}/review': {
         post: {
           operationId: 'reviewStudentPost',

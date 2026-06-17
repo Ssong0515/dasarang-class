@@ -27,9 +27,18 @@ import {
   FolderOpen,
   ExternalLink,
   Loader2,
+  CalendarClock,
+  ListChecks,
+  Link2,
+  Plus,
+  Trash2,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import {
+  AssignCurriculumDatesResult,
   AttendanceRecord,
+  CalendarClassSummary,
   ClassroomDateRecord,
   Curriculum,
   CurriculumSession,
@@ -80,10 +89,29 @@ interface ClassroomDashboardProps {
   ) => Promise<string>;
   onUpdateClassroom?: (classroomId: string, data: Partial<Classroom>) => void;
   onDeleteClassroom?: (classroomId: string) => void;
+  onListCalendarClasses?: () => Promise<CalendarClassSummary[]>;
+  onAssignCurriculumDates?: (
+    classroomId: string,
+    options?: { calendarClassId?: string; overwrite?: boolean }
+  ) => Promise<AssignCurriculumDatesResult>;
+  onSaveCurriculumSessions?: (curriculumId: string, sessions: CurriculumSession[]) => Promise<void>;
   onNavigateToContent?: (contentId: string) => void;
 }
 
-type Tab = 'dashboard' | 'students' | 'settings';
+type Tab = 'dashboard' | 'students' | 'curriculum' | 'settings';
+
+const DOW_LABELS = ['월', '화', '수', '목', '금', '토'];
+const SESSION_STATUS_LABELS: Record<CurriculumSession['status'], string> = {
+  planned: '예정',
+  done: '완료',
+  skipped: '건너뜀',
+};
+
+const formatSchedule = (schedule: CalendarClassSummary['schedules'][number]) => {
+  const days = (schedule.days || []).map((day) => DOW_LABELS[day] ?? '?').join('·');
+  const time = schedule.start && schedule.end ? ` ${schedule.start}~${schedule.end}` : '';
+  return `${days}${time}`;
+};
 type StudentAction = 'add' | 'edit' | 'delete' | 'move' | 'deactivate' | 'reactivate';
 
 const getLocalDateString = (date: Date) => {
@@ -173,6 +201,9 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   onGenerateMemoDraft,
   onUpdateClassroom,
   onDeleteClassroom,
+  onListCalendarClasses,
+  onAssignCurriculumDates,
+  onSaveCurriculumSessions,
   onNavigateToContent,
 }) => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
@@ -203,6 +234,13 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     driveFolderName: classroom.driveFolderName || '',
   });
   const [isPickerLoading, setIsPickerLoading] = useState(false);
+
+  const [calendarClasses, setCalendarClasses] = useState<CalendarClassSummary[]>([]);
+  const [calendarClassesLoading, setCalendarClassesLoading] = useState(false);
+  const [calendarClassesError, setCalendarClassesError] = useState<string | null>(null);
+  const [isAssigningDates, setIsAssigningDates] = useState(false);
+  const [assignMessage, setAssignMessage] = useState<string | null>(null);
+  const [assignError, setAssignError] = useState<string | null>(null);
 
   const isSavingStudentAction = studentAction !== null;
   const availableMoveClassrooms = classrooms.filter((candidate) => candidate.id !== classroom.id);
@@ -391,6 +429,161 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   useEffect(() => {
     setIsAssignmentCardCollapsed(true);
   }, [classroom.id]);
+
+  useEffect(() => {
+    setAssignMessage(null);
+    setAssignError(null);
+  }, [classroom.id]);
+
+  useEffect(() => {
+    if (activeTab !== 'curriculum' || !onListCalendarClasses) {
+      return;
+    }
+    let cancelled = false;
+    setCalendarClassesLoading(true);
+    setCalendarClassesError(null);
+    onListCalendarClasses()
+      .then((items) => {
+        if (!cancelled) setCalendarClasses(items);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setCalendarClassesError(
+            error instanceof Error ? error.message : '참고 시간표를 불러오지 못했습니다.'
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCalendarClassesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, onListCalendarClasses]);
+
+  const linkedCurriculum = useMemo(
+    () => (curriculums || []).find((curriculum) => curriculum.id === classroom.curriculumId) || null,
+    [curriculums, classroom.curriculumId]
+  );
+
+  const linkedCalendarClass = useMemo(
+    () => calendarClasses.find((calendarClass) => calendarClass.id === classroom.calendarClassId) || null,
+    [calendarClasses, classroom.calendarClassId]
+  );
+
+  const sortedCurriculumSessions = useMemo(
+    () => [...(linkedCurriculum?.sessions || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+    [linkedCurriculum]
+  );
+
+  const [sessionDrafts, setSessionDrafts] = useState<CurriculumSession[]>([]);
+  const [isSavingSessions, setIsSavingSessions] = useState(false);
+  const [sessionSaveError, setSessionSaveError] = useState<string | null>(null);
+
+  // 연결된 커리큘럼이 바뀌거나 외부(자동 배정·GPT)에서 갱신되면 편집 초안을 다시 맞춘다
+  useEffect(() => {
+    setSessionDrafts(sortedCurriculumSessions.map((session) => ({ ...session })));
+    setSessionSaveError(null);
+  }, [linkedCurriculum?.id, linkedCurriculum?.updatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const normalizeSessionsForCompare = (sessions: CurriculumSession[]) =>
+    JSON.stringify(
+      sessions.map((session, index) => ({
+        topic: session.topic || '',
+        details: session.details || '',
+        plannedDate: session.plannedDate || '',
+        status: session.status,
+        order: index + 1,
+      }))
+    );
+  const isSessionsDirty =
+    normalizeSessionsForCompare(sessionDrafts) !== normalizeSessionsForCompare(sortedCurriculumSessions);
+
+  const updateSessionDraft = (id: string, patch: Partial<CurriculumSession>) => {
+    setSessionDrafts((drafts) =>
+      drafts.map((session) => (session.id === id ? { ...session, ...patch } : session))
+    );
+  };
+
+  const addSessionDraft = () => {
+    setSessionDrafts((drafts) => [
+      ...drafts,
+      {
+        id:
+          typeof crypto !== 'undefined' && 'randomUUID' in crypto
+            ? crypto.randomUUID()
+            : `session-${Date.now()}`,
+        order: drafts.length + 1,
+        topic: '',
+        status: 'planned',
+      },
+    ]);
+  };
+
+  const removeSessionDraft = (id: string) => {
+    setSessionDrafts((drafts) => drafts.filter((session) => session.id !== id));
+  };
+
+  const moveSessionDraft = (id: string, direction: -1 | 1) => {
+    setSessionDrafts((drafts) => {
+      const index = drafts.findIndex((session) => session.id === id);
+      const target = index + direction;
+      if (index === -1 || target < 0 || target >= drafts.length) {
+        return drafts;
+      }
+      const next = [...drafts];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  };
+
+  const handleSaveSessionDrafts = async () => {
+    if (!onSaveCurriculumSessions || !linkedCurriculum || isSavingSessions) {
+      return;
+    }
+    if (sessionDrafts.some((session) => !session.topic.trim())) {
+      setSessionSaveError('주제가 비어 있는 회차가 있습니다. 모든 회차에 주제를 입력하세요.');
+      return;
+    }
+    setSessionSaveError(null);
+    setIsSavingSessions(true);
+    try {
+      await onSaveCurriculumSessions(
+        linkedCurriculum.id,
+        sessionDrafts.map((session) => ({ ...session, topic: session.topic.trim() }))
+      );
+    } catch {
+      setSessionSaveError('회차를 저장하지 못했습니다. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setIsSavingSessions(false);
+    }
+  };
+
+  const resetSessionDrafts = () => {
+    setSessionDrafts(sortedCurriculumSessions.map((session) => ({ ...session })));
+    setSessionSaveError(null);
+  };
+
+  const handleAssignCurriculumDatesClick = async () => {
+    if (!onAssignCurriculumDates || isAssigningDates) {
+      return;
+    }
+    setAssignMessage(null);
+    setAssignError(null);
+    setIsAssigningDates(true);
+    try {
+      const result = await onAssignCurriculumDates(classroom.id);
+      setAssignMessage(
+        `회차 ${result.assigned}개에 날짜를 배정했습니다. (수업 날짜 ${result.availableDates}개 / 대상 회차 ${result.eligibleSessions}개)`
+      );
+    } catch (error) {
+      setAssignError(
+        error instanceof Error ? error.message : '회차 날짜 배정에 실패했습니다.'
+      );
+    } finally {
+      setIsAssigningDates(false);
+    }
+  };
 
   const createInitialAttendance = (): AttendanceRecord[] =>
     students.map((student) => ({
@@ -1879,6 +2072,258 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     </motion.div>
   );
 
+  const renderCurriculumTab = () => {
+    const canAssign = Boolean(classroom.calendarClassId && classroom.curriculumId && onAssignCurriculumDates);
+
+    return (
+      <motion.div
+        key="curriculum"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10 }}
+        className="space-y-6"
+      >
+        {/* 연결 설정 */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-6 shadow-sm sm:p-8">
+            <h3 className="mb-2 flex items-center gap-2 text-lg font-bold text-[#4A3728]">
+              <CalendarClock className="text-[#8B5E3C]" size={18} />
+              참고 시간표 연결
+            </h3>
+            <p className="mb-4 text-sm text-[#8B7E74]">
+              calendar.damuna.org에 FM으로 짜둔 시간표를 고르면, 그 수업 날짜로 회차 일정을 자동 배정할 수 있습니다.
+            </p>
+            {calendarClassesError ? (
+              <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
+                {calendarClassesError}
+              </div>
+            ) : (
+              <select
+                value={classroom.calendarClassId || ''}
+                disabled={calendarClassesLoading || !onUpdateClassroom}
+                onChange={(event) =>
+                  onUpdateClassroom?.(classroom.id, { calendarClassId: event.target.value || null })
+                }
+                className="w-full rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] px-4 py-3 text-sm font-medium text-[#4A3728] focus:border-[#8B5E3C] focus:outline-none disabled:opacity-60"
+              >
+                <option value="">{calendarClassesLoading ? '불러오는 중...' : '연결 안 함'}</option>
+                {calendarClasses.map((calendarClass) => (
+                  <option key={calendarClass.id} value={calendarClass.id}>
+                    {calendarClass.name}
+                    {calendarClass.instructor ? ` (${calendarClass.instructor})` : ''}
+                  </option>
+                ))}
+              </select>
+            )}
+            {linkedCalendarClass && (
+              <div className="mt-4 space-y-2 rounded-2xl bg-[#FBF4EA] px-4 py-3 text-sm text-[#8B5E3C]">
+                {linkedCalendarClass.schedules.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {linkedCalendarClass.schedules.map((schedule, index) => (
+                      <span key={index} className="rounded-full bg-white px-3 py-1.5 font-bold shadow-sm">
+                        {formatSchedule(schedule)}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p>등록된 반복 일정이 없습니다.</p>
+                )}
+                {(linkedCalendarClass.startDate || linkedCalendarClass.endDate) && (
+                  <p className="text-xs text-[#A2906F]">
+                    기간: {linkedCalendarClass.startDate || '제한 없음'} ~ {linkedCalendarClass.endDate || '제한 없음'}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-6 shadow-sm sm:p-8">
+            <h3 className="mb-2 flex items-center gap-2 text-lg font-bold text-[#4A3728]">
+              <Link2 className="text-[#8B5E3C]" size={18} />
+              커리큘럼 연결
+            </h3>
+            <p className="mb-4 text-sm text-[#8B7E74]">
+              이 클래스에서 진행할 커리큘럼을 연결하세요. 회차별 주제와 진행 상태를 여기에서 관리합니다.
+            </p>
+            <select
+              value={classroom.curriculumId || ''}
+              disabled={!onUpdateClassroom}
+              onChange={(event) =>
+                onUpdateClassroom?.(classroom.id, { curriculumId: event.target.value || null })
+              }
+              className="w-full rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] px-4 py-3 text-sm font-medium text-[#4A3728] focus:border-[#8B5E3C] focus:outline-none disabled:opacity-60"
+            >
+              <option value="">연결 안 함</option>
+              {(curriculums || []).map((curriculum) => (
+                <option key={curriculum.id} value={curriculum.id}>
+                  {curriculum.title}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* 자동 배정 */}
+        <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-6 shadow-sm sm:p-8">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <h3 className="text-lg font-bold text-[#4A3728]">시간표로 회차 날짜 자동 배정</h3>
+              <p className="text-sm text-[#8B7E74]">
+                참고 시간표의 실제 수업 날짜를 1회차부터 순서대로 채웁니다. 완료·건너뜀 회차는 제외됩니다.
+              </p>
+            </div>
+            <button
+              onClick={handleAssignCurriculumDatesClick}
+              disabled={!canAssign || isAssigningDates}
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-[#8B5E3C] px-6 py-3 text-sm font-bold text-white shadow-md transition-all hover:bg-[#724D31] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#8B5E3C]"
+            >
+              {isAssigningDates ? <Loader2 size={16} className="animate-spin" /> : <CalendarClock size={16} />}
+              {isAssigningDates ? '배정 중...' : '날짜 자동 배정'}
+            </button>
+          </div>
+          {!canAssign && (
+            <p className="mt-3 text-xs text-[#A2906F]">
+              참고 시간표와 커리큘럼을 모두 연결해야 배정할 수 있습니다.
+            </p>
+          )}
+          {assignMessage && (
+            <div className="mt-4 rounded-2xl border border-[#D7EBD9] bg-[#F2FBF3] px-4 py-3 text-sm font-medium text-[#2F7A4D]">
+              {assignMessage}
+            </div>
+          )}
+          {assignError && (
+            <div className="mt-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+              {assignError}
+            </div>
+          )}
+        </div>
+
+        {/* 회차 편집 */}
+        <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-6 shadow-sm sm:p-8">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h3 className="flex items-center gap-2 text-lg font-bold text-[#4A3728]">
+              <ListChecks className="text-[#8B5E3C]" size={18} />
+              커리큘럼 회차
+              {linkedCurriculum && (
+                <span className="rounded-full bg-[#F3F2EE] px-3 py-1 text-xs font-bold text-[#8B7E74]">
+                  {sessionDrafts.length}회차
+                </span>
+              )}
+            </h3>
+            {linkedCurriculum && onSaveCurriculumSessions && (
+              <div className="flex items-center gap-2">
+                {isSessionsDirty && (
+                  <button
+                    onClick={resetSessionDrafts}
+                    disabled={isSavingSessions}
+                    className="rounded-xl border border-[#E5E3DD] px-4 py-2 text-sm font-bold text-[#8B7E74] transition-all hover:bg-[#F3F2EE] disabled:opacity-60"
+                  >
+                    되돌리기
+                  </button>
+                )}
+                <button
+                  onClick={handleSaveSessionDrafts}
+                  disabled={!isSessionsDirty || isSavingSessions}
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#8B5E3C] px-4 py-2 text-sm font-bold text-white shadow-md transition-all hover:bg-[#724D31] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#8B5E3C]"
+                >
+                  {isSavingSessions ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                  {isSavingSessions ? '저장 중...' : '회차 저장'}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {sessionSaveError && (
+            <div className="mb-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+              {sessionSaveError}
+            </div>
+          )}
+
+          {!linkedCurriculum ? (
+            <div className="rounded-[24px] border border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-6 py-8 text-center text-sm text-[#8B7E74]">
+              연결된 커리큘럼이 없습니다. 위에서 커리큘럼을 먼저 연결하세요. (전체 커리큘럼 생성은 ChatGPT/Claude로)
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {sessionDrafts.map((session, index) => (
+                <div
+                  key={session.id}
+                  className="flex flex-wrap items-center gap-2 rounded-2xl border border-[#F3F2EE] bg-[#FBFBFA] px-3 py-3 sm:flex-nowrap"
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#EBD9C1] text-xs font-bold text-[#8B5E3C]">
+                    {index + 1}
+                  </span>
+                  <input
+                    value={session.topic}
+                    onChange={(event) => updateSessionDraft(session.id, { topic: event.target.value })}
+                    placeholder="회차 주제"
+                    className="min-w-0 flex-1 rounded-xl border border-[#E5E3DD] bg-white px-3 py-2 text-sm font-medium text-[#4A3728] focus:border-[#8B5E3C] focus:outline-none"
+                  />
+                  <input
+                    type="date"
+                    value={session.plannedDate || ''}
+                    onChange={(event) =>
+                      updateSessionDraft(session.id, { plannedDate: event.target.value })
+                    }
+                    className="shrink-0 rounded-xl border border-[#E5E3DD] bg-white px-3 py-2 text-sm font-medium text-[#2F5EA8] focus:border-[#8B5E3C] focus:outline-none"
+                  />
+                  <select
+                    value={session.status}
+                    onChange={(event) =>
+                      updateSessionDraft(session.id, {
+                        status: event.target.value as CurriculumSession['status'],
+                      })
+                    }
+                    className="shrink-0 rounded-xl border border-[#E5E3DD] bg-white px-3 py-2 text-sm font-bold text-[#8B7E74] focus:border-[#8B5E3C] focus:outline-none"
+                  >
+                    {(Object.keys(SESSION_STATUS_LABELS) as CurriculumSession['status'][]).map((status) => (
+                      <option key={status} value={status}>
+                        {SESSION_STATUS_LABELS[status]}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      onClick={() => moveSessionDraft(session.id, -1)}
+                      disabled={index === 0}
+                      title="위로"
+                      className="rounded-lg p-1.5 text-[#8B7E74] transition-all hover:bg-[#F3F2EE] disabled:opacity-30"
+                    >
+                      <ChevronUp size={16} />
+                    </button>
+                    <button
+                      onClick={() => moveSessionDraft(session.id, 1)}
+                      disabled={index === sessionDrafts.length - 1}
+                      title="아래로"
+                      className="rounded-lg p-1.5 text-[#8B7E74] transition-all hover:bg-[#F3F2EE] disabled:opacity-30"
+                    >
+                      <ChevronDown size={16} />
+                    </button>
+                    <button
+                      onClick={() => removeSessionDraft(session.id)}
+                      title="회차 삭제"
+                      className="rounded-lg p-1.5 text-[#B42318] transition-all hover:bg-[#FDECEC]"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              <button
+                onClick={addSessionDraft}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-4 py-3 text-sm font-bold text-[#8B5E3C] transition-all hover:border-[#EBD9C1] hover:bg-[#FFF5E9]"
+              >
+                <Plus size={16} />
+                회차 추가
+              </button>
+            </div>
+          )}
+        </div>
+      </motion.div>
+    );
+  };
+
   const renderSettingsTab = () => {
     const PreviewIcon = getClassroomIconComponent(settingsDraft.icon);
 
@@ -2099,7 +2544,38 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
           </div>
         </div>
 
-        <div className="mt-10 rounded-2xl border border-red-100 bg-red-50 p-6">
+        <div className="mt-10 rounded-2xl border border-[#E5E3DD] bg-white p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <h3 className="flex items-center gap-2 text-lg font-bold text-[#4A3728]">
+                {classroom.hidden ? (
+                  <EyeOff size={18} className="text-[#8B7E74]" />
+                ) : (
+                  <Eye size={18} className="text-[#8B5E3C]" />
+                )}
+                클래스 표시
+              </h3>
+              <p className="text-sm text-[#8B7E74]">
+                {classroom.hidden
+                  ? '현재 사이드바·홈 목록에서 숨겨져 있습니다. 데이터는 그대로 보존됩니다.'
+                  : '가리면 사이드바·홈 목록에서 숨겨집니다. (삭제 아님 — 언제든 다시 표시 가능)'}
+              </p>
+            </div>
+            <button
+              onClick={() => onUpdateClassroom?.(classroom.id, { hidden: !classroom.hidden })}
+              className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl px-6 py-3 text-sm font-bold transition-all ${
+                classroom.hidden
+                  ? 'bg-[#8B5E3C] text-white hover:bg-[#724D31]'
+                  : 'border border-[#E5E3DD] text-[#8B7E74] hover:bg-[#F3F2EE]'
+              }`}
+            >
+              {classroom.hidden ? <Eye size={16} /> : <EyeOff size={16} />}
+              {classroom.hidden ? '다시 표시' : '클래스 가리기'}
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-red-100 bg-red-50 p-6">
           <div className="mb-3 flex items-center gap-2">
             <AlertCircle size={18} className="text-red-500" />
             <h3 className="text-lg font-bold text-red-600">위험 영역</h3>
@@ -2151,6 +2627,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
           {[
             { id: 'dashboard', label: '수업 대시보드', icon: ClipboardList },
             { id: 'students', label: '학생 명단 관리', icon: Users },
+            { id: 'curriculum', label: '커리큘럼·시간표', icon: CalendarClock },
             { id: 'settings', label: '클래스 설정', icon: Settings },
           ].map((tab) => (
             <button
@@ -2177,7 +2654,9 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
             ? renderDashboardTab()
             : activeTab === 'students'
               ? renderStudentsTab()
-              : renderSettingsTab()}
+              : activeTab === 'curriculum'
+                ? renderCurriculumTab()
+                : renderSettingsTab()}
         </AnimatePresence>
       </div>
     </main>

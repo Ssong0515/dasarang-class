@@ -10,6 +10,8 @@ import {
   GripVertical,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  EyeOff,
 } from 'lucide-react';
 import { Reorder } from 'motion/react';
 import { Classroom } from '../types';
@@ -123,6 +125,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isStudentView = false,
 }) => {
   const [localClassrooms, setLocalClassrooms] = React.useState(classrooms);
+  const [showHidden, setShowHidden] = React.useState(false);
   const [viewportMode, setViewportMode] = React.useState<ViewportMode>(getViewportMode);
   const [isDesktopCollapsed, setIsDesktopCollapsed] = React.useState(() =>
     getDefaultDesktopCollapsed(getViewportMode())
@@ -143,7 +146,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           classroom.id !== localClassroom.id ||
           classroom.name !== localClassroom.name ||
           classroom.icon !== localClassroom.icon ||
-          classroom.color !== localClassroom.color
+          classroom.color !== localClassroom.color ||
+          classroom.hidden !== localClassroom.hidden
         );
       });
 
@@ -189,9 +193,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setIsDesktopCollapsed(getDefaultDesktopCollapsed(viewportMode));
   }, [viewportMode]);
 
-  const handleReorder = (newOrder: Classroom[]) => {
-    setLocalClassrooms(newOrder);
-    onReorderClassrooms?.(newOrder);
+  const visibleClassrooms = localClassrooms.filter((classroom) => !classroom.hidden);
+  const hiddenClassrooms = localClassrooms.filter((classroom) => classroom.hidden);
+
+  const handleReorder = (newVisibleOrder: Classroom[]) => {
+    const nextOrder = [...newVisibleOrder, ...hiddenClassrooms];
+    setLocalClassrooms(nextOrder);
+    onReorderClassrooms?.(nextOrder);
   };
 
   const handleToggleSidebar = () => {
@@ -293,8 +301,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         <div className={`border-t border-[#E5E3DD] ${isCollapsed ? 'mt-5 pt-5' : 'mt-6 pt-8'} flex-1`}>
-          <Reorder.Group axis="y" values={localClassrooms} onReorder={handleReorder} className="space-y-1">
-            {localClassrooms.map((classroom) => {
+          <Reorder.Group axis="y" values={visibleClassrooms} onReorder={handleReorder} className="space-y-1">
+            {visibleClassrooms.map((classroom) => {
               const SideIcon = getClassroomIconComponent(classroom.icon);
               const isActive =
                 !isStudentView && activeTab === 'classroom-management' && classroom.id === activeClassroomId;
@@ -353,6 +361,46 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <Plus size={16} />
               {!isCollapsed && <span>클래스 생성</span>}
             </button>
+          )}
+
+          {!isCollapsed && hiddenClassrooms.length > 0 && (
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={() => setShowHidden((prev) => !prev)}
+                className="flex w-full items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold text-[#A2906F] transition-all hover:bg-[#F3F2EE]"
+              >
+                <EyeOff size={14} />
+                <span className="flex-1 text-left">숨긴 클래스 ({hiddenClassrooms.length})</span>
+                <ChevronDown
+                  size={14}
+                  className={`transition-transform ${showHidden ? 'rotate-180' : ''}`}
+                />
+              </button>
+              {showHidden && (
+                <div className="mt-1 space-y-1">
+                  {hiddenClassrooms.map((classroom) => {
+                    const SideIcon = getClassroomIconComponent(classroom.icon);
+                    return (
+                      <button
+                        key={classroom.id}
+                        type="button"
+                        onClick={() => onManageClassroom(classroom)}
+                        title={`${classroom.name} (숨김)`}
+                        className="flex w-full items-center gap-3 rounded-xl px-4 py-2 font-bold text-[#A2906F] opacity-70 transition-all hover:bg-[#F3F2EE] hover:opacity-100"
+                      >
+                        <SideIcon
+                          size={16}
+                          className="shrink-0"
+                          style={classroom.color ? { color: classroom.color } : undefined}
+                        />
+                        <span className="truncate max-w-[120px] text-sm">{classroom.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           )}
         </div>
 

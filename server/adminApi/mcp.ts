@@ -9,6 +9,7 @@ import {
   listCalendarEvents,
   upsertCalendarEvent,
 } from './calendarSync';
+import { assignCurriculumDatesFromCalendar, listCalendarClasses } from './calendarClasses';
 import { AdminApiError, RESOURCE_NAMES } from './resources';
 import {
   createPracticeContent,
@@ -210,6 +211,25 @@ const buildMcpServer = () => {
             return fullResync();
         }
       })
+  );
+
+  server.tool(
+    'list_calendar_classes',
+    'calendar.damuna.org의 참고 시간표(classes) 목록 조회. 각 수업의 반복 일정(요일=월0…토5, 시간)·기간을 반환한다. 교실에 연결할 calendarClassId를 고를 때 사용.',
+    {},
+    async () => run(async () => ({ items: await listCalendarClasses() }))
+  );
+
+  server.tool(
+    'assign_curriculum_dates',
+    '교실에 연결된 참고 시간표(calendarClassId)의 실제 수업 날짜들을 그 교실 커리큘럼 회차에 순서대로 자동 배정한다(1회차→첫 수업일…). done/skipped 회차는 건너뛴다. calendarClassId 미지정 시 교실에 저장된 연결을 사용.',
+    {
+      classroomId: z.string(),
+      calendarClassId: z.string().optional(),
+      overwrite: z.boolean().optional().describe('이미 plannedDate가 있는 회차도 덮어쓸지 (기본 true)'),
+    },
+    async ({ classroomId, calendarClassId, overwrite }) =>
+      run(() => assignCurriculumDatesFromCalendar({ classroomId, calendarClassId, overwrite }))
   );
 
   server.tool(

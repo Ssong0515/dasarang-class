@@ -106,6 +106,32 @@ export interface Classroom {
   driveFolderId?: string;
   driveFolderName?: string;
   curriculumId?: string | null;
+  /** calendar.damuna.org의 `classes` 문서 ID. FM 참고 시간표로 연결됨. */
+  calendarClassId?: string | null;
+  /** 사이드바·홈에서 숨길지 여부 (삭제하지 않고 가리기) */
+  hidden?: boolean;
+}
+
+/** calendar.damuna.org `classes` 컬렉션의 참고 시간표 요약 (읽기 전용) */
+export interface CalendarClassSummary {
+  id: string;
+  name: string;
+  instructor: string;
+  /** 요일(월=0…토=5) + 시작/종료 시간 */
+  schedules: { days: number[]; start: string; end: string }[];
+  startDate: string;
+  endDate: string;
+}
+
+/** 시간표 → 커리큘럼 회차 날짜 자동 배정 결과 */
+export interface AssignCurriculumDatesResult {
+  classroomId: string;
+  calendarClassId: string;
+  curriculumId: string;
+  availableDates: number;
+  eligibleSessions: number;
+  assigned: number;
+  assignments: { sessionId: string; order: number; plannedDate: string }[];
 }
 
 export interface Memo {

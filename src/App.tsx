@@ -9,9 +9,12 @@ import { StudentPage } from './components/StudentPage';
 import { StudentAccessManager } from './components/StudentAccessManager';
 import {
   AccessLog,
+  AssignCurriculumDatesResult,
+  CalendarClassSummary,
   ClassroomDateRecord,
   Classroom,
   Curriculum,
+  CurriculumSession,
   DailyReview,
   Memo,
   NotebookLmFolderSyncResult,
@@ -54,6 +57,8 @@ import {
   sanitizeAttendanceRecordsForStorage,
 } from './utils/attendance';
 import { normalizeClassroomDateRecordContentIds } from './utils/classroomDateRecordContent';
+import { CLASSROOM_COLOR_OPTIONS } from './utils/classroomAppearance';
+import { CreateClassroomModal } from './components/CreateClassroomModal';
 import {
   CLASSROOMS_COLLECTION,
   DAILY_REVIEWS_COLLECTION,
@@ -260,6 +265,7 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'admin' | 'student'>('student');
   const [isDevSigningIn, setIsDevSigningIn] = useState(DEV_BYPASS);
   const [activeClassroomId, setActiveClassroomId] = useState<string | null>(null);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isContentLibraryDirty, setIsContentLibraryDirty] = useState(false);
   const [selectedContentIdInLibrary, setSelectedContentIdInLibrary] = useState<string | null>(null);
 
@@ -368,6 +374,35 @@ export default function App() {
     }
     return (responsePayload || {}) as TResponse;
   };
+
+  const getAdminRequest = async <TResponse,>(path: string): Promise<TResponse> => {
+    if (!user) {
+      throw new Error('관리자 요청을 보내려면 로그인 정보가 필요합니다.');
+    }
+    const idToken = await user.getIdToken();
+    const response = await fetch(resolveAppPath(path), {
+      headers: { Authorization: `Bearer ${idToken}` },
+    });
+    const responsePayload = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(responsePayload?.error || '관리자 요청 처리에 실패했습니다.');
+    }
+    return (responsePayload || {}) as TResponse;
+  };
+
+  const handleListCalendarClasses = async (): Promise<CalendarClassSummary[]> => {
+    const { items } = await getAdminRequest<{ items: CalendarClassSummary[] }>('api/calendar/classes');
+    return items || [];
+  };
+
+  const handleAssignCurriculumDates = async (
+    classroomId: string,
+    options?: { calendarClassId?: string; overwrite?: boolean }
+  ): Promise<AssignCurriculumDatesResult> =>
+    postAdminRequest<AssignCurriculumDatesResult>('api/calendar/assign-curriculum-dates', {
+      classroomId,
+      ...options,
+    });
 
   const syncClassroomsWithGoogleSheets = async (
     requests: GoogleSheetsSyncRequest[],
@@ -709,6 +744,9 @@ export default function App() {
           createdAt: typeof data.createdAt === 'string' ? data.createdAt : undefined,
           driveFolderId: typeof data.driveFolderId === 'string' ? data.driveFolderId : undefined,
           driveFolderName: typeof data.driveFolderName === 'string' ? data.driveFolderName : undefined,
+          curriculumId: typeof data.curriculumId === 'string' ? data.curriculumId : undefined,
+          calendarClassId: typeof data.calendarClassId === 'string' ? data.calendarClassId : undefined,
+          hidden: data.hidden === true,
         } satisfies Classroom;
       });
 
@@ -1235,6 +1273,27 @@ export default function App() {
     }
   };
 
+  const handleSaveCurriculumSessions = async (
+    curriculumId: string,
+    sessions: CurriculumSession[]
+  ) => {
+    if (!user) return;
+    const orderedSessions = sessions.map((session, index) => ({
+      ...session,
+      order: index + 1,
+    }));
+    try {
+      await setDoc(
+        doc(db, 'curriculums', curriculumId),
+        { sessions: orderedSessions, updatedAt: new Date().toISOString() },
+        { merge: true }
+      );
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `curriculums/${curriculumId}`);
+      throw error;
+    }
+  };
+
   const handleCreateClassroom = async () => {
     if (!user) return;
     try {
@@ -1248,6 +1307,34 @@ export default function App() {
       };
       await setDoc(classroomRef, classroomData);
       triggerGoogleSheetsSync([{ classroomId: classroomRef.id, mode: 'upsert' }]);
+      setIsCreateModalOpen(false);
+      handleManageClassroom({ ...classroomData, id: classroomRef.id } as Classroom);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, CLASSROOMS_COLLECTION);
+    }
+  };
+
+  const handleCreateClassroomFromCalendar = async (calendarClass: CalendarClassSummary) => {
+    if (!user) return;
+    try {
+      const newOrder = classrooms.length;
+      const classroomRef = doc(collection(db, CLASSROOMS_COLLECTION));
+      // 이름 기반으로 팔레트에서 안정적인 색 자동 배정
+      const colorIndex =
+        Math.abs([...calendarClass.name].reduce((acc, ch) => acc * 31 + ch.charCodeAt(0), 7)) %
+        CLASSROOM_COLOR_OPTIONS.length;
+      const classroomData = {
+        name: calendarClass.name || '새로운 클래스',
+        ownerUid: user.uid,
+        order: newOrder,
+        color: CLASSROOM_COLOR_OPTIONS[colorIndex].value,
+        calendarClassId: calendarClass.id,
+        createdAt: new Date().toISOString(),
+      };
+      await setDoc(classroomRef, classroomData);
+      triggerGoogleSheetsSync([{ classroomId: classroomRef.id, mode: 'upsert' }]);
+      setIsCreateModalOpen(false);
+      handleManageClassroom({ ...classroomData, id: classroomRef.id } as Classroom);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, CLASSROOMS_COLLECTION);
     }
@@ -1590,7 +1677,7 @@ export default function App() {
           onManageClassroom={handleManageClassroom}
           onLogout={handleLogout}
           onSwitchToStudent={handleSwitchToStudent}
-          onCreateClassroom={handleCreateClassroom}
+          onCreateClassroom={() => setIsCreateModalOpen(true)}
           onReorderClassrooms={async (newOrder) => {
             try {
               await Promise.all(
@@ -1602,6 +1689,13 @@ export default function App() {
               console.error('Failed to reorder classrooms', error);
             }
           }}
+        />
+        <CreateClassroomModal
+          isOpen={isCreateModalOpen}
+          onClose={() => setIsCreateModalOpen(false)}
+          onCreateBlank={handleCreateClassroom}
+          onCreateFromCalendar={handleCreateClassroomFromCalendar}
+          onListCalendarClasses={handleListCalendarClasses}
         />
         <div className="flex-1 flex flex-col overflow-hidden">
           {viewMode === 'student' ? (
@@ -1672,6 +1766,9 @@ export default function App() {
               onGenerateMemoDraft={handleGenerateMemoDraft}
               onUpdateClassroom={handleUpdateClassroom}
               onDeleteClassroom={handleDeleteClassroom}
+              onListCalendarClasses={handleListCalendarClasses}
+              onAssignCurriculumDates={handleAssignCurriculumDates}
+              onSaveCurriculumSessions={handleSaveCurriculumSessions}
               onNavigateToContent={(contentId) => {
                 setSelectedContentIdInLibrary(contentId);
                 setActiveTab('content-library');
