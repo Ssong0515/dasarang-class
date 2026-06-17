@@ -52,8 +52,11 @@ export const buildOpenApiDocument = () => {
     schema: { type: 'string' },
   };
 
+  // ChatGPT Actions 검증기는 type:object 스키마에 properties 키가 존재할 것을 요구한다.
+  // 자유 형식(문서 내용이 리소스마다 다름)은 properties:{} + additionalProperties:true로 표현.
   const genericObjectSchema = {
     type: 'object',
+    properties: {},
     additionalProperties: true,
   };
 
@@ -79,6 +82,17 @@ export const buildOpenApiDocument = () => {
     servers: [{ url: serverUrl }],
     security: [{ bearerAuth: [] }],
     components: {
+      schemas: {
+        FirestoreDoc: {
+          type: 'object',
+          properties: { id: { type: 'string' } },
+          additionalProperties: true,
+        },
+        ErrorResponse: {
+          type: 'object',
+          properties: { error: { type: 'string' } },
+        },
+      },
       securitySchemes: {
         bearerAuth: { type: 'http', scheme: 'bearer' },
       },
