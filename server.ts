@@ -26,6 +26,10 @@ import {
   syncNotebookLmPptxFolder,
   validateNotebookLmSyncPayload,
 } from './server/notebookLmSync';
+import { createAdminApiRouter } from './server/adminApi/router';
+import { handleMcpPostRequest, handleMcpUnsupportedMethod } from './server/adminApi/mcp';
+import { syncRecordToCalendarSafe } from './server/adminApi/calendarSync';
+import { createPostFromUpload, listPublicStudentPosts } from './server/adminApi/studentPosts';
 import multer from 'multer';
 
 dotenv.config();
@@ -95,7 +99,7 @@ async function startServer() {
   const requestedHmrPort = Number.isNaN(parsedHmrPort) ? PORT + 1 : parsedHmrPort;
   const HMR_PORT = isProduction ? requestedHmrPort : await findAvailablePort(requestedHmrPort, HOST);
 
-  app.use(express.json({ limit: '1mb' }));
+  app.use(express.json({ limit: '5mb' }));
 
   const upload = multer({
     storage: multer.memoryStorage(),
@@ -185,7 +189,30 @@ async function startServer() {
           originalName: req.file.originalname,
           mimeType: req.file.mimetype,
         });
-        res.json({ ok: true, ...result });
+
+        // 업로드 성공 시 승인 대기 게시물 자동 생성 (실패해도 업로드 자체는 성공 처리)
+        const { title, description, anonymous } = req.body as {
+          title?: string;
+          description?: string;
+          anonymous?: string;
+        };
+        let postId: string | undefined;
+        try {
+          const post = await createPostFromUpload({
+            classroomId,
+            studentName: studentName.trim(),
+            title,
+            description,
+            anonymous: anonymous === 'true' || anonymous === 'on',
+            mimeType: req.file.mimetype,
+            upload: result,
+          });
+          postId = post.id;
+        } catch (postError) {
+          console.warn('[studentPosts] 게시물 자동 생성 실패:', postError);
+        }
+
+        res.json({ ok: true, ...result, postId });
       } catch (error) {
         res.status(500).json({ error: error instanceof Error ? error.message : '업로드에 실패했습니다.' });
       }
@@ -194,6 +221,43 @@ async function startServer() {
 
   app.get(withBasePath(APP_BASE_PATH, '/api/health'), (_req, res) => {
     res.json({ status: 'ok' });
+  });
+
+  // ChatGPT(커스텀 GPT Actions)용 관리 API — API 키 인증 (openapi.json만 공개)
+  app.use(withBasePath(APP_BASE_PATH, '/api/gpt'), createAdminApiRouter());
+
+  // Claude용 MCP 서버 — Streamable HTTP (stateless), Bearer API 키 인증
+  app.post(withBasePath(APP_BASE_PATH, '/mcp'), handleMcpPostRequest);
+  app.get(withBasePath(APP_BASE_PATH, '/mcp'), handleMcpUnsupportedMethod);
+  app.delete(withBasePath(APP_BASE_PATH, '/mcp'), handleMcpUnsupportedMethod);
+
+  // damuna.org 학생 작품 쇼케이스용 공개 피드 (승인된 게시물만)
+  app.get(withBasePath(APP_BASE_PATH, '/api/public/student-posts'), async (req, res) => {
+    const origin = req.headers.origin || '';
+    const allowedOrigins = isProduction
+      ? ['https://damuna.org', 'https://www.damuna.org']
+      : [origin].filter(Boolean);
+    if (allowedOrigins.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+    }
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    try {
+      res.json({ items: await listPublicStudentPosts() });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : '게시물 조회에 실패했습니다.' });
+    }
+  });
+
+  // 브라우저(관리자 UI)에서 수업 기록 저장/삭제 후 달력 동기화를 트리거
+  app.post(withBasePath(APP_BASE_PATH, '/api/calendar/sync-record'), requireAdmin, async (req, res) => {
+    const { recordId } = (req.body || {}) as { recordId?: string };
+    if (!recordId?.trim()) {
+      res.status(400).json({ error: 'recordId가 필요합니다.' });
+      return;
+    }
+    const result = await syncRecordToCalendarSafe(recordId.trim());
+    res.json({ ok: result !== null, result });
   });
 
   app.post(withBasePath(APP_BASE_PATH, '/api/notebooklm/sync-folder'), requireAdmin, async (req, res) => {

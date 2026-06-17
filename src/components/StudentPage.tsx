@@ -285,6 +285,8 @@ export const StudentPage: React.FC<StudentPageProps> = ({
 
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [uploadStudentName, setUploadStudentName] = useState('');
+  const [uploadTitle, setUploadTitle] = useState('');
+  const [uploadAnonymous, setUploadAnonymous] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadPreview, setUploadPreview] = useState<string | null>(null);
   const [uploadState, setUploadState] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle');
@@ -310,6 +312,8 @@ export const StudentPage: React.FC<StudentPageProps> = ({
     setUploadFile(null);
     setUploadPreview(null);
     setUploadStudentName('');
+    setUploadTitle('');
+    setUploadAnonymous(false);
     setUploadError('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -328,6 +332,8 @@ export const StudentPage: React.FC<StudentPageProps> = ({
       formData.append('file', uploadFile);
       formData.append('classroomId', activeClassroomId);
       formData.append('studentName', uploadStudentName.trim());
+      if (uploadTitle.trim()) formData.append('title', uploadTitle.trim());
+      formData.append('anonymous', uploadAnonymous ? 'true' : 'false');
       const res = await fetch(resolveAppPath('/api/drive/upload'), {
         method: 'POST',
         headers: {
@@ -996,6 +1002,22 @@ export const StudentPage: React.FC<StudentPageProps> = ({
                   onChange={(e) => setUploadStudentName(e.target.value)}
                   className="w-full rounded-2xl border-2 border-[#E5E3DD] px-4 py-3 text-sm text-[#4A3728] outline-none focus:border-[#8B5E3C]"
                 />
+                <input
+                  type="text"
+                  placeholder="작품 제목 (선택)"
+                  value={uploadTitle}
+                  onChange={(e) => setUploadTitle(e.target.value)}
+                  className="w-full rounded-2xl border-2 border-[#E5E3DD] px-4 py-3 text-sm text-[#4A3728] outline-none focus:border-[#8B5E3C]"
+                />
+                <label className="flex cursor-pointer items-center gap-2 px-1 text-xs text-[#A89F94]">
+                  <input
+                    type="checkbox"
+                    checked={uploadAnonymous}
+                    onChange={(e) => setUploadAnonymous(e.target.checked)}
+                    className="h-4 w-4 accent-[#8B5E3C]"
+                  />
+                  홈페이지에 공개될 때 이름 대신 '익명'으로 표시
+                </label>
 
                 {uploadPreview ? (
                   <div className="relative">

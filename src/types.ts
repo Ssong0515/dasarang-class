@@ -88,6 +88,8 @@ export interface ClassroomDateRecord {
   memo: string;
   createdAt: string;
   updatedAt: string;
+  curriculumId?: string;
+  curriculumSessionId?: string;
 }
 
 export interface Classroom {
@@ -103,6 +105,7 @@ export interface Classroom {
   createdAt?: string;
   driveFolderId?: string;
   driveFolderName?: string;
+  curriculumId?: string | null;
 }
 
 export interface Memo {
@@ -110,6 +113,55 @@ export interface Memo {
   ownerUid: string;
   content: string;
   date: string;
+  curriculumId?: string;
+  curriculumSessionId?: string;
+}
+
+export type CurriculumSessionStatus = 'planned' | 'done' | 'skipped';
+
+export interface CurriculumSession {
+  id: string;
+  /** 1-based 회차 */
+  order: number;
+  topic: string;
+  details?: string;
+  /** YYYY-MM-DD */
+  plannedDate?: string;
+  contentIds?: string[];
+  status: CurriculumSessionStatus;
+}
+
+export interface Curriculum {
+  id: string;
+  ownerUid: string;
+  title: string;
+  description?: string;
+  sessions: CurriculumSession[];
+  order?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type StudentPostStatus = 'pending' | 'approved' | 'hidden';
+
+export interface StudentPost {
+  id: string;
+  ownerUid: string;
+  title: string;
+  description?: string;
+  studentName: string;
+  anonymous?: boolean;
+  classroomId: string;
+  classroomName: string;
+  driveFileId: string;
+  fileName: string;
+  mimeType: string;
+  webViewLink: string;
+  imageUrl?: string;
+  status: StudentPostStatus;
+  createdAt: string;
+  approvedAt?: string;
+  order?: number;
 }
 
 export interface DailyReview {

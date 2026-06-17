@@ -230,5 +230,25 @@ service cloud.firestore {
         request.resource.data.email == request.auth.token.email;
       allow update, delete: if isAdmin();
     }
+
+    function isValidCurriculum(data) {
+      return data.keys().hasAll(['title', 'ownerUid', 'sessions', 'createdAt', 'updatedAt']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 100 &&
+             data.sessions is list &&
+             (!('description' in data) || data.description is string) &&
+             (!('order' in data) || data.order is number) &&
+             (data.ownerUid == request.auth.uid || isAdmin());
+    }
+
+    match /curriculums/{curriculumId} {
+      allow read: if isAdmin();
+      allow create, update: if isAdmin() && isValidCurriculum(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    // 공개 노출은 서버(/api/public/student-posts, admin SDK)를 통해서만 — 클라이언트는 관리자만
+    match /studentPosts/{postId} {
+      allow read, write: if isAdmin();
+    }
   }
 }

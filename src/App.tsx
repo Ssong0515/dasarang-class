@@ -11,6 +11,7 @@ import {
   AccessLog,
   ClassroomDateRecord,
   Classroom,
+  Curriculum,
   DailyReview,
   Memo,
   NotebookLmFolderSyncResult,
@@ -251,6 +252,7 @@ export default function App() {
   const [students, setStudents] = useState<Student[]>([]);
   const [memos, setMemos] = useState<Memo[]>([]);
   const [dailyReviews, setDailyReviews] = useState<DailyReview[]>([]);
+  const [curriculums, setCurriculums] = useState<Curriculum[]>([]);
   const [classroomDateRecords, setClassroomDateRecords] = useState<ClassroomDateRecord[]>([]);
   const [categories, setCategories] = useState<LessonCategory[]>([]);
   const [contents, setContents] = useState<LessonContent[]>([]);
@@ -902,6 +904,38 @@ export default function App() {
     return () => unsubscribeDailyReviews();
   }, [user, isAdmin]);
 
+  // 커리큘럼 리스너 (관리자 전용 — ChatGPT/Claude로 관리되는 데이터를 실시간 반영)
+  useEffect(() => {
+    if (!user || !isAdmin) {
+      setCurriculums([]);
+      return;
+    }
+
+    const unsubscribeCurriculums = onSnapshot(
+      collection(db, 'curriculums'),
+      (snapshot) => {
+        const curriculumsData = snapshot.docs.map((curriculumDoc) => {
+          const data = curriculumDoc.data() as Partial<Curriculum>;
+          return {
+            id: curriculumDoc.id,
+            ownerUid: data.ownerUid ?? '',
+            title: data.title ?? '',
+            description: data.description,
+            sessions: Array.isArray(data.sessions) ? data.sessions : [],
+            order: data.order,
+            createdAt: data.createdAt ?? '',
+            updatedAt: data.updatedAt ?? '',
+          } satisfies Curriculum;
+        });
+        curriculumsData.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        setCurriculums(curriculumsData);
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, 'curriculums')
+    );
+
+    return () => unsubscribeCurriculums();
+  }, [user, isAdmin]);
+
   const handleGoogleSignIn = async () => {
     setIsSigningIn(true);
     setSignInError('');
@@ -1419,6 +1453,7 @@ export default function App() {
       await deleteDuplicateClassroomDateRecordDocs(record.classroomId, record.date, recordId);
 
       upsertLocalClassroomDateRecord(nextRecord);
+      void postAdminRequest('api/calendar/sync-record', { recordId }).catch(() => {});
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `classroomDateRecords/${record.id}`);
     }
@@ -1437,6 +1472,7 @@ export default function App() {
       }
 
       removeLocalClassroomDateRecord(recordId);
+      void postAdminRequest('api/calendar/sync-record', { recordId }).catch(() => {});
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `classroomDateRecords/${recordId}`);
     }
@@ -1627,6 +1663,7 @@ export default function App() {
               dateRecords={classroomDateRecords}
               categories={categories}
               contents={contents}
+              curriculums={curriculums}
               userEmail={user?.email ?? undefined}
               onSaveStudents={handleSaveStudents}
               onMoveStudent={handleMoveStudent}

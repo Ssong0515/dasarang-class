@@ -26,6 +26,11 @@ env:
     value: 1049224228341-p1qe72is5mc7mosv31ba5fo000c5qqs4.apps.googleusercontent.com
 
   # ── 서버 전용 시크릿 (Secret Manager) ────────────────────────────
+  # ChatGPT(GPT Actions)/Claude(MCP) 관리 API 키 — 배포 전 반드시 생성:
+  #   firebase apphosting:secrets:set ADMIN_API_KEY
+  - variable: ADMIN_API_KEY
+    secret: ADMIN_API_KEY
+
   - variable: GEMINI_API_KEY
     secret: GEMINI_API_KEY
 

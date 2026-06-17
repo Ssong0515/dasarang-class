@@ -31,6 +31,8 @@ import {
 import {
   AttendanceRecord,
   ClassroomDateRecord,
+  Curriculum,
+  CurriculumSession,
   LessonCategory,
   LessonContent,
   Classroom,
@@ -66,6 +68,7 @@ interface ClassroomDashboardProps {
   dateRecords: ClassroomDateRecord[];
   categories: LessonCategory[];
   contents: LessonContent[];
+  curriculums?: Curriculum[];
   userEmail?: string;
   onSaveStudents: (classroomId: string, students: Student[]) => Promise<void>;
   onMoveStudent: (sourceClassroomId: string, targetClassroomId: string, studentId: string) => Promise<void>;
@@ -161,6 +164,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   dateRecords,
   categories,
   contents,
+  curriculums,
   userEmail,
   onSaveStudents,
   onMoveStudent,
@@ -225,6 +229,20 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     () => new Set(classroomDateRecords.filter((record) => record.memo?.trim()).map((record) => record.date)),
     [classroomDateRecords]
   );
+  // 이 교실에 연결된 커리큘럼의 예정 회차 (날짜 → 회차 목록)
+  const plannedSessionsByDate = useMemo(() => {
+    const map = new Map<string, CurriculumSession[]>();
+    const linkedCurriculum = (curriculums || []).find(
+      (curriculum) => curriculum.id === classroom.curriculumId
+    );
+    for (const session of linkedCurriculum?.sessions || []) {
+      if (!session.plannedDate) continue;
+      const sessionsOnDate = map.get(session.plannedDate) || [];
+      sessionsOnDate.push(session);
+      map.set(session.plannedDate, sessionsOnDate);
+    }
+    return map;
+  }, [curriculums, classroom.curriculumId]);
   const categorizedContents = useMemo(
     () => contents.filter((content) => content.categoryId !== null),
     [contents]
@@ -1324,11 +1342,17 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 const isToday = dateStr === getLocalDateString(new Date());
                 const isActive = activeDateSet.has(dateStr);
                 const hasMemo = memoDateSet.has(dateStr);
+                const plannedSessions = plannedSessionsByDate.get(dateStr);
 
                 return (
                   <button
                     key={dateStr}
                     onClick={() => setSelectedDate(dateStr)}
+                    title={
+                      plannedSessions
+                        ? plannedSessions.map((session) => `${session.order}회차 ${session.topic}`).join(', ')
+                        : undefined
+                    }
                     className={`relative flex h-8 w-full items-center justify-center rounded-lg text-xs font-bold transition-all ${
                       isSelected
                         ? 'bg-[#8B5E3C] text-white shadow-md shadow-[#8B5E3C]/20'
@@ -1338,19 +1362,31 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                     }`}
                   >
                     {date.getDate()}
-                    {isActive && (
-                      <div
-                        className={`absolute bottom-1 h-1.5 w-1.5 rounded-full transition-all ${
-                          hasMemo
-                            ? isSelected ? 'bg-white' : 'bg-[#8B5E3C]'
-                            : isSelected ? 'border border-white' : 'border border-[#8B5E3C]'
-                        }`}
-                      />
-                    )}
+                    <span className="absolute bottom-1 flex items-center gap-0.5">
+                      {isActive && (
+                        <span
+                          className={`h-1.5 w-1.5 rounded-full transition-all ${
+                            hasMemo
+                              ? isSelected ? 'bg-white' : 'bg-[#8B5E3C]'
+                              : isSelected ? 'border border-white' : 'border border-[#8B5E3C]'
+                          }`}
+                        />
+                      )}
+                      {plannedSessions && (
+                        <span
+                          className={`h-1.5 w-1.5 rounded-full border border-dashed transition-all ${
+                            isSelected ? 'border-white/80' : 'border-[#C4956A]'
+                          }`}
+                        />
+                      )}
+                    </span>
                   </button>
                 );
               })}
             </div>
+            {plannedSessionsByDate.size > 0 && (
+              <p className="mt-2 text-right text-[10px] text-[#A89F94]">점선 ○ = 커리큘럼 예정일</p>
+            )}
           </div>
 
           {isCurrentDateActive ? (
