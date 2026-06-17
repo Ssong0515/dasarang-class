@@ -227,7 +227,11 @@ const buildMcpServer = () => {
  * App Hosting은 인스턴스 0-2개로 세션 어피니티가 없으므로 요청마다 새 transport를 만든다.
  */
 export const handleMcpPostRequest: express.RequestHandler = async (req, res) => {
-  const token = extractBearerToken(req.headers.authorization);
+  // 인증: Authorization 헤더(Bearer) 우선, 없으면 URL 쿼리 파라미터(?key= 또는 ?token=)
+  // 쿼리 방식은 Claude Desktop 커넥터 UI처럼 커스텀 헤더를 못 넣는 클라이언트를 위한 것.
+  const queryKey = (req.query.key || req.query.token);
+  const token = extractBearerToken(req.headers.authorization)
+    || (typeof queryKey === 'string' ? queryKey.trim() : '');
   if (!token || !isValidApiKey(token)) {
     res.status(401).json({
       jsonrpc: '2.0',
