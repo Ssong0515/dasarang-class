@@ -1319,15 +1319,12 @@ export default function App() {
     try {
       const newOrder = classrooms.length;
       const classroomRef = doc(collection(db, CLASSROOMS_COLLECTION));
-      // 이름 기반으로 팔레트에서 안정적인 색 자동 배정
-      const colorIndex =
-        Math.abs([...calendarClass.name].reduce((acc, ch) => acc * 31 + ch.charCodeAt(0), 7)) %
-        CLASSROOM_COLOR_OPTIONS.length;
+      // 캘린더가 강사명으로 산출한 색을 그대로 사용해 동기화. 없으면 팔레트 기본색.
       const classroomData = {
         name: calendarClass.name || '새로운 클래스',
         ownerUid: user.uid,
         order: newOrder,
-        color: CLASSROOM_COLOR_OPTIONS[colorIndex].value,
+        color: calendarClass.color || CLASSROOM_COLOR_OPTIONS[0].value,
         calendarClassId: calendarClass.id,
         createdAt: new Date().toISOString(),
       };

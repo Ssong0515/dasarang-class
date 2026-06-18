@@ -117,6 +117,8 @@ export interface CalendarClassSummary {
   id: string;
   name: string;
   instructor: string;
+  /** calendar 앱이 강사명으로 산출하는 대표 색(hex) */
+  color: string;
   /** 요일(월=0…토=5) + 시작/종료 시간 */
   schedules: { days: number[]; start: string; end: string }[];
   startDate: string;

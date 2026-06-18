@@ -164,9 +164,14 @@ export const CreateClassroomModal: React.FC<CreateClassroomModalProps> = ({
                         disabled={creatingId !== null}
                         className="flex w-full items-center gap-3 rounded-2xl border border-[#F3F2EE] bg-[#FBFBFA] px-4 py-3 text-left transition-all hover:border-[#EBD9C1] hover:bg-[#FFF5E9] disabled:cursor-not-allowed disabled:opacity-60"
                       >
+                        <span
+                          className="h-2.5 w-2.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: calendarClass.color || '#A2906F' }}
+                          aria-hidden
+                        />
                         <span className="min-w-0 flex-1">
-                          <span className="flex items-center gap-2">
-                            <span className="truncate text-sm font-bold text-[#4A3728]">
+                          <span className="flex min-w-0 items-center gap-2">
+                            <span className="truncate text-sm font-semibold text-[#4A3728]">
                               {calendarClass.name}
                             </span>
                             {calendarClass.instructor && (

@@ -32,10 +32,33 @@ export interface CalendarClassSummary {
   id: string;
   name: string;
   instructor: string;
+  /** calendar 앱이 강사명으로 산출하는 대표 색(hex) */
+  color: string;
   schedules: { days: number[]; start: string; end: string }[];
   startDate: string;
   endDate: string;
 }
+
+/**
+ * calendar 앱(app.js)의 강사 색 팔레트/해시를 그대로 포팅.
+ * 캘린더는 수업 색을 강사명으로 결정하므로(없으면 수업명), 동일 로직으로 재현해야 색이 맞는다.
+ * (강사별 커스텀 색은 calendar 기기의 localStorage에만 있어 서버에서는 알 수 없다.)
+ */
+const TAG_PALETTE = [
+  '#d32f2f', '#1976d2', '#388e3c', '#f57c00',
+  '#7b1fa2', '#00838f', '#c62828', '#283593',
+  '#2e7d32', '#ad1457', '#00695c', '#5e35b1',
+  '#6d4c41', '#558b2f', '#0277bd', '#e65100',
+];
+
+const strToColorIdx = (str: string) => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i += 1) hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+  return hash % TAG_PALETTE.length;
+};
+
+const getCalendarClassColor = (instructor: string, name: string) =>
+  TAG_PALETTE[strToColorIdx(instructor || name || '')];
 
 const pad2 = (value: number) => String(value).padStart(2, '0');
 const makeDateStr = (year: number, month: number, day: number) =>
@@ -49,6 +72,7 @@ const toSummary = (id: string, data: CalendarClassDoc): CalendarClassSummary => 
   id,
   name: data.name || '',
   instructor: data.instructor || '',
+  color: getCalendarClassColor(data.instructor || '', data.name || ''),
   schedules: (data.schedules || []).map((sched) => ({
     days: sched.days || [],
     start: sched.start || '',
