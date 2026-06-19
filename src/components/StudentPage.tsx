@@ -28,6 +28,14 @@ const CONTENT_MENU_GAP = 12;
 const CONTENT_MENU_MAX_HEIGHT = 360;
 const CONTENT_MENU_MIN_HEIGHT = 160;
 
+// 강사 화면(ClassroomDashboard)의 selectedDate와 동일한 로컬 날짜 계산 — 게이팅 날짜가 어긋나지 않도록 맞춘다.
+const getLocalDateString = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 interface StudentPageProps {
   onBackToAdmin?: () => void;
   onLogin?: () => void;
@@ -369,18 +377,21 @@ export const StudentPage: React.FC<StudentPageProps> = ({
 
   const categorizedContents = contents.filter((content) => content.categoryId !== null);
   const categorizedContentIds = new Set(categorizedContents.map((content) => content.id));
-  // 게이팅: 강사가 '공개'한 실습 블록만 학생에게 보인다. 공개 전까진 잠겨 있음(빈 상태).
-  // 반 구분 없이 전체 공개 정책 → 모든 publishedLessons 문서의 공개 id를 합집합으로 본다.
+  // 게이팅: 강사가 '오늘' 공개한 실습 블록만 학생에게 보인다. 공개 전까진 잠겨 있음(빈 상태).
+  // 반 구분 없이 전체 공개 정책 → 오늘 날짜 publishedLessons의 공개 id를 합집합으로 본다.
+  const todayDateString = getLocalDateString(new Date());
   const publishedContentIdSet = new Set(
-    publishedLessons.flatMap((lesson) => lesson.publishedContentIds)
+    publishedLessons
+      .filter((lesson) => lesson.date === todayDateString)
+      .flatMap((lesson) => lesson.publishedContentIds)
   );
   const getAssignedContentIdsForClassroom = (_classroom?: Classroom) =>
     Array.from(categorizedContentIds);
   const visibleContents = categorizedContents.filter((content) =>
     publishedContentIdSet.has(content.id)
   );
-  const visibleAssignedContentIds = new Set(visibleContents.map((content) => content.id));
   const visibleContentIds = new Set(visibleContents.map((content) => content.id));
+  const visibleAssignedContentIds = visibleContentIds;
 
   const contentsByCategory = categories
     .map((category) => ({
