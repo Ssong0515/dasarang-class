@@ -164,7 +164,7 @@ const buildMcpServer = () => {
 
   server.tool(
     'create_practice_content',
-    '실습 자료(자체 완결 HTML)를 학생 콘텐츠로 등록한다. 등록 즉시 학생 페이지에 표시된다. categoryId나 categoryName을 주지 않으면 "실습 자료" 카테고리에 들어간다. HTML은 외부 리소스 없이 자체 완결로 작성할 것 (최대 약 900KB).',
+    '실습 자료(자체 완결 HTML)를 학생 콘텐츠로 등록한다. 등록해도 학생 화면에는 바로 안 보이고, 강사가 클래스 관리 > 수업 진행에서 "공개"를 눌러야 그 실습이 학생에게 열린다(게이팅). categoryId나 categoryName을 주지 않으면 "실습 자료" 카테고리에 들어간다. 회차에 연결하려면 반환된 콘텐츠 id를 mutate_curriculum_sessions의 session.contentIds에 넣을 것. HTML은 외부 리소스 없이 자체 완결로 작성할 것 (최대 약 900KB).',
     {
       title: z.string(),
       description: z.string().optional().describe('학생에게 보이는 짧은 설명'),

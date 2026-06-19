@@ -128,7 +128,7 @@ export const RESOURCE_SPECS: Record<ResourceName, ResourceSpec> = {
   contents: {
     collection: 'contents',
     description:
-      '수업 콘텐츠 (HTML 또는 Google Slides). categoryId가 null이면 학생에게 보이지 않는다. 목록 조회에서는 html이 생략되며 includeHtml=true로 포함시킬 수 있다.',
+      '수업 콘텐츠. slideUrl=이론 슬라이드(강사 화면 전용), html=실습(학생 화면). categoryId가 null이면 어디에도 안 보인다. 카테고리에 넣어도 학생 화면에는 강사가 수업 중 "공개"한 실습만 열린다(게이팅). 목록 조회에서는 html이 생략되며 includeHtml=true로 포함시킬 수 있다.',
     filterFields: ['categoryId'],
     sort: { field: 'order', direction: 'asc' },
     fields: {
