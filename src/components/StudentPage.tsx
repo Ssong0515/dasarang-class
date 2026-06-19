@@ -10,8 +10,9 @@ import {
   Upload,
   CheckCircle2,
   X,
+  Lock,
 } from 'lucide-react';
-import { Classroom, LessonCategory, LessonContent } from '../types';
+import { Classroom, LessonCategory, LessonContent, PublishedLesson } from '../types';
 import { resolveAppPath } from '../utils/appPaths';
 import { StudentContentCard } from './StudentContentPreview';
 import {
@@ -36,6 +37,7 @@ interface StudentPageProps {
   classrooms?: Classroom[];
   categories?: LessonCategory[];
   contents?: LessonContent[];
+  publishedLessons?: PublishedLesson[];
 }
 
 type Language = 'KO' | 'EN' | 'RU' | 'ZH';
@@ -70,7 +72,7 @@ const translations = {
     translating: '번역 중...',
     original: '원문 보기',
     noLessons: '이 클래스에 등록된 수업이 아직 없습니다.',
-    noVisibleContents: '표시 가능한 콘텐츠가 없습니다.',
+    noVisibleContents: '아직 공개된 실습이 없어요. 선생님이 수업 중에 공개하면 여기에서 바로 풀 수 있어요.',
     selectClass: '수업 클래스 선택하기',
     pm: '오후',
     am: '오전',
@@ -91,7 +93,7 @@ const translations = {
     translating: 'Translating...',
     original: 'Show Original',
     noLessons: 'No lessons have been registered for this class yet.',
-    noVisibleContents: 'No visible content is available.',
+    noVisibleContents: 'No practice is open yet. It will appear here the moment your teacher unlocks it during class.',
     selectClass: 'Select Your Class',
     pm: 'PM',
     am: 'AM',
@@ -112,7 +114,7 @@ const translations = {
     translating: 'Перевод...',
     original: 'Показать оригинал',
     noLessons: 'Уроки для этого класса пока не зарегистрированы.',
-    noVisibleContents: 'Нет доступного содержимого для показа.',
+    noVisibleContents: 'Практика пока не открыта. Она появится здесь, как только учитель откроет её во время урока.',
     selectClass: 'Выберите свой класс',
     pm: 'дня',
     am: 'утра',
@@ -132,7 +134,7 @@ const translations = {
     translating: '翻译中...',
     original: '查看原文',
     noLessons: '该班级尚无登记的课程。',
-    noVisibleContents: '当前没有可显示的内容。',
+    noVisibleContents: '尚未开放练习。老师在课堂上开放后，这里会立即显示。',
     selectClass: '选择您的班级',
     pm: '下午',
     am: '上午',
@@ -270,6 +272,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   classrooms = [],
   categories = [],
   contents = [],
+  publishedLessons = [],
 }) => {
   const [lang, setLang] = useState<Language>('KO');
   const [isLangOpen, setIsLangOpen] = useState(false);
@@ -366,10 +369,17 @@ export const StudentPage: React.FC<StudentPageProps> = ({
 
   const categorizedContents = contents.filter((content) => content.categoryId !== null);
   const categorizedContentIds = new Set(categorizedContents.map((content) => content.id));
+  // 게이팅: 강사가 '공개'한 실습 블록만 학생에게 보인다. 공개 전까진 잠겨 있음(빈 상태).
+  // 반 구분 없이 전체 공개 정책 → 모든 publishedLessons 문서의 공개 id를 합집합으로 본다.
+  const publishedContentIdSet = new Set(
+    publishedLessons.flatMap((lesson) => lesson.publishedContentIds)
+  );
   const getAssignedContentIdsForClassroom = (_classroom?: Classroom) =>
     Array.from(categorizedContentIds);
-  const visibleContents = categorizedContents;
-  const visibleAssignedContentIds = categorizedContentIds;
+  const visibleContents = categorizedContents.filter((content) =>
+    publishedContentIdSet.has(content.id)
+  );
+  const visibleAssignedContentIds = new Set(visibleContents.map((content) => content.id));
   const visibleContentIds = new Set(visibleContents.map((content) => content.id));
 
   const contentsByCategory = categories
@@ -378,6 +388,15 @@ export const StudentPage: React.FC<StudentPageProps> = ({
       items: visibleContents.filter((content) => content.categoryId === category.id),
     }))
     .filter((group) => group.items.length > 0);
+
+  // 강사가 실시간으로 잠그면, 열어 두던 실습을 즉시 닫는다.
+  useEffect(() => {
+    if (selectedContent && !visibleContentIds.has(selectedContent.id)) {
+      setSelectedContent(null);
+    }
+    // visibleContentIds는 publishedLessons에서 파생 → publishedLessons 변화가 트리거
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedContent?.id, publishedLessons]);
 
   const closeContentDropdown = () => {
     setOpenDropdown(null);
@@ -921,8 +940,10 @@ export const StudentPage: React.FC<StudentPageProps> = ({
               animate={{ opacity: 1, y: 0 }}
               className="mb-12 w-full max-w-none rounded-[40px] border border-[#E5E3DD] bg-white p-12 text-center shadow-sm"
             >
-              <BookOpen size={48} className="mx-auto mb-4 text-[#E5E3DD]" />
-              <p className="text-lg font-bold text-[#8B7E74]">
+              <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-[#F3F2EE]">
+                <Lock size={28} className="text-[#A89F94]" />
+              </div>
+              <p className="mx-auto max-w-md text-lg font-bold text-[#8B7E74]">
                 {detailT.noVisibleContents}
               </p>
             </motion.section>

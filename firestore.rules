@@ -217,6 +217,23 @@ service cloud.firestore {
       allow delete: if isDocOwner() || isAdmin();
     }
 
+    function isValidPublishedLesson(data) {
+      return data.keys().hasAll(['classroomId', 'date', 'publishedContentIds', 'ownerUid', 'updatedAt']) &&
+             data.classroomId is string &&
+             data.date is string &&
+             data.publishedContentIds is list &&
+             data.updatedAt is string &&
+             (!('classroomName' in data) || data.classroomName is string) &&
+             (data.ownerUid == request.auth.uid || isAdmin());
+    }
+
+    // 학생이 읽을 수 있는 유일한 수업 데이터 — 강사가 '공개'한 실습 블록 id만 담는다 (출석·메모 제외).
+    match /publishedLessons/{docId} {
+      allow read: if canReadStudentPage();
+      allow create, update: if isAdmin() && isValidPublishedLesson(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
     match /studentAccess/{email} {
       allow get: if isAdmin() || (isAuthenticated() && request.auth.token.email == email);
       allow list: if isAdmin();

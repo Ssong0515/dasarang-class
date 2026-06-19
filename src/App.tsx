@@ -19,6 +19,7 @@ import {
   DailyReview,
   Memo,
   NotebookLmFolderSyncResult,
+  PublishedLesson,
   Student,
   StudentAccess,
   StudentPost,
@@ -69,8 +70,10 @@ import {
   CLASSROOMS_COLLECTION,
   DAILY_REVIEWS_COLLECTION,
   CLASSROOM_DATE_RECORDS_COLLECTION,
+  PUBLISHED_LESSONS_COLLECTION,
   comparePreferredClassroomDateRecord,
   getClassroomDateRecordId,
+  getPublishedLessonId,
   sortClassroomDateRecords,
 } from './utils/classroomDomain';
 import {
@@ -269,6 +272,7 @@ export default function App() {
   const [classroomDateRecords, setClassroomDateRecords] = useState<ClassroomDateRecord[]>([]);
   const [categories, setCategories] = useState<LessonCategory[]>([]);
   const [contents, setContents] = useState<LessonContent[]>([]);
+  const [publishedLessons, setPublishedLessons] = useState<PublishedLesson[]>([]);
   const [studentPosts, setStudentPosts] = useState<StudentPost[]>([]);
   const [activeTab, setActiveTab] = useState<AdminTab>('home');
   const [viewMode, setViewMode] = useState<'admin' | 'student'>('student');
@@ -741,6 +745,7 @@ export default function App() {
       setClassroomDateRecords([]);
       setCategories([]);
       setContents([]);
+      setPublishedLessons([]);
       return;
     }
 
@@ -913,6 +918,30 @@ export default function App() {
       setContents(sortContents(contentData));
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'contents'));
 
+    // Published Lessons Listener — 강사가 '공개'한 실습 블록 목록. 학생도 읽을 수 있는 유일한 수업 데이터.
+    const publishedLessonsQuery = query(collection(db, PUBLISHED_LESSONS_COLLECTION));
+    const unsubscribePublishedLessons = onSnapshot(
+      publishedLessonsQuery,
+      (snapshot) => {
+        const publishedData = snapshot.docs.map((lessonDoc) => {
+          const data = lessonDoc.data() as Partial<PublishedLesson>;
+          return {
+            id: lessonDoc.id,
+            classroomId: typeof data.classroomId === 'string' ? data.classroomId : '',
+            classroomName: typeof data.classroomName === 'string' ? data.classroomName : '',
+            date: typeof data.date === 'string' ? data.date : '',
+            publishedContentIds: Array.isArray(data.publishedContentIds)
+              ? data.publishedContentIds.filter((value): value is string => typeof value === 'string')
+              : [],
+            ownerUid: data.ownerUid ?? '',
+            updatedAt: data.updatedAt ?? '',
+          } satisfies PublishedLesson;
+        });
+        setPublishedLessons(publishedData);
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, PUBLISHED_LESSONS_COLLECTION)
+    );
+
     return () => {
       unsubscribeClassrooms();
       unsubscribeStudents();
@@ -920,6 +949,7 @@ export default function App() {
       unsubscribeClassroomDateRecords();
       unsubscribeCategories();
       unsubscribeContents();
+      unsubscribePublishedLessons();
     };
   }, [user, isAdmin, canAccessStudentPage]);
 
@@ -1606,6 +1636,40 @@ export default function App() {
     }
   };
 
+  // 강사가 수업 진행 중 실습 블록을 학생에게 공개/해제. 공개된 콘텐츠 id 목록 전체를 받아 덮어쓴다.
+  const handleUpdatePublishedLesson = async (
+    classroomId: string,
+    classroomName: string,
+    date: string,
+    publishedContentIds: string[]
+  ) => {
+    if (!user) return;
+
+    const lessonId = getPublishedLessonId(classroomId, date);
+    try {
+      const lessonRef = doc(db, PUBLISHED_LESSONS_COLLECTION, lessonId);
+
+      // 공개된 게 하나도 없으면 문서를 지워 학생 화면에서 깔끔히 사라지게 한다.
+      if (publishedContentIds.length === 0) {
+        await deleteDoc(lessonRef);
+        return;
+      }
+
+      const nextLesson: PublishedLesson = {
+        id: lessonId,
+        classroomId,
+        classroomName,
+        date,
+        publishedContentIds,
+        ownerUid: user.uid,
+        updatedAt: new Date().toISOString(),
+      };
+      await setDoc(lessonRef, nextLesson);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `${PUBLISHED_LESSONS_COLLECTION}/${lessonId}`);
+    }
+  };
+
   const handleDeleteClassroomDateRecord = async (recordId: string) => {
     if (!user) return;
 
@@ -1722,6 +1786,7 @@ export default function App() {
           classrooms={classroomsWithStudents}
           categories={categories}
           contents={contents}
+          publishedLessons={publishedLessons}
         />
       );
     }
@@ -1768,6 +1833,7 @@ export default function App() {
               classrooms={classroomsWithStudents}
               categories={categories}
               contents={contents}
+              publishedLessons={publishedLessons}
             />
           ) : (
             <>
@@ -1819,11 +1885,13 @@ export default function App() {
               categories={categories}
               contents={contents}
               curriculums={curriculums}
+              publishedLessons={publishedLessons}
               userEmail={user?.email ?? undefined}
               onSaveStudents={handleSaveStudents}
               onMoveStudent={handleMoveStudent}
               onSaveDateRecord={handleSaveClassroomDateRecord}
               onDeleteDateRecord={handleDeleteClassroomDateRecord}
+              onUpdatePublishedLesson={handleUpdatePublishedLesson}
               onGenerateMemoDraft={handleGenerateMemoDraft}
               onUpdateClassroom={handleUpdateClassroom}
               onDeleteClassroom={handleDeleteClassroom}
