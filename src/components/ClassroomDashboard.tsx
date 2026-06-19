@@ -34,6 +34,9 @@ import {
   Trash2,
   Eye,
   EyeOff,
+  Presentation,
+  Lock,
+  Unlock,
 } from 'lucide-react';
 import {
   AssignCurriculumDatesResult,
@@ -45,6 +48,7 @@ import {
   LessonCategory,
   LessonContent,
   Classroom,
+  PublishedLesson,
   Student,
 } from '../types';
 import {
@@ -78,11 +82,18 @@ interface ClassroomDashboardProps {
   categories: LessonCategory[];
   contents: LessonContent[];
   curriculums?: Curriculum[];
+  publishedLessons?: PublishedLesson[];
   userEmail?: string;
   onSaveStudents: (classroomId: string, students: Student[]) => Promise<void>;
   onMoveStudent: (sourceClassroomId: string, targetClassroomId: string, studentId: string) => Promise<void>;
   onSaveDateRecord: (record: ClassroomDateRecord) => void;
   onDeleteDateRecord: (recordId: string) => void;
+  onUpdatePublishedLesson?: (
+    classroomId: string,
+    classroomName: string,
+    date: string,
+    publishedContentIds: string[]
+  ) => Promise<void>;
   onGenerateMemoDraft: (
     date: string,
     existingMemo?: string
@@ -193,11 +204,13 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   categories,
   contents,
   curriculums,
+  publishedLessons,
   userEmail,
   onSaveStudents,
   onMoveStudent,
   onSaveDateRecord,
   onDeleteDateRecord,
+  onUpdatePublishedLesson,
   onGenerateMemoDraft,
   onUpdateClassroom,
   onDeleteClassroom,
@@ -322,6 +335,30 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     currentDateRecordContentIds.length - currentDateRecordedContents.length,
     0
   );
+
+  // 이 날짜에 학생에게 공개된 실습 블록 목록 (실시간 게이팅의 기준)
+  const currentPublishedLesson = useMemo(
+    () =>
+      (publishedLessons || []).find(
+        (lesson) => lesson.classroomId === classroom.id && lesson.date === selectedDate
+      ),
+    [publishedLessons, classroom.id, selectedDate]
+  );
+  const publishedContentIdSet = useMemo(
+    () => new Set(currentPublishedLesson?.publishedContentIds || []),
+    [currentPublishedLesson]
+  );
+  // 수업기록에 담긴 콘텐츠를 강사용 슬라이드(PPT)와 학생용 실습(HTML)으로 분류한다.
+  // 슬라이드는 강사 화면 전용이라 공개 대상이 아니고, HTML 실습만 학생에게 공개한다.
+  const recordedSlideContents = currentDateRecordedContents.filter((content) =>
+    Boolean(content.slideUrl?.trim())
+  );
+  const recordedPracticeContents = currentDateRecordedContents.filter(
+    (content) => Boolean(content.html?.trim()) && !content.slideUrl?.trim()
+  );
+  const publishedPracticeCount = recordedPracticeContents.filter((content) =>
+    publishedContentIdSet.has(content.id)
+  ).length;
   const calendarDays = getDaysInMonth(viewMonth);
   const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
   const previewColorMeta = getClassroomColorMeta(settingsDraft.color);
@@ -654,6 +691,37 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       ...currentDateRecord,
       contentIds: orderClassroomDateRecordContentIds(nextIds, assignedContents),
     });
+  };
+
+  // 실습 블록 하나를 학생에게 공개/잠금 토글 — Firestore 반영 즉시 학생 화면이 실시간으로 열린다.
+  const handleTogglePublishContent = (content: LessonContent) => {
+    if (!onUpdatePublishedLesson) {
+      return;
+    }
+    const current = currentPublishedLesson?.publishedContentIds || [];
+    const next = current.includes(content.id)
+      ? current.filter((contentId) => contentId !== content.id)
+      : [...current, content.id];
+    void onUpdatePublishedLesson(classroom.id, classroom.name, selectedDate, next);
+  };
+
+  const handlePublishAllPractice = () => {
+    if (!onUpdatePublishedLesson) {
+      return;
+    }
+    void onUpdatePublishedLesson(
+      classroom.id,
+      classroom.name,
+      selectedDate,
+      recordedPracticeContents.map((content) => content.id)
+    );
+  };
+
+  const handleUnpublishAll = () => {
+    if (!onUpdatePublishedLesson) {
+      return;
+    }
+    void onUpdatePublishedLesson(classroom.id, classroom.name, selectedDate, []);
   };
 
   const handleSaveMemo = () => {
@@ -1283,6 +1351,126 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
             ) : (
               <div className="mb-8 rounded-[28px] border border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-6 py-8 text-sm text-[#8B7E74]">
                 아직 이 날짜에 기록된 수업 콘텐츠가 없습니다. 아래에서 실제 진행한 콘텐츠를 선택해주세요.
+              </div>
+            )}
+
+            {onUpdatePublishedLesson && (recordedPracticeContents.length > 0 || recordedSlideContents.length > 0) && (
+              <div className="mb-8 rounded-[28px] border border-[#E5E3DD] bg-[#FBFBFA] p-6">
+                <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <h3 className="flex items-center gap-2 text-base font-bold text-[#4A3728]">
+                      <Presentation className="text-[#8B5E3C]" size={18} />
+                      수업 진행 · 학생 공개
+                    </h3>
+                    <p className="text-xs text-[#8B7E74]">
+                      이론(슬라이드)은 강사 화면 전용입니다. 실습을 공개하면 학생 화면에서 즉시 잠금이 풀립니다.
+                    </p>
+                  </div>
+                  {recordedPracticeContents.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handlePublishAllPractice}
+                        disabled={publishedPracticeCount === recordedPracticeContents.length}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-[#EEF7F0] px-3 py-2 text-xs font-bold text-[#2D7A4D] transition-all hover:bg-[#DCEFE2] disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <Unlock size={14} />
+                        전체 공개
+                      </button>
+                      <button
+                        onClick={handleUnpublishAll}
+                        disabled={publishedPracticeCount === 0}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-[#FDECEC] px-3 py-2 text-xs font-bold text-[#B42318] transition-all hover:bg-[#FAD4D1] disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <Lock size={14} />
+                        전체 잠금
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {recordedSlideContents.length > 0 && (
+                  <div className="mb-4">
+                    <p className="mb-2 text-xs font-bold uppercase tracking-wider text-[#8B7E74]">
+                      이론 슬라이드 (강사 화면 전용)
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {recordedSlideContents.map((content) => (
+                        <a
+                          key={content.id}
+                          href={content.slideUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 rounded-full border border-[#E5E3DD] bg-white px-4 py-2.5 text-sm font-bold text-[#4A3728] shadow-sm transition-all hover:border-[#8B5E3C]"
+                        >
+                          <Presentation size={14} className="text-[#8B5E3C]" />
+                          {content.title}
+                          <ExternalLink size={12} className="text-[#8B7E74]" />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {recordedPracticeContents.length > 0 ? (
+                  <div>
+                    <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#8B7E74]">
+                      실습 (학생 화면)
+                      <span className="rounded-full bg-[#EEF7F0] px-2 py-0.5 text-[10px] text-[#2D7A4D]">
+                        {publishedPracticeCount}/{recordedPracticeContents.length} 공개됨
+                      </span>
+                    </p>
+                    <div className="space-y-2">
+                      {recordedPracticeContents.map((content) => {
+                        const isPublished = publishedContentIdSet.has(content.id);
+                        return (
+                          <div
+                            key={content.id}
+                            className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 transition-all ${
+                              isPublished
+                                ? 'border-[#BFE3CC] bg-[#F2FBF3]'
+                                : 'border-[#E5E3DD] bg-white'
+                            }`}
+                          >
+                            <div className="flex min-w-0 items-center gap-2">
+                              {isPublished ? (
+                                <Eye size={16} className="shrink-0 text-[#2D7A4D]" />
+                              ) : (
+                                <Lock size={16} className="shrink-0 text-[#8B7E74]" />
+                              )}
+                              <span className="truncate text-sm font-bold text-[#4A3728]">
+                                {content.title}
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => handleTogglePublishContent(content)}
+                              className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+                                isPublished
+                                  ? 'bg-[#FDECEC] text-[#B42318] hover:bg-[#FAD4D1]'
+                                  : 'bg-[#8B5E3C] text-white hover:bg-[#724D31]'
+                              }`}
+                            >
+                              {isPublished ? (
+                                <>
+                                  <EyeOff size={14} />
+                                  잠그기
+                                </>
+                              ) : (
+                                <>
+                                  <Eye size={14} />
+                                  공개
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="rounded-2xl border border-dashed border-[#E5E3DD] bg-white px-4 py-5 text-center text-sm text-[#8B7E74]">
+                    공개할 실습(HTML) 콘텐츠가 아직 없습니다. 위에서 실습 콘텐츠를 수업기록에 추가해주세요.
+                  </p>
+                )}
               </div>
             )}
 
@@ -2619,7 +2807,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
             날짜별 수업 기록과 실제 진행한 콘텐츠, 출석, 메모를 한 화면에서 관리합니다.
           </p>
           <p className="mt-3 max-w-2xl text-sm text-[#8B7E74]">
-            학생 페이지에는 분류된 전체 콘텐츠가 공통으로 노출되고, 날짜 기록에서는 그날 실제 진행한 수업만 별도로 남길 수 있습니다.
+            학생 페이지에는 강사가 '공개'한 실습만 실시간으로 열리고, 날짜 기록에서는 그날 실제 진행한 수업만 별도로 남길 수 있습니다.
           </p>
         </div>
 

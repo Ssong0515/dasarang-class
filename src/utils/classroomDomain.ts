@@ -4,8 +4,13 @@ export const CLASSROOMS_COLLECTION = 'classrooms';
 export const CLASSROOM_DATE_RECORDS_COLLECTION = 'classroomDateRecords';
 export const STUDENTS_COLLECTION = 'students';
 export const DAILY_REVIEWS_COLLECTION = 'dailyReviews';
+export const PUBLISHED_LESSONS_COLLECTION = 'publishedLessons';
 
 export const getClassroomDateRecordId = (classroomId: string, date: string) =>
+  `${classroomId.trim()}_${date.trim()}`;
+
+/** publishedLessons 문서 id — classroomDateRecord와 동일한 규칙(반+날짜)을 따른다. */
+export const getPublishedLessonId = (classroomId: string, date: string) =>
   `${classroomId.trim()}_${date.trim()}`;
 
 export const getClassroomDateRecordTimestamp = (

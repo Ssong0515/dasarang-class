@@ -126,7 +126,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             관리합니다.
           </p>
           <p className="mb-8 text-lg leading-relaxed text-[#8B7E74]">
-            학생 페이지에는 분류된 전체 콘텐츠가 공통으로 노출되고, 날짜별 수업 운영 기록은 클래스 관리 화면에서 실제 진행한 수업만 남길 수 있습니다.
+            학생 페이지에는 강사가 수업 중 '공개'한 실습만 실시간으로 열리고, 날짜별 수업 운영 기록은 클래스 관리 화면에서 실제 진행한 수업만 남길 수 있습니다.
           </p>
           <div className="flex gap-4">
             <button

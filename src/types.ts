@@ -92,6 +92,22 @@ export interface ClassroomDateRecord {
   curriculumSessionId?: string;
 }
 
+/**
+ * 학생에게 "공개된" 실습 블록 목록. 강사가 수업을 진행하며 공개를 누르면 채워진다.
+ * 학생이 읽을 수 있는 유일한 수업 데이터(출석·메모 등 민감정보는 classroomDateRecord에만 둠).
+ * 문서 id는 `${classroomId}_${date}`.
+ */
+export interface PublishedLesson {
+  id: string;
+  classroomId: string;
+  classroomName: string;
+  date: string;
+  /** 지금 학생 화면에서 풀 수 있는(공개된) 콘텐츠 id 목록 */
+  publishedContentIds: string[];
+  ownerUid: string;
+  updatedAt: string;
+}
+
 export interface Classroom {
   id: string;
   name: string;
