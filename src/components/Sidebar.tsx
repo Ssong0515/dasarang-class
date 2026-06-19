@@ -12,6 +12,7 @@ import {
   ChevronRight,
   ChevronDown,
   EyeOff,
+  Globe,
 } from 'lucide-react';
 import { Reorder } from 'motion/react';
 import { Classroom } from '../types';
@@ -42,17 +43,26 @@ const getDefaultDesktopCollapsed = (viewportMode: ViewportMode) => {
   return viewportMode === 'compactDesktop';
 };
 
+type AdminTab =
+  | 'home'
+  | 'memo'
+  | 'classroom-management'
+  | 'content-library'
+  | 'student-access'
+  | 'student-showcase';
+
 interface SidebarProps {
   classrooms: Classroom[];
   activeClassroomId?: string;
-  activeTab: 'home' | 'memo' | 'classroom-management' | 'content-library' | 'student-access';
-  onTabChange: (tab: 'home' | 'memo' | 'classroom-management' | 'content-library' | 'student-access') => void;
+  activeTab: AdminTab;
+  onTabChange: (tab: AdminTab) => void;
   onManageClassroom: (classroom: Classroom) => void;
   onLogout: () => void;
   onSwitchToStudent: () => void;
   onReorderClassrooms?: (classrooms: Classroom[]) => void;
   onCreateClassroom?: () => void;
   isStudentView?: boolean;
+  pendingShowcaseCount?: number;
 }
 
 type SidebarNavButtonProps = {
@@ -123,6 +133,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onReorderClassrooms,
   onCreateClassroom,
   isStudentView = false,
+  pendingShowcaseCount = 0,
 }) => {
   const [localClassrooms, setLocalClassrooms] = React.useState(classrooms);
   const [showHidden, setShowHidden] = React.useState(false);
@@ -298,6 +309,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
             extraClassName="mt-2"
             onClick={() => onTabChange('student-access')}
           />
+
+          <button
+            type="button"
+            onClick={() => onTabChange('student-showcase')}
+            title="홈페이지 공유"
+            aria-label="홈페이지 공유"
+            className={`relative mt-2 flex w-full items-center rounded-xl font-bold transition-all ${
+              isCollapsed ? 'justify-center px-3 py-3.5' : 'gap-4 px-4 py-3'
+            } ${
+              !isStudentView && activeTab === 'student-showcase'
+                ? 'bg-[#FFF5E9] text-[#8B5E3C]'
+                : 'text-[#8B7E74] hover:bg-[#F3F2EE]'
+            }`}
+          >
+            <span className="relative shrink-0">
+              <Globe size={20} />
+              {isCollapsed && pendingShowcaseCount > 0 && (
+                <span className="absolute -right-1.5 -top-1.5 flex h-2.5 w-2.5 rounded-full bg-amber-500 ring-2 ring-[#FBFBFA]" />
+              )}
+            </span>
+            {!isCollapsed && (
+              <>
+                <span className="flex-1 text-left">홈페이지 공유</span>
+                {pendingShowcaseCount > 0 && (
+                  <span className="rounded-full bg-amber-500 px-2 py-0.5 text-[11px] font-bold text-white">
+                    {pendingShowcaseCount}
+                  </span>
+                )}
+              </>
+            )}
+          </button>
         </div>
 
         <div className={`border-t border-[#E5E3DD] ${isCollapsed ? 'mt-5 pt-5' : 'mt-6 pt-8'} flex-1`}>

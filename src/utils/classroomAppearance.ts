@@ -83,3 +83,28 @@ export const getClassroomCardColors = (color?: string) => {
 
 export const getClassroomIconComponent = (icon?: string) =>
   CLASSROOM_ICON_MAP[icon || DEFAULT_CLASSROOM_ICON] || BookOpen;
+
+/**
+ * 새 클래스에 배정할 색을 고른다. 아직 안 쓰인 팔레트 색을 우선 배정하고,
+ * 모두 쓰였으면 가장 적게 쓰인 색을 고른다(동률이면 팔레트 순서가 빠른 색).
+ * 색 없는 기존 클래스는 기본색(브라운)을 쓴 것으로 간주한다.
+ */
+export const pickUnusedClassroomColor = (usedColors: Iterable<string>): string => {
+  const counts = new Map<string, number>(
+    CLASSROOM_COLOR_OPTIONS.map((option) => [option.value, 0])
+  );
+  for (const color of usedColors) {
+    const normalized = color || DEFAULT_CLASSROOM_COLOR;
+    if (counts.has(normalized)) counts.set(normalized, (counts.get(normalized) ?? 0) + 1);
+  }
+  let best: string = CLASSROOM_COLOR_OPTIONS[0].value;
+  let bestCount = Infinity;
+  for (const option of CLASSROOM_COLOR_OPTIONS) {
+    const count = counts.get(option.value) ?? 0;
+    if (count < bestCount) {
+      best = option.value;
+      bestCount = count;
+    }
+  }
+  return best;
+};

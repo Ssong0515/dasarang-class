@@ -33,7 +33,7 @@ import {
   assignCurriculumDatesFromCalendar,
   listCalendarClasses,
 } from './server/adminApi/calendarClasses';
-import { createPostFromUpload, listPublicStudentPosts } from './server/adminApi/studentPosts';
+import { createPostFromUpload, listPublicStudentPosts, reviewStudentPost } from './server/adminApi/studentPosts';
 import multer from 'multer';
 
 dotenv.config();
@@ -252,6 +252,30 @@ async function startServer() {
       res.status(500).json({ error: error instanceof Error ? error.message : '게시물 조회에 실패했습니다.' });
     }
   });
+
+  // 관리자 UI에서 학생 게시물 승인(홈페이지 공유)/숨김. 승인 시 Drive 파일 공개 전환은 서버만 가능.
+  app.post(
+    withBasePath(APP_BASE_PATH, '/api/student-posts/:id/review'),
+    requireAdmin,
+    async (req, res) => {
+      const { action } = (req.body || {}) as { action?: string };
+      if (action !== 'approve' && action !== 'hide') {
+        res.status(400).json({ error: "action은 'approve' 또는 'hide'여야 합니다." });
+        return;
+      }
+      try {
+        res.json(await reviewStudentPost(req.params.id, action));
+      } catch (error) {
+        const statusCode =
+          error && typeof error === 'object' && 'statusCode' in error
+            ? (error as { statusCode: number }).statusCode
+            : 500;
+        res.status(statusCode).json({
+          error: error instanceof Error ? error.message : '게시물 처리에 실패했습니다.',
+        });
+      }
+    }
+  );
 
   // 브라우저(관리자 UI)에서 수업 기록 저장/삭제 후 달력 동기화를 트리거
   app.post(withBasePath(APP_BASE_PATH, '/api/calendar/sync-record'), requireAdmin, async (req, res) => {

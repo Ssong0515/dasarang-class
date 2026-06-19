@@ -140,17 +140,18 @@ export const CreateClassroomModal: React.FC<CreateClassroomModalProps> = ({
                   />
                 </div>
 
+                <div className="h-72 overflow-y-auto">
                 {error ? (
                   <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
                     {error}
                   </div>
                 ) : loading ? (
-                  <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-4 py-8 text-sm text-[#8B7E74]">
+                  <div className="flex h-full items-center justify-center gap-2 rounded-2xl border border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-4 py-8 text-sm text-[#8B7E74]">
                     <Loader2 size={16} className="animate-spin" />
                     불러오는 중...
                   </div>
                 ) : filteredClasses.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-4 py-8 text-center text-sm text-[#8B7E74]">
+                  <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-4 py-8 text-center text-sm text-[#8B7E74]">
                     {calendarClasses.length === 0
                       ? 'calendar.damuna.org에 등록된 시간표가 없습니다.'
                       : '검색 결과가 없습니다.'}
@@ -204,6 +205,7 @@ export const CreateClassroomModal: React.FC<CreateClassroomModalProps> = ({
                     ))}
                   </div>
                 )}
+                </div>
               </div>
             </div>
           </motion.div>

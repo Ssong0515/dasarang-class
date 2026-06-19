@@ -7,6 +7,7 @@ import { MemoSection } from './components/MemoSection';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { StudentPage } from './components/StudentPage';
 import { StudentAccessManager } from './components/StudentAccessManager';
+import { StudentShowcaseManager } from './components/StudentShowcaseManager';
 import {
   AccessLog,
   AssignCurriculumDatesResult,
@@ -20,6 +21,7 @@ import {
   NotebookLmFolderSyncResult,
   Student,
   StudentAccess,
+  StudentPost,
   LessonCategory,
   LessonContent,
 } from './types';
@@ -57,7 +59,11 @@ import {
   sanitizeAttendanceRecordsForStorage,
 } from './utils/attendance';
 import { normalizeClassroomDateRecordContentIds } from './utils/classroomDateRecordContent';
-import { CLASSROOM_COLOR_OPTIONS } from './utils/classroomAppearance';
+import {
+  CLASSROOM_COLOR_OPTIONS,
+  DEFAULT_CLASSROOM_COLOR,
+  pickUnusedClassroomColor,
+} from './utils/classroomAppearance';
 import { CreateClassroomModal } from './components/CreateClassroomModal';
 import {
   CLASSROOMS_COLLECTION,
@@ -122,7 +128,7 @@ type ContentReorderUpdate = {
   order: number;
 };
 
-type AdminTab = 'home' | 'memo' | 'classroom-management' | 'content-library' | 'student-access';
+type AdminTab = 'home' | 'memo' | 'classroom-management' | 'content-library' | 'student-access' | 'student-showcase';
 
 const UNCATEGORIZED_CATEGORY_ID = null;
 const MISC_CATEGORY_NAME = '기타';
@@ -230,6 +236,7 @@ const getPathFromAppState = (
     case 'classroom-management': return classroomId ? `/classroom/${classroomId}` : '/';
     case 'content-library':     return '/content-library';
     case 'student-access':      return '/student-access';
+    case 'student-showcase':    return '/student-showcase';
     default:                    return '/';
   }
 };
@@ -245,6 +252,7 @@ const parsePathToAppState = (
   }
   if (pathname === '/content-library')     return { viewMode: 'admin',    activeTab: 'content-library',       activeClassroomId: null };
   if (pathname === '/student-access')      return { viewMode: 'admin',    activeTab: 'student-access',        activeClassroomId: null };
+  if (pathname === '/student-showcase')    return { viewMode: 'admin',    activeTab: 'student-showcase',      activeClassroomId: null };
   return                                          { viewMode: 'admin',    activeTab: 'home',                  activeClassroomId: null };
 };
 
@@ -261,6 +269,7 @@ export default function App() {
   const [classroomDateRecords, setClassroomDateRecords] = useState<ClassroomDateRecord[]>([]);
   const [categories, setCategories] = useState<LessonCategory[]>([]);
   const [contents, setContents] = useState<LessonContent[]>([]);
+  const [studentPosts, setStudentPosts] = useState<StudentPost[]>([]);
   const [activeTab, setActiveTab] = useState<AdminTab>('home');
   const [viewMode, setViewMode] = useState<'admin' | 'student'>('student');
   const [isDevSigningIn, setIsDevSigningIn] = useState(DEV_BYPASS);
@@ -393,6 +402,11 @@ export default function App() {
   const handleListCalendarClasses = async (): Promise<CalendarClassSummary[]> => {
     const { items } = await getAdminRequest<{ items: CalendarClassSummary[] }>('api/calendar/classes');
     return items || [];
+  };
+
+  // 학생 작품 승인(홈페이지 공유)/숨김. 실제 반영은 studentPosts 리스너가 실시간으로 갱신.
+  const handleReviewStudentPost = async (id: string, action: 'approve' | 'hide') => {
+    await postAdminRequest(`api/student-posts/${id}/review`, { action });
   };
 
   const handleAssignCurriculumDates = async (
@@ -942,6 +956,50 @@ export default function App() {
     return () => unsubscribeDailyReviews();
   }, [user, isAdmin]);
 
+  // 학생 작품 게시물 리스너 (관리자 전용 — 홈페이지 공유 관리·실시간 승인 대기 배지)
+  useEffect(() => {
+    if (!user || !isAdmin) {
+      setStudentPosts([]);
+      return;
+    }
+
+    const unsubscribeStudentPosts = onSnapshot(
+      collection(db, 'studentPosts'),
+      (snapshot) => {
+        const postsData = snapshot.docs.map((postDoc) => {
+          const data = postDoc.data() as Partial<StudentPost>;
+          return {
+            id: postDoc.id,
+            ownerUid: data.ownerUid ?? '',
+            title: data.title ?? '',
+            description: data.description ?? '',
+            studentName: data.studentName ?? '',
+            anonymous: data.anonymous === true,
+            classroomId: data.classroomId ?? '',
+            classroomName: data.classroomName ?? '',
+            driveFileId: data.driveFileId ?? '',
+            fileName: data.fileName ?? '',
+            mimeType: data.mimeType ?? '',
+            webViewLink: data.webViewLink ?? '',
+            imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : undefined,
+            status: (['pending', 'approved', 'hidden'] as const).includes(
+              data.status as StudentPost['status']
+            )
+              ? (data.status as StudentPost['status'])
+              : 'pending',
+            order: typeof data.order === 'number' ? data.order : undefined,
+            createdAt: data.createdAt ?? '',
+            approvedAt: typeof data.approvedAt === 'string' ? data.approvedAt : undefined,
+          } satisfies StudentPost;
+        });
+        setStudentPosts(postsData);
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, 'studentPosts')
+    );
+
+    return () => unsubscribeStudentPosts();
+  }, [user, isAdmin]);
+
   // 커리큘럼 리스너 (관리자 전용 — ChatGPT/Claude로 관리되는 데이터를 실시간 반영)
   useEffect(() => {
     if (!user || !isAdmin) {
@@ -1299,10 +1357,15 @@ export default function App() {
     try {
       const newOrder = classrooms.length;
       const classroomRef = doc(collection(db, CLASSROOMS_COLLECTION));
+      // 가려지지 않은 기존 클래스 색과 겹치지 않는 색을 자동 배정
+      const usedColors = classrooms
+        .filter((classroom) => !classroom.hidden)
+        .map((classroom) => classroom.color || DEFAULT_CLASSROOM_COLOR);
       const classroomData = {
         name: '새로운 클래스',
         ownerUid: user.uid,
         order: newOrder,
+        color: pickUnusedClassroomColor(usedColors),
         createdAt: new Date().toISOString(),
       };
       await setDoc(classroomRef, classroomData);
@@ -1665,12 +1728,13 @@ export default function App() {
 
     return (
       <div className="flex h-screen bg-[#FBFBFA] font-sans text-[#4A3728]">
-        <Sidebar 
-          classrooms={classroomsWithStudents} 
+        <Sidebar
+          classrooms={classroomsWithStudents}
           activeClassroomId={activeClassroomId || undefined}
-          activeTab={activeTab} 
+          activeTab={activeTab}
           isStudentView={viewMode === 'student'}
-          onTabChange={handleTabChange} 
+          pendingShowcaseCount={studentPosts.filter((post) => post.status === 'pending').length}
+          onTabChange={handleTabChange}
           onManageClassroom={handleManageClassroom}
           onLogout={handleLogout}
           onSwitchToStudent={handleSwitchToStudent}
@@ -1796,6 +1860,9 @@ export default function App() {
               onAdd={handleAddStudentAccess}
               onDelete={handleDeleteStudentAccess}
             />
+          )}
+          {activeTab === 'student-showcase' && (
+            <StudentShowcaseManager posts={studentPosts} onReview={handleReviewStudentPost} />
           )}
             </>
           )}

@@ -26,6 +26,8 @@ interface CalendarClassDoc {
   exceptions?: CalendarException[];
   startDate?: string;
   endDate?: string;
+  /** calendar 앱에서 '숨기기'한 수업 (가져오기 목록에서 제외) */
+  hidden?: boolean;
 }
 
 export interface CalendarClassSummary {
@@ -86,7 +88,9 @@ const toSummary = (id: string, data: CalendarClassDoc): CalendarClassSummary => 
 export const listCalendarClasses = async (): Promise<CalendarClassSummary[]> => {
   const snap = await getCalendarDb().collection(CLASSES_COLLECTION).get();
   return snap.docs
-    .map((doc) => toSummary(doc.id, doc.data() as CalendarClassDoc))
+    .map((doc) => ({ id: doc.id, data: doc.data() as CalendarClassDoc }))
+    .filter(({ data }) => !data.hidden)
+    .map(({ id, data }) => toSummary(id, data))
     .sort((a, b) => a.name.localeCompare(b.name));
 };
 
