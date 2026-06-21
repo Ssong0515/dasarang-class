@@ -293,6 +293,8 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   const [translatedClassroomNames, setTranslatedClassroomNames] = useState<Record<string, string>>(
     {}
   );
+  // 강사 미리보기 전용: 이 날짜 기준으로 '공개된 실습'을 본다. 실제 학생(isAdmin=false)은 항상 실제 오늘만 본다.
+  const [previewDate, setPreviewDate] = useState(getLocalDateString(new Date()));
 
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [uploadStudentName, setUploadStudentName] = useState('');
@@ -379,10 +381,12 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   const categorizedContentIds = new Set(categorizedContents.map((content) => content.id));
   // 게이팅: 강사가 '오늘' 공개한 실습 블록만 학생에게 보인다. 공개 전까진 잠겨 있음(빈 상태).
   // 반 구분 없이 전체 공개 정책 → 오늘 날짜 publishedLessons의 공개 id를 합집합으로 본다.
-  const todayDateString = getLocalDateString(new Date());
+  // 학생: 실제 오늘 공개분만. 강사 미리보기: previewDate 기준(테스트용 — 실제 학생 화면엔 영향 없음).
+  const realTodayString = getLocalDateString(new Date());
+  const gatingDateString = isAdmin ? previewDate : realTodayString;
   const publishedContentIdSet = new Set(
     publishedLessons
-      .filter((lesson) => lesson.date === todayDateString)
+      .filter((lesson) => lesson.date === gatingDateString)
       .flatMap((lesson) => lesson.publishedContentIds)
   );
   const getAssignedContentIdsForClassroom = (_classroom?: Classroom) =>
@@ -751,6 +755,21 @@ export const StudentPage: React.FC<StudentPageProps> = ({
                   <Upload size={18} />
                   <span className="hidden sm:inline">업로드</span>
                 </button>
+              )}
+
+              {isAdmin && (
+                <label
+                  className="flex items-center gap-1.5 whitespace-nowrap rounded-xl bg-[#FFF5E9] px-3 py-2 text-sm font-bold text-[#8B5E3C]"
+                  title="강사 미리보기 날짜 — 이 날짜에 공개된 실습을 미리 봅니다. 실제 학생 화면에는 영향이 없습니다."
+                >
+                  🔧 미리보기
+                  <input
+                    type="date"
+                    value={previewDate}
+                    onChange={(event) => setPreviewDate(event.target.value)}
+                    className="bg-transparent text-sm font-bold text-[#8B5E3C] outline-none"
+                  />
+                </label>
               )}
 
               {isAdmin && onBackToAdmin && (

@@ -84,7 +84,8 @@
   - `description`: 한 줄(대상·결과물 요약).
   - `html`: 생성물.
   - `categoryName`: 모듈/주제에 맞게 기존 카테고리명 사용(기초 / WorkSpace / 앱스 / 학생 자료 / AI). AI 모듈 → "AI", 그 외 입문 → "기초".
-- 저장 후 반환 `id`를 `mutate_curriculum_sessions`로 그 회차 `contentIds`에 **append**. **status 변경·공개는 하지 않는다.**
+- 저장 후 반환 `id`를 **`upsert_lesson_record`로 그 커리큘럼을 쓰는 각 반의 해당 날짜(session.plannedDate) "날짜별 수업기록"(`classroomDateRecords`)의 `contentIds`에 넣는다** — 강사가 실제 보고 고르는 화면이라 여기에 넣어야 "미리 선택됨"이 된다. `curriculumSessionId`로 회차↔기록 연결. ⚠️ **학생 공개 아님**(`publishedLessons`는 안 건드림 = 게이팅 유지). (선택) `mutate_curriculum_sessions`로 회차 plan `contentIds`도 동기화 가능. **status 변경·공개는 하지 않는다.**
+  - `contentIds`는 **교체**되므로(append 아님), 기존 기록을 먼저 읽어 **합집합**으로 넣을 것(한 회차의 여러 시수 콘텐츠를 모두 유지).
 
 ## 7. 생성 후 자가 점검 (체크리스트)
 
