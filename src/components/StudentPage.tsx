@@ -297,6 +297,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   const [previewDate, setPreviewDate] = useState(getLocalDateString(new Date()));
 
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [isEndNoticeOpen, setIsEndNoticeOpen] = useState(false);
   const [uploadStudentName, setUploadStudentName] = useState('');
   const [uploadTitle, setUploadTitle] = useState('');
   const [uploadAnonymous, setUploadAnonymous] = useState(false);
@@ -363,6 +364,81 @@ export const StudentPage: React.FC<StudentPageProps> = ({
       setUploadState('error');
     }
   };
+
+  // 실습(iframe) 결과물 자동 저장 브리지: 실습 HTML이 postMessage로 보낸 결과 파일(이미지 dataUrl 또는 html 문자열)을
+  // 받아 기존 업로드 파이프라인(Drive 폴더 + studentPosts pending)으로 올린다. 답신은 보낸 iframe(event.source)에만 보낸다.
+  useEffect(() => {
+    const handleStudentWorkSave = async (event: MessageEvent) => {
+      const data = event.data as
+        | {
+            type?: string;
+            mimeType?: string;
+            dataUrl?: string;
+            html?: string;
+            fileName?: string;
+            title?: string;
+            studentName?: string;
+            anonymous?: boolean;
+          }
+        | null;
+      if (!data || data.type !== 'student-work-save') return;
+      const source = event.source as Window | null;
+      const reply = (ok: boolean, extra: Record<string, unknown> = {}) => {
+        try {
+          source?.postMessage({ type: 'student-work-saved', ok, ...extra }, '*');
+        } catch {
+          /* iframe이 사라진 경우 등 무시 */
+        }
+      };
+      try {
+        if (!activeClassroomId) return reply(false, { error: '반 정보를 찾을 수 없어요.' });
+        const studentName = (data.studentName || '').trim();
+        if (!studentName) return reply(false, { error: '이름이 필요해요.' });
+        const idToken = await getAuthToken?.();
+        if (!idToken) return reply(false, { error: '로그인이 필요해요.' });
+
+        const rawName = (data.fileName || 'student-work').toString().replace(/[\\/:*?"<>|]/g, '_');
+        let file: File;
+        if (data.mimeType === 'text/html' && typeof data.html === 'string') {
+          const name = rawName.endsWith('.html') ? rawName : `${rawName}.html`;
+          file = new File([data.html], name, { type: 'text/html' });
+        } else if (typeof data.dataUrl === 'string') {
+          const blob = await (await fetch(data.dataUrl)).blob();
+          const ext = (blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+          const name = /\.[a-z0-9]+$/i.test(rawName) ? rawName : `${rawName}.${ext}`;
+          file = new File([blob], name, { type: blob.type || data.mimeType || 'image/png' });
+        } else {
+          return reply(false, { error: '저장할 내용이 없어요.' });
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('classroomId', activeClassroomId);
+        formData.append('studentName', studentName);
+        if (data.title) formData.append('title', String(data.title));
+        formData.append('anonymous', data.anonymous ? 'true' : 'false');
+
+        const res = await fetch(resolveAppPath('/api/drive/upload'), {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${idToken}` },
+          body: formData,
+        });
+        const result = (await res.json()) as {
+          ok?: boolean;
+          fileName?: string;
+          webViewLink?: string;
+          error?: string;
+        };
+        if (!res.ok || !result.ok) throw new Error(result.error || '저장에 실패했어요.');
+        reply(true, { fileName: result.fileName, webViewLink: result.webViewLink });
+      } catch (err) {
+        reply(false, { error: err instanceof Error ? err.message : '저장에 실패했어요.' });
+      }
+    };
+
+    window.addEventListener('message', handleStudentWorkSave);
+    return () => window.removeEventListener('message', handleStudentWorkSave);
+  }, [activeClassroomId, getAuthToken]);
 
   const homeTranslationCacheRef = useRef<Record<string, string>>({});
   const homeTranslationRequestIdRef = useRef(0);
@@ -1130,6 +1206,44 @@ export const StudentPage: React.FC<StudentPageProps> = ({
           </button>
         )}
       </footer>
+
+      {/* 수업 마치기 — 항상 떠 있는 버튼. 교사가 수업 중 아무 때나 눌러 종료 안내를 띄운다. */}
+      <button
+        type="button"
+        onClick={() => setIsEndNoticeOpen(true)}
+        title="수업 마치기"
+        className="fixed bottom-5 right-5 z-[90] flex items-center gap-2 rounded-full bg-[#8B5E3C] px-5 py-3 text-base font-bold text-white shadow-lg transition-all hover:bg-[#75502F] active:scale-95"
+      >
+        🎒 수업 마치기
+      </button>
+
+      {isEndNoticeOpen && (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setIsEndNoticeOpen(false)}
+        >
+          <div
+            className="w-full max-w-lg rounded-[28px] bg-white p-8 text-center shadow-2xl sm:p-12"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-6xl">🎉</div>
+            <h2 className="mt-4 font-serif text-3xl font-bold text-[#141414]">오늘 수업 끝!</h2>
+            <div className="mt-6 space-y-3 text-xl font-medium leading-relaxed text-[#4A3728]">
+              <p>오늘 수업은 여기서 마무리합니다.</p>
+              <p>모두 수고 많으셨습니다! 다음에 또 만나요. 👋</p>
+              <p>이제 정리해도 좋습니다.</p>
+              <p className="text-lg text-[#8B7E74]">더 연습하고 싶은 학생은 10분 정도 자율 연습 가능합니다.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsEndNoticeOpen(false)}
+              className="mt-8 rounded-2xl bg-[#8B5E3C] px-8 py-3 text-lg font-bold text-white transition-all hover:bg-[#75502F] active:scale-95"
+            >
+              닫기
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
