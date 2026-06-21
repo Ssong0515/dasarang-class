@@ -551,7 +551,7 @@ export const createPracticeContent = async (input: CreatePracticeContentInput) =
     categoryId,
     title: contentData.title,
     order: contentData.order,
-    message: '콘텐츠가 생성되었습니다. 학생 페이지에 바로 표시됩니다.',
+    message: '콘텐츠가 생성되었습니다. 학생 화면에는 바로 안 보이며, 클래스 관리 > 수업 진행에서 "공개"해야 학생에게 열립니다(게이팅).',
   };
 };
 

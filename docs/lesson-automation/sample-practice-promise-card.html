@@ -1,0 +1,348 @@
+<title>나의 디지털 약속</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-user-select: none; user-select: none; }
+  body { font-family: "Malgun Gothic", "맑은 고딕", system-ui, sans-serif; color: #1f2330; }
+  .wrap { max-width: 800px; margin: 0 auto; padding: 18px 16px 60px; }
+
+  .head { text-align: center; margin-bottom: 14px; }
+  .head h1 { font-size: 32px; letter-spacing: -1px; }
+  .head p { font-size: 19px; color: #5b6172; margin-top: 6px; }
+
+  .tracker { display: flex; gap: 7px; justify-content: center; flex-wrap: wrap;
+    background: #f4f6fb; border-radius: 16px; padding: 12px; margin-bottom: 18px; }
+  .chip { display: flex; align-items: center; gap: 6px; font-size: 16px; font-weight: 700;
+    color: #9aa0b4; background: #fff; border: 2px solid #e4e8f2; border-radius: 999px; padding: 7px 14px; transition: .25s; }
+  .chip.now { border-color: #3b6fe0; color: #3b6fe0; box-shadow: 0 0 0 3px #e8f0ff; }
+  .chip.done { color: #1a7f47; border-color: #56cf8c; background: #eafaf0; }
+
+  .card { background: #fff; border: 3px solid #e7ebf5; border-radius: 22px; padding: 26px 24px;
+    box-shadow: 0 10px 30px rgba(40,55,90,.06); min-height: 440px; display: flex; flex-direction: column; }
+  .step-no { font-size: 17px; font-weight: 800; color: #3b6fe0; margin-bottom: 4px; }
+  .title { font-size: 27px; font-weight: 800; line-height: 1.3; margin-bottom: 8px; }
+  .guide { font-size: 20px; color: #4a4f60; line-height: 1.5; margin-bottom: 14px; }
+  .guide b { color: #d6452b; }
+  .progress { font-size: 18px; font-weight: 800; color: #3b6fe0; text-align: center; margin-bottom: 10px; }
+
+  .stage { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; }
+  .feedback { text-align: center; font-size: 21px; font-weight: 800; color: #1a7f47; min-height: 30px; margin-top: 12px; line-height: 1.4; }
+
+  .btn { align-self: center; margin-top: 14px; font-family: inherit; font-size: 22px; font-weight: 800;
+    color: #fff; background: #3b6fe0; border: none; border-radius: 14px; padding: 15px 38px; cursor: pointer;
+    box-shadow: 0 6px 0 #2a55b8; transition: .1s; }
+  .btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #2a55b8; }
+  .btn.gray { background:#8b93a7; box-shadow:0 6px 0 #6c7589; }
+  .btn:disabled { opacity: .45; cursor: default; box-shadow: 0 6px 0 #2a55b8; }
+
+  .name-in { font-family: inherit; font-size: 22px; text-align: center; padding: 12px 16px; width: 260px;
+    border: 3px solid #cfd6e6; border-radius: 12px; -webkit-user-select: text; user-select: text; }
+
+  .mascot { font-size: 88px; }
+
+  /* 약속 모으기 */
+  .picks { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+  .pick-card { width: 150px; min-height: 122px; background: #fff; border: 3px solid #e4e8f2; border-radius: 16px;
+    padding: 14px 10px; cursor: pointer; font-size: 16px; font-weight: 700; color: #2f3445;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; transition: .12s; }
+  .pick-card .pe { font-size: 38px; }
+  .pick-card:active { transform: scale(.96); }
+  .pick-card.good { border-color: #56cf8c; background: #eafaf0; color: #1a7f47; pointer-events: none; }
+  .pick-card.bad { animation: shake .4s; border-color: #e8584f; }
+  @keyframes shake { 0%,100%{transform:translateX(0);} 20%,60%{transform:translateX(-7px);} 40%,80%{transform:translateX(7px);} }
+
+  /* 계정 약속 스위치 */
+  .promise-row { display: flex; align-items: center; gap: 12px; width: 100%; max-width: 540px;
+    background: #fff; border: 2px solid #e4e8f2; border-radius: 14px; padding: 12px 16px; margin: 0 auto; cursor: pointer;
+    font-size: 19px; font-weight: 700; transition: .15s; }
+  .promise-row.on { border-color: #56cf8c; background: #eafaf0; }
+  .promise-row .emoji { font-size: 28px; }
+  .promise-row .txt { flex: 1; text-align: left; }
+  .switch { width: 64px; height: 34px; border-radius: 999px; background: #cfd6e6; position: relative; transition: .2s; flex-shrink: 0; }
+  .switch.on { background: #56cf8c; }
+  .switch .knob { position: absolute; top: 3px; left: 3px; width: 28px; height: 28px; border-radius: 50%;
+    background: #fff; transition: .2s; box-shadow: 0 2px 4px rgba(0,0,0,.2); }
+  .switch.on .knob { left: 33px; }
+
+  /* 개인정보 OX */
+  .ox-card { text-align: center; }
+  .ox-emoji { font-size: 78px; }
+  .ox-label { font-size: 25px; font-weight: 800; margin: 6px 0; }
+  .ox-q { font-size: 19px; color: #4a4f60; margin-bottom: 16px; }
+  .ox-btns { display: flex; gap: 16px; justify-content: center; }
+  .ox-btn { font-family: inherit; font-size: 21px; font-weight: 800; padding: 16px 24px; border-radius: 16px;
+    border: 3px solid #cfd6e6; cursor: pointer; background: #fff; transition: .1s; }
+  .ox-btn.o { color: #1a7f47; border-color: #9be0b8; }
+  .ox-btn.x { color: #d6452b; border-color: #f3a79a; }
+  .ox-btn:active { transform: translateY(3px); }
+  .ox-btn.pick-good { background: #eafaf0; border-color: #56cf8c; }
+  .ox-btn.pick-bad { background: #fdecea; border-color: #e8584f; }
+  .ox-btn:disabled { opacity: .5; }
+
+  /* 할 수 있어요 */
+  .cando { display: flex; flex-direction: column; gap: 10px; align-items: center; width: 100%; }
+  .cando-chip { width: 100%; max-width: 480px; padding: 14px 18px; border-radius: 14px; border: 3px solid #e4e8f2;
+    background: #fff; font-size: 19px; font-weight: 700; color: #2f3445; cursor: pointer; text-align: left; transition: .12s; }
+  .cando-chip.on { border-color: #3b6fe0; background: #eaf1ff; color: #3b6fe0; }
+  .cando-chip.on::before { content: '✓ '; font-weight: 900; }
+
+  /* 완료: 약속 카드 */
+  .done-screen { text-align: center; }
+  .done-screen .big { font-size: 56px; }
+  .done-screen h2 { font-size: 27px; margin: 8px 0; }
+  .promise-card { display: inline-block; text-align: left; background: #fbfdff; border: 3px solid #cfe0d6;
+    border-radius: 18px; padding: 22px 28px; margin-top: 12px; max-width: 470px; }
+  .promise-card h3 { font-size: 23px; color: #1a7f47; margin-bottom: 4px; text-align: center; }
+  .promise-card .date { text-align: center; color: #7a8295; font-size: 15px; margin-bottom: 14px; }
+  .promise-card li { list-style: none; font-size: 18px; line-height: 1.85; color: #2f3445; }
+  .promise-card .sign { margin-top: 14px; font-size: 18px; font-weight: 700; border-top: 2px dashed #cfd6e6; padding-top: 12px; }
+  .stars { font-size: 24px; margin: 6px 0; }
+  .row-btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 16px; }
+
+  @media print { .row-btns, .head p, .tracker { display: none; } .card { border: none; box-shadow: none; } }
+</style>
+
+<div class="wrap">
+  <div class="head">
+    <h1>🌱 나의 디지털 약속</h1>
+    <p>안전하게 컴퓨터를 쓰는 약속을 만들어요!</p>
+  </div>
+
+  <div class="tracker" id="tracker">
+    <div class="chip" data-m="0">① 규칙</div>
+    <div class="chip" data-m="1">② 계정</div>
+    <div class="chip" data-m="2">③ 개인정보</div>
+    <div class="chip" data-m="3">④ 할 수 있어요</div>
+  </div>
+
+  <div class="card" id="card"></div>
+</div>
+
+<script>
+(function () {
+  var card = document.getElementById('card');
+  var chips = [].slice.call(document.querySelectorAll('.chip'));
+  var chipLabels = ['① 규칙', '② 계정', '③ 개인정보', '④ 할 수 있어요'];
+  var studentName = '';
+  var score = 0;          // 개인정보 퀴즈 점수
+  var canDoChosen = [];   // 고른 '할 수 있어요'
+
+  function setNow(i) { chips.forEach(function (c, k) { c.classList.toggle('now', k === i && !c.classList.contains('done')); }); }
+  function markDone(i) { var c = chips[i]; if (c) { c.classList.add('done'); c.classList.remove('now'); c.textContent = '✅ ' + c.textContent.replace(/^[①②③④✅]\s*/, ''); } }
+  function btn(label, fn, gray) { var b = document.createElement('button'); b.className = 'btn' + (gray ? ' gray' : ''); b.textContent = label; b.addEventListener('click', fn); return b; }
+  function shuffle(a) { a = a.slice(); for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+
+  /* ===== 시작 ===== */
+  function start() {
+    setNow(-1);
+    score = 0; canDoChosen = [];
+    card.innerHTML =
+      '<div class="step-no">시작하기</div>' +
+      '<div class="title">우리 반 디지털 약속을 만들어요</div>' +
+      '<div class="guide">컴퓨터를 안전하게 쓰는 약속이에요.<br>이름을 적고 시작해요. (안 적어도 괜찮아요.)</div>' +
+      '<div class="stage"><div class="mascot">🤝</div>' +
+        '<input class="name-in" id="nm" placeholder="이름 (선택)" maxlength="12">' +
+      '</div>' +
+      '<div class="feedback"></div>';
+    card.appendChild(btn('시작하기 ▶', function () {
+      studentName = (document.getElementById('nm').value || '').trim();
+      stageRules();
+    }));
+  }
+
+  /* ===== ① 컴퓨터실 규칙: 좋은 약속 모으기 ===== */
+  function stageRules() {
+    setNow(0);
+    var good = [
+      { e: '🙋', t: '모르면 손을 들어 물어봐요' },
+      { e: '🪑', t: '끝나면 의자를 넣어요' },
+      { e: '🤝', t: '차례를 잘 지켜요' },
+      { e: '💻', t: '컴퓨터를 아껴 써요' },
+      { e: '🥤', t: '음식과 물은 멀리 둬요' }
+    ];
+    var bad = [
+      { e: '🙅', t: '친구 화면을 마음대로 만져요' },
+      { e: '🔌', t: '마음대로 전원을 꺼요' },
+      { e: '📢', t: '큰 소리로 떠들어요' }
+    ];
+    card.innerHTML =
+      '<div class="step-no">미션 ① 컴퓨터실 규칙</div>' +
+      '<div class="title">지킬 약속을 모아요</div>' +
+      '<div class="guide">좋은 약속을 <b>눌러서</b> 담아요. (5개)</div>' +
+      '<div class="progress" id="pg">0 / 5</div>' +
+      '<div class="stage"><div class="picks" id="picks"></div></div>' +
+      '<div class="feedback" id="fb"></div>';
+    var picks = document.getElementById('picks'), pg = document.getElementById('pg'), fb = document.getElementById('fb');
+    var got = 0, total = 5;
+    var all = shuffle(good.map(function (g) { return { g: g, ok: true }; }).concat(bad.map(function (b) { return { g: b, ok: false }; })));
+    all.forEach(function (item) {
+      var el = document.createElement('div'); el.className = 'pick-card';
+      el.innerHTML = '<div class="pe">' + item.g.e + '</div><div>' + item.g.t + '</div>';
+      el.addEventListener('click', function () {
+        if (item.ok) {
+          el.classList.add('good'); el.querySelector('.pe').textContent = '✅';
+          got++; pg.textContent = got + ' / ' + total; fb.textContent = '좋아요! 약속에 담았어요 🌟';
+          if (got >= total) { fb.textContent = '🎉 약속을 모두 모았어요!'; markDone(0); card.appendChild(btn('다음 ▶', stageAccount)); }
+        } else {
+          el.classList.remove('bad'); void el.offsetWidth; el.classList.add('bad');
+          fb.textContent = '음~ 이건 약속이 아니에요. 다른 걸 찾아봐요.';
+        }
+      });
+      picks.appendChild(el);
+    });
+  }
+
+  /* ===== ② 계정 약속: 스위치 모두 켜기 ===== */
+  function stageAccount() {
+    setNow(1);
+    var rows = [
+      { e: '🔑', t: '내 비밀번호는 비밀로 해요' },
+      { e: '🤐', t: '친구에게 비밀번호를 안 알려줘요' },
+      { e: '🚪', t: '끝나면 꼭 로그아웃해요' },
+      { e: '🙅', t: '다른 사람 계정으로 안 들어가요' }
+    ];
+    var html =
+      '<div class="step-no">미션 ② 계정 약속</div>' +
+      '<div class="title">계정 약속을 켜요</div>' +
+      '<div class="guide">내 계정(아이디·비밀번호)을 지키는 약속이에요. 스위치를 <b>모두 켜요</b>.</div>' +
+      '<div class="progress" id="pg">0 / 4</div>' +
+      '<div class="stage" style="gap:10px;">';
+    rows.forEach(function (r, i) {
+      html += '<div class="promise-row" data-i="' + i + '"><span class="emoji">' + r.e + '</span>' +
+        '<span class="txt">' + r.t + '</span><span class="switch"><span class="knob"></span></span></div>';
+    });
+    html += '</div><div class="feedback" id="fb"></div>';
+    card.innerHTML = html;
+    var fb = document.getElementById('fb'), pg = document.getElementById('pg'), on = 0, total = 4;
+    [].slice.call(card.querySelectorAll('.promise-row')).forEach(function (row) {
+      var sw = row.querySelector('.switch');
+      row.addEventListener('click', function () {
+        if (row.classList.contains('on')) return;
+        row.classList.add('on'); sw.classList.add('on');
+        on++; pg.textContent = on + ' / ' + total; fb.textContent = '켰어요! 👍';
+        if (on >= total) { fb.textContent = '🎉 계정 약속을 모두 켰어요!'; markDone(1); card.appendChild(btn('다음 ▶', stagePrivacy)); }
+      });
+    });
+  }
+
+  /* ===== ③ 개인정보: 올려도 될까요? (OX) ===== */
+  function stagePrivacy() {
+    setNow(2);
+    var items = [
+      { e: '🏞️', label: '예쁜 풍경 사진', ok: true, why: '예쁜 사진은 올려도 괜찮아요 🏞️' },
+      { e: '🏠', label: '우리 집 주소', ok: false, why: '주소는 개인정보예요. 조심해요 🏠' },
+      { e: '🍜', label: '좋아하는 음식 사진', ok: true, why: '음식 사진은 괜찮아요 🍜' },
+      { e: '🔑', label: '내 비밀번호', ok: false, why: '비밀번호는 절대 비밀이에요! 🔑' },
+      { e: '📞', label: '내 전화번호', ok: false, why: '전화번호는 알려주지 않아요 📞' },
+      { e: '🧑', label: '허락 안 받은 친구 얼굴', ok: false, why: '친구 사진은 꼭 허락을 받아요 🧑' }
+    ];
+    var k = 0;
+    function render() {
+      var it = items[k];
+      card.innerHTML =
+        '<div class="step-no">미션 ③ 개인정보 조심하기</div>' +
+        '<div class="title">올려도 될까요?</div>' +
+        '<div class="guide">괜찮으면 <b>🙆 올려도 돼요</b>, 조심할 것은 <b>🙅 조심해요</b>.</div>' +
+        '<div class="progress">' + (k + 1) + ' / ' + items.length + '</div>' +
+        '<div class="stage"><div class="ox-card">' +
+          '<div class="ox-emoji">' + it.e + '</div>' +
+          '<div class="ox-label">' + it.label + '</div>' +
+          '<div class="ox-q">인터넷이나 게시판에 올려도 될까요?</div>' +
+          '<div class="ox-btns">' +
+            '<button class="ox-btn o" id="bo">🙆 올려도 돼요</button>' +
+            '<button class="ox-btn x" id="bx">🙅 조심해요</button>' +
+          '</div>' +
+        '</div></div>' +
+        '<div class="feedback" id="fb"></div>';
+      var fb = document.getElementById('fb');
+      function answer(choseOk, clickedBtn) {
+        var correct = (choseOk === it.ok);
+        document.getElementById('bo').disabled = true; document.getElementById('bx').disabled = true;
+        clickedBtn.classList.add(correct ? 'pick-good' : 'pick-bad');
+        if (correct) { score++; fb.textContent = '맞아요! ' + it.why; }
+        else { fb.textContent = '조심해요! ' + it.why; }
+        k++;
+        if (k < items.length) card.appendChild(btn('다음 ▶', render));
+        else { markDone(2); card.appendChild(btn('다음 ▶', stageCanDo)); }
+      }
+      document.getElementById('bo').addEventListener('click', function () { answer(true, this); });
+      document.getElementById('bx').addEventListener('click', function () { answer(false, this); });
+    }
+    render();
+  }
+
+  /* ===== ④ 할 수 있어요: 고르기 ===== */
+  function stageCanDo() {
+    setNow(3);
+    var opts = [
+      '약속을 잘 지킬 수 있어요',
+      '모르면 물어볼 수 있어요',
+      '천천히 배울 수 있어요',
+      '친구를 도와줄 수 있어요',
+      '끝까지 해볼 수 있어요'
+    ];
+    var html =
+      '<div class="step-no">미션 ④ 오늘 할 수 있어요</div>' +
+      '<div class="title">나는 할 수 있어요</div>' +
+      '<div class="guide">할 수 있는 것을 <b>모두 골라요</b> 🌟</div>' +
+      '<div class="stage"><div class="cando" id="cando"></div></div>' +
+      '<div class="feedback" id="fb"></div>';
+    card.innerHTML = html;
+    var box = document.getElementById('cando'), fb = document.getElementById('fb');
+    var chosen = {};
+    var goBtn = btn('약속 카드 만들기 🎉', function () {
+      canDoChosen = opts.filter(function (o) { return chosen[o]; });
+      markDone(3); finish();
+    });
+    goBtn.disabled = true;
+    opts.forEach(function (o) {
+      var el = document.createElement('div'); el.className = 'cando-chip'; el.textContent = o;
+      el.addEventListener('click', function () {
+        chosen[o] = !chosen[o]; el.classList.toggle('on', chosen[o]);
+        var n = Object.keys(chosen).filter(function (kk) { return chosen[kk]; }).length;
+        goBtn.disabled = n < 1;
+        fb.textContent = n > 0 ? n + '개 골랐어요! 멋져요 👏' : '';
+      });
+      box.appendChild(el);
+    });
+    card.appendChild(goBtn);
+  }
+
+  /* ===== 완료: 나의 디지털 약속 카드 ===== */
+  function finish() {
+    setNow(-1);
+    var who = studentName ? studentName + ' 님' : '여러분';
+    var d = new Date();
+    var dateStr = d.getFullYear() + '년 ' + (d.getMonth() + 1) + '월 ' + d.getDate() + '일';
+    var stars = score >= 5 ? '⭐⭐⭐' : score >= 3 ? '⭐⭐' : '⭐';
+    var promiseLis =
+      '<li>✅ 컴퓨터실 약속을 잘 지켜요</li>' +
+      '<li>✅ 내 비밀번호는 비밀로 지켜요</li>' +
+      '<li>✅ 끝나면 꼭 로그아웃해요</li>' +
+      '<li>✅ 개인정보(주소·전화·비밀번호)는 조심해요</li>';
+    canDoChosen.forEach(function (c) { promiseLis += '<li>✅ ' + c + '</li>'; });
+    card.innerHTML =
+      '<div class="done-screen">' +
+        '<div class="big">🏆</div>' +
+        '<h2>' + who + ', 약속 완성!</h2>' +
+        '<div class="stars">개인정보 퀴즈 ' + score + ' / 6 ' + stars + '</div>' +
+        '<div class="promise-card">' +
+          '<h3>🌱 ' + who + '의 디지털 약속</h3>' +
+          '<div class="date">' + dateStr + '</div>' +
+          '<ul>' + promiseLis + '</ul>' +
+          '<div class="sign">사인 ✍️ ____________________</div>' +
+        '</div>' +
+        '<p style="font-size:20px;color:#5b6172;margin:16px 0 0;">약속을 지켜요. 참 잘했어요! 👏</p>' +
+        '<div class="row-btns">' +
+          '<button class="btn" id="pr">약속 카드 인쇄 🖨️</button>' +
+          '<button class="btn gray" id="rt">다시 하기 🔄</button>' +
+        '</div>' +
+      '</div>';
+    document.getElementById('pr').addEventListener('click', function () { window.print(); });
+    document.getElementById('rt').addEventListener('click', function () {
+      chips.forEach(function (c, k) { c.className = 'chip'; c.textContent = chipLabels[k]; });
+      start();
+    });
+  }
+
+  start();
+})();
+</script>
