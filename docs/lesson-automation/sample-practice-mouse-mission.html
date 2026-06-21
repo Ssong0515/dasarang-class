@@ -8,7 +8,6 @@
   .head h1 { font-size: 34px; letter-spacing: -1px; }
   .head p { font-size: 19px; color: #5b6172; margin-top: 6px; }
 
-  /* 미션표 */
   .tracker { display: flex; gap: 7px; justify-content: center; flex-wrap: wrap;
     background: #f4f6fb; border-radius: 16px; padding: 12px; margin-bottom: 18px; }
   .chip { display: flex; align-items: center; gap: 6px; font-size: 16px; font-weight: 700;
@@ -16,30 +15,29 @@
   .chip.now { border-color: #3b6fe0; color: #3b6fe0; box-shadow: 0 0 0 3px #e8f0ff; }
   .chip.done { color: #1a7f47; border-color: #56cf8c; background: #eafaf0; }
 
-  .card { background: #fff; border: 3px solid #e7ebf5; border-radius: 22px; padding: 26px 24px;
-    box-shadow: 0 10px 30px rgba(40,55,90,.06); min-height: 430px; display: flex; flex-direction: column; }
+  .card { background: #fff; border: 3px solid #e7ebf5; border-radius: 22px; padding: 24px 22px;
+    box-shadow: 0 10px 30px rgba(40,55,90,.06); min-height: 460px; display: flex; flex-direction: column; }
   .step-no { font-size: 17px; font-weight: 800; color: #3b6fe0; margin-bottom: 4px; }
-  .title { font-size: 28px; font-weight: 800; line-height: 1.3; margin-bottom: 8px; }
-  .guide { font-size: 21px; color: #4a4f60; line-height: 1.5; margin-bottom: 16px; }
+  .title { font-size: 27px; font-weight: 800; line-height: 1.3; margin-bottom: 6px; }
+  .guide { font-size: 20px; color: #4a4f60; line-height: 1.5; margin-bottom: 8px; }
   .guide b { color: #d6452b; }
+  .roundbar { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 6px; }
+  .round-badge { font-size: 15px; font-weight: 800; color: #8a5cf6; background: #f1ebff; border-radius: 999px; padding: 4px 12px; }
   .progress { font-size: 18px; font-weight: 800; color: #3b6fe0; text-align: center; margin-bottom: 8px; }
 
   .stage { flex: 1; position: relative; display: flex; align-items: center; justify-content: center;
-    flex-wrap: wrap; gap: 20px; min-height: 250px; }
-  .stage.free { display: block; }
+    flex-wrap: wrap; gap: 18px; min-height: 270px; }
 
-  .feedback { text-align: center; font-size: 23px; font-weight: 800; color: #1a7f47; min-height: 32px; margin-top: 12px; }
-  .btn { align-self: center; margin-top: 14px; font-family: inherit; font-size: 22px; font-weight: 800;
+  .feedback { text-align: center; font-size: 22px; font-weight: 800; color: #1a7f47; min-height: 30px; margin-top: 10px; }
+  .btn { align-self: center; margin-top: 12px; font-family: inherit; font-size: 22px; font-weight: 800;
     color: #fff; background: #3b6fe0; border: none; border-radius: 14px; padding: 15px 38px; cursor: pointer;
     box-shadow: 0 6px 0 #2a55b8; transition: .1s; }
   .btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #2a55b8; }
   .btn.gray { background:#8b93a7; box-shadow:0 6px 0 #6c7589; }
 
-  /* 시작/이름 */
   .name-in { font-family: inherit; font-size: 22px; text-align: center; padding: 12px 16px; width: 260px;
     border: 3px solid #cfd6e6; border-radius: 12px; -webkit-user-select: text; user-select: text; }
 
-  /* 전원 버튼 */
   .power { width: 130px; height: 130px; border-radius: 50%; background: #2b2f3a; color: #7bdc9a;
     font-size: 60px; display: flex; align-items: center; justify-content: center; cursor: pointer;
     box-shadow: 0 8px 0 #15171d, inset 0 0 22px rgba(0,0,0,.5); transition: .12s; }
@@ -48,55 +46,57 @@
     display: flex; align-items: center; justify-content: center; color: #444; font-size: 18px; transition: .4s; }
   .screen-off.on { background: #cfe8ff; color: #1f5fbf; font-weight: 800; }
 
-  /* 별(이동/hover) */
-  .star { position: absolute; font-size: 56px; cursor: pointer; transition: transform .15s;
+  .star { position: absolute; font-size: 52px; cursor: pointer; transition: transform .15s;
     filter: drop-shadow(0 4px 6px rgba(0,0,0,.15)); }
   .star:hover { transform: scale(1.25) rotate(8deg); }
+  .star.move { animation: drift 4.5s ease-in-out infinite; }
   .star.caught { animation: catch .4s forwards; pointer-events: none; }
   @keyframes catch { to { transform: scale(0) rotate(90deg); opacity: 0; } }
+  @keyframes drift {
+    0%,100% { translate: 0 0; } 25% { translate: 34px -26px; }
+    50% { translate: -28px 18px; } 75% { translate: 22px 30px; } }
 
-  /* 풍선(클릭) */
-  .balloon { position: absolute; width: 86px; height: 104px; border-radius: 50% 50% 48% 48%;
+  .balloon { position: absolute; width: 84px; height: 102px; border-radius: 50% 50% 48% 48%;
     display: flex; align-items: center; justify-content: center; font-size: 34px; color: #fff; cursor: pointer;
     box-shadow: inset -8px -8px 0 rgba(0,0,0,.08); animation: bob 2.4s ease-in-out infinite; }
   @keyframes bob { 0%,100%{ transform: translateY(0); } 50%{ transform: translateY(-12px); } }
+  .balloon.drift { animation: bob 2.4s ease-in-out infinite, sway 3.6s ease-in-out infinite; }
+  @keyframes sway { 0%,100%{ margin-left: 0; } 50%{ margin-left: 90px; } }
   .balloon:active { transform: scale(.9); }
   .balloon.pop { animation: pop .3s forwards; pointer-events: none; }
   @keyframes pop { to { transform: scale(0); opacity: 0; } }
 
-  /* 폴더(더블클릭) */
-  .folder { width: 150px; cursor: pointer; text-align: center; font-size: 84px; line-height: 1.1; transition: transform .12s; }
-  .folder small { display: block; font-size: 17px; font-weight: 700; color: #5b6172; }
+  .folder { width: 140px; cursor: pointer; text-align: center; font-size: 78px; line-height: 1.1; transition: transform .12s; }
+  .folder small { display: block; font-size: 16px; font-weight: 700; color: #5b6172; }
   .folder:active { transform: scale(.94); }
   .folder.open { animation: wob .4s; }
   @keyframes wob { 25%{transform:rotate(-6deg);} 75%{transform:rotate(6deg);} }
 
-  /* 드래그 분류 */
-  .tray { display: flex; gap: 14px; justify-content: center; width: 100%; margin-bottom: 18px; flex-wrap: wrap; }
-  .file-item { width: 92px; height: 104px; background: #fff; border: 3px solid #cfd6e6; border-radius: 14px;
-    display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 42px;
+  .tray { display: flex; gap: 12px; justify-content: center; width: 100%; margin-bottom: 16px; flex-wrap: wrap; }
+  .file-item { width: 88px; height: 100px; background: #fff; border: 3px solid #cfd6e6; border-radius: 14px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 40px;
     cursor: grab; touch-action: none; box-shadow: 0 6px 14px rgba(40,55,90,.12); }
-  .file-item small { font-size: 14px; font-weight: 700; color: #5b6172; margin-top: 2px; }
+  .file-item small { font-size: 13px; font-weight: 700; color: #5b6172; margin-top: 2px; }
   .file-item.dragging { cursor: grabbing; opacity: .9; }
   .file-item.placed { position: static !important; cursor: default; border-color:#56cf8c; }
-  .zones { display: flex; gap: 14px; justify-content: center; width: 100%; flex-wrap: wrap; }
-  .dropzone { width: 150px; min-height: 150px; border: 4px dashed #b7c0d6; border-radius: 16px; background: #f8faff;
+  .zones { display: flex; gap: 12px; justify-content: center; width: 100%; flex-wrap: wrap; }
+  .dropzone { width: 140px; min-height: 140px; border: 4px dashed #b7c0d6; border-radius: 16px; background: #f8faff;
     display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 6px; padding: 10px;
-    font-size: 17px; font-weight: 800; color: #97a0b6; }
-  .dropzone .zlabel { font-size: 30px; }
+    font-size: 16px; font-weight: 800; color: #97a0b6; }
+  .dropzone .zlabel { font-size: 28px; }
   .dropzone.over { border-color: #3b6fe0; background: #eaf1ff; }
   .dropzone.good { border-style: solid; border-color: #56cf8c; background: #eafaf0; }
 
-  /* 완료 */
   .done-screen { text-align: center; }
-  .done-screen .big { font-size: 60px; }
-  .done-screen h2 { font-size: 30px; margin: 10px 0; }
+  .done-screen .big { font-size: 58px; }
+  .done-screen h2 { font-size: 29px; margin: 8px 0; }
+  .stars { font-size: 22px; font-weight: 800; color: #f0a32e; margin: 4px 0 8px; }
   .sheet { display: inline-block; text-align: left; background: #fbfdff; border: 2px solid #dbe3f2;
-    border-radius: 14px; padding: 18px 26px; margin-top: 12px; }
+    border-radius: 14px; padding: 18px 26px; margin-top: 8px; }
   .sheet h3 { font-size: 20px; margin-bottom: 10px; color:#3b6fe0; }
   .sheet li { list-style: none; font-size: 21px; line-height: 1.9; color: #2f3445; }
-  .row-btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
-  @media print { .row-btns, .head p, .tracker { display: none; } }
+  .row-btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
+  @media print { .row-btns, .head p, .tracker { display: none; } .card { border: none; box-shadow: none; } }
 </style>
 
 <div class="wrap">
@@ -119,189 +119,228 @@
 (function () {
   var card = document.getElementById('card');
   var chips = [].slice.call(document.querySelectorAll('.chip'));
+  var chipLabels = ['① 이동', '② 클릭', '③ 더블클릭', '④ 드래그'];
   var studentName = '';
+  var score = 0;
   var balloonColors = ['#e8584f', '#3b9ae0', '#f0a32e', '#7d5fe0', '#2bb673', '#e0628f'];
 
+  function byId(id) { return document.getElementById(id); }
   function setNow(i) { chips.forEach(function (c, k) { c.classList.toggle('now', k === i && !c.classList.contains('done')); }); }
-  function markDone(i) { var c = chips[i]; if (c) { c.classList.add('done'); c.classList.remove('now'); c.textContent = '✅ ' + c.textContent.replace(/^[①②③④]\s*/, ''); } }
+  function markDone(i) { var c = chips[i]; if (c) { c.classList.add('done'); c.classList.remove('now'); c.textContent = '✅ ' + c.textContent.replace(/^[①②③④✅]\s*/, ''); } }
   function btn(label, fn, gray) { var b = document.createElement('button'); b.className = 'btn' + (gray ? ' gray' : ''); b.textContent = label; b.addEventListener('click', fn); return b; }
-  function rnd(min, max) { return Math.floor(min + (max - min) * (performance.now() % 1000) / 1000 + Math.random() * (max - min)) % (max - min) + min; }
+  function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
+  var cheers = ['좋아요!', '잘했어요!', '멋져요!', '최고예요!', '대단해요!'];
 
   /* ===== 시작 ===== */
   function start() {
-    setNow(-1);
+    setNow(-1); score = 0;
     card.innerHTML =
       '<div class="step-no">시작하기</div>' +
       '<div class="title">컴퓨터를 켜 볼까요?</div>' +
-      '<div class="guide">먼저 이름을 적고, <b>전원 버튼</b>을 한 번 눌러요.<br>(이름은 안 적어도 괜찮아요.)</div>' +
+      '<div class="guide">이름을 적고, <b>전원 버튼</b>을 한 번 눌러요.<br>(이름은 안 적어도 괜찮아요.)</div>' +
       '<div class="stage" style="gap:28px;">' +
         '<div class="screen-off" id="scr">꺼짐</div>' +
         '<div class="power" id="pw">⏻</div>' +
       '</div>' +
       '<input class="name-in" id="nm" placeholder="이름 (선택)" maxlength="12" style="margin:14px auto 0;display:block;">' +
       '<div class="feedback" id="fb"></div>';
-    var pw = document.getElementById('pw'), scr = document.getElementById('scr'), fb = document.getElementById('fb');
-    pw.addEventListener('click', function () {
+    byId('pw').addEventListener('click', function () {
+      var scr = byId('scr');
       scr.classList.add('on'); scr.textContent = '안녕하세요! 👋';
-      studentName = (document.getElementById('nm').value || '').trim();
-      fb.textContent = '🎉 컴퓨터가 켜졌어요!';
-      var b = btn('미션 시작 ▶', level1); card.appendChild(b);
+      studentName = (byId('nm').value || '').trim();
+      byId('fb').textContent = '🎉 컴퓨터가 켜졌어요!';
+      card.appendChild(btn('미션 시작 ▶', level1));
     });
   }
 
-  /* ===== ① 이동: 별 잡기 (hover 또는 클릭) ===== */
+  /* ===== ① 이동: 별 잡기 (2라운드: 정적 → 움직이는 별) ===== */
   function level1() {
     setNow(0);
-    card.innerHTML =
-      '<div class="step-no">미션 ① 마우스 이동</div>' +
-      '<div class="title">화살표를 움직여 별을 잡아요</div>' +
-      '<div class="guide">마우스를 움직여 <b>별 위에 올리거나 클릭</b>해서 별 3개를 잡아요. ⭐</div>' +
-      '<div class="progress" id="pg">0 / 3</div>' +
-      '<div class="stage" id="stage"></div>' +
-      '<div class="feedback" id="fb"></div>';
-    var stage = document.getElementById('stage'), pg = document.getElementById('pg'), fb = document.getElementById('fb');
-    var caught = 0, total = 3;
-    var spots = [[12, 20], [60, 60], [30, 70], [70, 18], [45, 35]];
-    function spawn(n) {
-      var s = document.createElement('div'); s.className = 'star'; s.textContent = '⭐';
-      var p = spots[(n + caught) % spots.length];
-      s.style.left = p[0] + '%'; s.style.top = p[1] + '%';
-      var hovTimer = null;
-      function grab() {
-        if (s.classList.contains('caught')) return;
-        s.classList.add('caught'); caught++; pg.textContent = caught + ' / ' + total;
-        if (caught >= total) { fb.textContent = '🎉 별을 모두 잡았어요!'; markDone(0); card.appendChild(btn('다음 ▶', level2)); }
-        else { fb.textContent = '잘했어요! ⭐'; setTimeout(function () { spawn(n + 1); }, 250); }
-      }
-      s.addEventListener('click', grab);
-      s.addEventListener('mouseenter', function () { hovTimer = setTimeout(grab, 500); });
-      s.addEventListener('mouseleave', function () { clearTimeout(hovTimer); });
-      stage.appendChild(s);
+    var rounds = [{ n: 5, move: false, label: '가만히 있는 별' }, { n: 5, move: true, label: '움직이는 별' }];
+    var ri = 0;
+    var spots = [[10, 18], [62, 52], [30, 66], [73, 14], [44, 36], [16, 46], [80, 62], [50, 74]];
+    function playRound() {
+      var rd = rounds[ri];
+      card.innerHTML =
+        '<div class="step-no">미션 ① 마우스 이동</div>' +
+        '<div class="title">화살표를 움직여 별을 잡아요</div>' +
+        '<div class="guide">마우스를 움직여 <b>별 위에 올리거나 클릭</b>해서 잡아요. ⭐</div>' +
+        '<div class="roundbar"><span class="round-badge">라운드 ' + (ri + 1) + ' / 2 · ' + rd.label + '</span></div>' +
+        '<div class="progress" id="pg">0 / ' + rd.n + '</div>' +
+        '<div class="stage" id="stage"></div>' +
+        '<div class="feedback" id="fb"></div>';
+      var stage = byId('stage'), pg = byId('pg'), fb = byId('fb');
+      var caught = 0;
+      for (var i = 0; i < rd.n; i++) (function (i) {
+        var s = document.createElement('div'); s.className = 'star' + (rd.move ? ' move' : ''); s.textContent = '⭐';
+        var p = spots[i % spots.length]; s.style.left = p[0] + '%'; s.style.top = p[1] + '%';
+        if (rd.move) s.style.animationDelay = (-i * 0.6) + 's';
+        var hov = null;
+        function grab() {
+          if (s.classList.contains('caught')) return;
+          s.classList.add('caught'); caught++; score++; pg.textContent = caught + ' / ' + rd.n;
+          if (caught >= rd.n) advance(fb); else fb.textContent = pick(cheers) + ' ⭐';
+        }
+        s.addEventListener('click', grab);
+        s.addEventListener('mouseenter', function () { hov = setTimeout(grab, 450); });
+        s.addEventListener('mouseleave', function () { clearTimeout(hov); });
+        stage.appendChild(s);
+      })(i);
     }
-    spawn(0);
+    function advance(fb) {
+      if (ri < rounds.length - 1) { fb.textContent = '🎉 라운드 ' + (ri + 1) + ' 완료!'; ri++; card.appendChild(btn('라운드 ' + (ri + 1) + ' ▶', playRound)); }
+      else { fb.textContent = '🎉 별을 모두 잡았어요!'; markDone(0); card.appendChild(btn('다음 ▶', level2)); }
+    }
+    playRound();
   }
 
-  /* ===== ② 클릭: 풍선 터뜨리기 ===== */
+  /* ===== ② 클릭: 풍선 (2라운드: 정적 → 흔들리는 풍선) ===== */
   function level2() {
     setNow(1);
-    card.innerHTML =
-      '<div class="step-no">미션 ② 클릭</div>' +
-      '<div class="title">풍선을 한 번씩 클릭해요</div>' +
-      '<div class="guide">풍선을 <b>한 번 클릭</b>해서 모두 터뜨려요. 🎈</div>' +
-      '<div class="progress" id="pg">0 / 6</div>' +
-      '<div class="stage" id="stage"></div>' +
-      '<div class="feedback" id="fb"></div>';
-    var stage = document.getElementById('stage'), pg = document.getElementById('pg'), fb = document.getElementById('fb');
-    var total = 6, popped = 0;
-    var pos = [[6, 12], [38, 40], [70, 8], [18, 62], [55, 66], [80, 44]];
-    for (var i = 0; i < total; i++) {
-      (function (i) {
-        var b = document.createElement('div'); b.className = 'balloon'; b.textContent = '🎈';
+    var rounds = [{ n: 8, drift: false }, { n: 8, drift: true }];
+    var ri = 0;
+    var pos = [[6, 10], [34, 36], [68, 6], [16, 58], [52, 60], [80, 40], [40, 12], [24, 32]];
+    function playRound() {
+      var rd = rounds[ri];
+      card.innerHTML =
+        '<div class="step-no">미션 ② 클릭</div>' +
+        '<div class="title">풍선을 한 번씩 클릭해요</div>' +
+        '<div class="guide">풍선을 <b>한 번 클릭</b>해서 모두 터뜨려요. 🎈</div>' +
+        '<div class="roundbar"><span class="round-badge">라운드 ' + (ri + 1) + ' / 2 · ' + (rd.drift ? '흔들리는 풍선' : '가만히 있는 풍선') + '</span></div>' +
+        '<div class="progress" id="pg">0 / ' + rd.n + '</div>' +
+        '<div class="stage" id="stage"></div>' +
+        '<div class="feedback" id="fb"></div>';
+      var stage = byId('stage'), pg = byId('pg'), fb = byId('fb');
+      var popped = 0;
+      for (var i = 0; i < rd.n; i++) (function (i) {
+        var b = document.createElement('div'); b.className = 'balloon' + (rd.drift ? ' drift' : ''); b.textContent = '🎈';
         b.style.background = balloonColors[i % balloonColors.length];
-        b.style.left = pos[i][0] + '%'; b.style.top = pos[i][1] + '%';
+        b.style.left = pos[i % pos.length][0] + '%'; b.style.top = pos[i % pos.length][1] + '%';
         b.style.animationDelay = (i * 0.2) + 's';
         b.addEventListener('click', function () {
           if (b.classList.contains('pop')) return;
-          b.classList.add('pop'); popped++; pg.textContent = popped + ' / ' + total;
-          if (popped >= total) { fb.textContent = '🎉 클릭 성공!'; markDone(1); card.appendChild(btn('다음 ▶', level3)); }
+          b.classList.add('pop'); popped++; score++; pg.textContent = popped + ' / ' + rd.n;
+          if (popped >= rd.n) advance(fb); else fb.textContent = pick(cheers) + ' 🎈';
         });
         stage.appendChild(b);
       })(i);
     }
+    function advance(fb) {
+      if (ri < rounds.length - 1) { fb.textContent = '🎉 라운드 ' + (ri + 1) + ' 완료!'; ri++; card.appendChild(btn('라운드 ' + (ri + 1) + ' ▶', playRound)); }
+      else { fb.textContent = '🎉 클릭 성공!'; markDone(1); card.appendChild(btn('다음 ▶', level3)); }
+    }
+    playRound();
   }
 
-  /* ===== ③ 더블클릭: 폴더 열기 ===== */
+  /* ===== ③ 더블클릭: 폴더 (2라운드) ===== */
   function level3() {
     setNow(2);
-    card.innerHTML =
-      '<div class="step-no">미션 ③ 더블클릭</div>' +
-      '<div class="title">폴더를 두 번 빠르게 클릭해요</div>' +
-      '<div class="guide">폴더 3개를 <b>두 번 빠르게 클릭</b>해서 모두 열어요. 📁</div>' +
-      '<div class="progress" id="pg">0 / 3</div>' +
-      '<div class="stage" id="stage"></div>' +
-      '<div class="feedback" id="fb"></div>';
-    var stage = document.getElementById('stage'), pg = document.getElementById('pg'), fb = document.getElementById('fb');
-    var treasures = ['🖼️', '🎵', '⭐'], opened = 0, total = 3;
-    treasures.forEach(function (t, i) {
-      var f = document.createElement('div'); f.className = 'folder'; f.innerHTML = '📁<small>폴더 ' + (i + 1) + '</small>';
-      f.addEventListener('click', function () { if (!f.dataset.open) fb.textContent = '두 번 빠르게 눌러요!'; });
-      f.addEventListener('dblclick', function () {
-        if (f.dataset.open) return;
-        f.dataset.open = '1'; f.classList.add('open'); f.innerHTML = '📂' + t + '<small>열림!</small>';
-        opened++; pg.textContent = opened + ' / ' + total; fb.textContent = '🎉 폴더가 열렸어요!';
-        if (opened >= total) { markDone(2); card.appendChild(btn('다음 ▶', level4)); }
+    var rounds = [['🖼️', '🎵', '⭐', '📷'], ['🎬', '🎁', '🍰', '🚀']];
+    var ri = 0;
+    function playRound() {
+      var treasures = rounds[ri];
+      card.innerHTML =
+        '<div class="step-no">미션 ③ 더블클릭</div>' +
+        '<div class="title">폴더를 두 번 빠르게 클릭해요</div>' +
+        '<div class="guide">폴더를 <b>두 번 빠르게 클릭</b>해서 모두 열어요. 📁</div>' +
+        '<div class="roundbar"><span class="round-badge">라운드 ' + (ri + 1) + ' / 2</span></div>' +
+        '<div class="progress" id="pg">0 / ' + treasures.length + '</div>' +
+        '<div class="stage" id="stage"></div>' +
+        '<div class="feedback" id="fb"></div>';
+      var stage = byId('stage'), pg = byId('pg'), fb = byId('fb');
+      var opened = 0;
+      treasures.forEach(function (t, i) {
+        var f = document.createElement('div'); f.className = 'folder'; f.innerHTML = '📁<small>폴더 ' + (i + 1) + '</small>';
+        f.addEventListener('click', function () { if (!f.dataset.open) fb.textContent = '두 번 빠르게 눌러요!'; });
+        f.addEventListener('dblclick', function () {
+          if (f.dataset.open) return;
+          f.dataset.open = '1'; f.classList.add('open'); f.innerHTML = '📂' + t + '<small>열림!</small>';
+          opened++; score++; pg.textContent = opened + ' / ' + treasures.length; fb.textContent = pick(cheers) + ' 📂';
+          if (opened >= treasures.length) advance(fb);
+        });
+        stage.appendChild(f);
       });
-      stage.appendChild(f);
-    });
+    }
+    function advance(fb) {
+      if (ri < rounds.length - 1) { fb.textContent = '🎉 라운드 ' + (ri + 1) + ' 완료!'; ri++; card.appendChild(btn('라운드 ' + (ri + 1) + ' ▶', playRound)); }
+      else { fb.textContent = '🎉 폴더를 모두 열었어요!'; markDone(2); card.appendChild(btn('다음 ▶', level4)); }
+    }
+    playRound();
   }
 
-  /* ===== ④ 드래그: 알맞은 상자에 분류 ===== */
+  /* ===== ④ 드래그: 분류 (2라운드: 3개 → 6개) ===== */
   function level4() {
     setNow(3);
-    card.innerHTML =
-      '<div class="step-no">미션 ④ 드래그</div>' +
-      '<div class="title">알맞은 상자로 끌어다 놓아요</div>' +
-      '<div class="guide">파일을 <b>꾹 누른 채로 끌어서</b> 같은 그림 상자에 넣어요.</div>' +
-      '<div class="progress" id="pg">0 / 3</div>' +
-      '<div class="tray" id="tray"></div>' +
-      '<div class="zones" id="zones"></div>' +
-      '<div class="feedback" id="fb"></div>';
-    var tray = document.getElementById('tray'), zones = document.getElementById('zones');
-    var pg = document.getElementById('pg'), fb = document.getElementById('fb');
-    var items = [{ t: 'pic', e: '🖼️', n: '사진' }, { t: 'mus', e: '🎵', n: '음악' }, { t: 'doc', e: '📄', n: '문서' }];
-    var placed = 0, total = 3;
-    var zoneByType = {};
-    items.forEach(function (it) {
-      var z = document.createElement('div'); z.className = 'dropzone'; z.dataset.type = it.t;
-      z.innerHTML = '<div class="zlabel">' + it.e + '</div><div>' + it.n + '</div>';
-      zones.appendChild(z); zoneByType[it.t] = z;
-    });
-    // shuffle tray order a bit
-    var order = [items[1], items[2], items[0]];
-    order.forEach(function (it) {
-      var f = document.createElement('div'); f.className = 'file-item'; f.dataset.type = it.t;
-      f.innerHTML = it.e + '<small>' + it.n + '</small>';
-      enableDrag(f);
-    });
-    function enableDrag(file) {
-      tray.appendChild(file);
-      var dragging = false, ox = 0, oy = 0;
-      function over(x, y, z) { var r = z.getBoundingClientRect(); return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom; }
-      function start(x, y) {
-        if (file.classList.contains('placed')) return;
-        dragging = true; file.classList.add('dragging');
-        var r = file.getBoundingClientRect(); ox = x - r.left; oy = y - r.top;
-        file.style.position = 'fixed'; file.style.zIndex = 999; file.style.width = r.width + 'px'; file.style.height = r.height + 'px';
-        move(x, y);
-      }
-      function move(x, y) {
-        if (!dragging) return;
-        file.style.left = (x - ox) + 'px'; file.style.top = (y - oy) + 'px';
-        for (var t in zoneByType) zoneByType[t].classList.toggle('over', over(x, y, zoneByType[t]));
-      }
-      function end(x, y) {
-        if (!dragging) return; dragging = false; file.classList.remove('dragging');
-        var target = zoneByType[file.dataset.type];
-        var ok = over(x, y, target);
-        for (var t in zoneByType) zoneByType[t].classList.remove('over');
-        if (ok) {
-          file.classList.add('placed'); file.style.position = ''; file.style.left = ''; file.style.top = '';
-          file.style.width = ''; file.style.height = ''; file.style.zIndex = '';
-          target.appendChild(file); target.classList.add('good');
-          placed++; pg.textContent = placed + ' / ' + total; fb.textContent = '🎉 맞았어요!';
-          if (placed >= total) { markDone(3); card.appendChild(btn('미션표 보기 🏆', finish)); }
-        } else {
-          file.style.position = ''; file.style.left = ''; file.style.top = ''; file.style.width = ''; file.style.height = ''; file.style.zIndex = '';
-          fb.textContent = '괜찮아요! 같은 그림 상자에 다시 넣어요.';
+    var types = [{ t: 'pic', e: '🖼️', n: '사진' }, { t: 'mus', e: '🎵', n: '음악' }, { t: 'doc', e: '📄', n: '문서' }];
+    var rounds = [1, 2]; // 타입별 개수
+    var ri = 0;
+    function playRound() {
+      var perType = rounds[ri];
+      card.innerHTML =
+        '<div class="step-no">미션 ④ 드래그</div>' +
+        '<div class="title">알맞은 상자로 끌어다 놓아요</div>' +
+        '<div class="guide">파일을 <b>꾹 누른 채로 끌어서</b> 같은 그림 상자에 넣어요.</div>' +
+        '<div class="roundbar"><span class="round-badge">라운드 ' + (ri + 1) + ' / 2</span></div>' +
+        '<div class="progress" id="pg">0 / ' + (perType * types.length) + '</div>' +
+        '<div class="tray" id="tray"></div>' +
+        '<div class="zones" id="zones"></div>' +
+        '<div class="feedback" id="fb"></div>';
+      var tray = byId('tray'), zones = byId('zones'), pg = byId('pg'), fb = byId('fb');
+      var total = perType * types.length, placed = 0;
+      var zoneByType = {};
+      types.forEach(function (it) {
+        var z = document.createElement('div'); z.className = 'dropzone'; z.dataset.type = it.t;
+        z.innerHTML = '<div class="zlabel">' + it.e + '</div><div>' + it.n + '</div>';
+        zones.appendChild(z); zoneByType[it.t] = z;
+      });
+      var items = [];
+      for (var r = 0; r < perType; r++) types.forEach(function (it) { items.push(it); });
+      items.sort(function () { return Math.random() - 0.5; });
+      items.forEach(function (it) {
+        var f = document.createElement('div'); f.className = 'file-item'; f.dataset.type = it.t;
+        f.innerHTML = it.e + '<small>' + it.n + '</small>';
+        enableDrag(f);
+      });
+      function enableDrag(file) {
+        tray.appendChild(file);
+        var dragging = false, ox = 0, oy = 0;
+        function over(x, y, z) { var r = z.getBoundingClientRect(); return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom; }
+        function begin(x, y) {
+          if (file.classList.contains('placed')) return;
+          dragging = true; file.classList.add('dragging');
+          var r = file.getBoundingClientRect(); ox = x - r.left; oy = y - r.top;
+          file.style.position = 'fixed'; file.style.zIndex = 999; file.style.width = r.width + 'px'; file.style.height = r.height + 'px';
+          mv(x, y);
         }
+        function mv(x, y) {
+          if (!dragging) return;
+          file.style.left = (x - ox) + 'px'; file.style.top = (y - oy) + 'px';
+          for (var t in zoneByType) zoneByType[t].classList.toggle('over', over(x, y, zoneByType[t]));
+        }
+        function end(x, y) {
+          if (!dragging) return; dragging = false; file.classList.remove('dragging');
+          var target = zoneByType[file.dataset.type]; var ok = over(x, y, target);
+          for (var t in zoneByType) zoneByType[t].classList.remove('over');
+          file.style.position = ''; file.style.left = ''; file.style.top = ''; file.style.width = ''; file.style.height = ''; file.style.zIndex = '';
+          if (ok) {
+            file.classList.add('placed'); target.appendChild(file); target.classList.add('good');
+            placed++; score++; pg.textContent = placed + ' / ' + total; fb.textContent = pick(cheers) + ' 📦';
+            if (placed >= total) advance(fb);
+          } else { fb.textContent = '괜찮아요! 같은 그림 상자에 다시 넣어요.'; }
+        }
+        file.addEventListener('mousedown', function (e) { e.preventDefault(); begin(e.clientX, e.clientY); });
+        window.addEventListener('mousemove', function (e) { mv(e.clientX, e.clientY); });
+        window.addEventListener('mouseup', function (e) { end(e.clientX, e.clientY); });
+        file.addEventListener('touchstart', function (e) { var t = e.touches[0]; begin(t.clientX, t.clientY); }, { passive: true });
+        window.addEventListener('touchmove', function (e) { if (dragging) { e.preventDefault(); var t = e.touches[0]; mv(t.clientX, t.clientY); } }, { passive: false });
+        window.addEventListener('touchend', function (e) { var t = e.changedTouches[0]; end(t.clientX, t.clientY); });
       }
-      file.addEventListener('mousedown', function (e) { e.preventDefault(); start(e.clientX, e.clientY); });
-      window.addEventListener('mousemove', function (e) { move(e.clientX, e.clientY); });
-      window.addEventListener('mouseup', function (e) { end(e.clientX, e.clientY); });
-      file.addEventListener('touchstart', function (e) { var t = e.touches[0]; start(t.clientX, t.clientY); }, { passive: true });
-      window.addEventListener('touchmove', function (e) { if (dragging) { e.preventDefault(); var t = e.touches[0]; move(t.clientX, t.clientY); } }, { passive: false });
-      window.addEventListener('touchend', function (e) { var t = e.changedTouches[0]; end(t.clientX, t.clientY); });
+      function advance(fb) {
+        if (ri < rounds.length - 1) { fb.textContent = '🎉 라운드 ' + (ri + 1) + ' 완료!'; ri++; card.appendChild(btn('라운드 ' + (ri + 1) + ' ▶', playRound)); }
+        else { fb.textContent = '🎉 분류 완성!'; markDone(3); card.appendChild(btn('미션표 보기 🏆', finish)); }
+      }
     }
+    playRound();
   }
 
   /* ===== 완료: 미션표(결과물) ===== */
@@ -312,6 +351,7 @@
       '<div class="done-screen">' +
         '<div class="big">🏆</div>' +
         '<h2>' + who + ', 미션 완료!</h2>' +
+        '<div class="stars">⭐ ' + score + '번 성공했어요!</div>' +
         '<div class="sheet">' +
           '<h3>오늘의 기본 조작 미션표</h3>' +
           '<ul>' +
@@ -321,14 +361,14 @@
             '<li>✅ 드래그 — 누른 채로 옮기기</li>' +
           '</ul>' +
         '</div>' +
-        '<p style="font-size:20px;color:#5b6172;margin:16px 0;">참 잘했어요. 박수! 👏</p>' +
+        '<p style="font-size:20px;color:#5b6172;margin:14px 0 0;">참 잘했어요. 박수! 👏</p>' +
         '<div class="row-btns">' +
           '<button class="btn" id="pr">미션표 인쇄 🖨️</button>' +
           '<button class="btn gray" id="rt">다시 하기 🔄</button>' +
         '</div>' +
       '</div>';
-    document.getElementById('pr').addEventListener('click', function () { window.print(); });
-    document.getElementById('rt').addEventListener('click', function () { chips.forEach(function (c, k) { c.className = 'chip'; c.textContent = ['① 이동', '② 클릭', '③ 더블클릭', '④ 드래그'][k]; }); start(); });
+    byId('pr').addEventListener('click', function () { window.print(); });
+    byId('rt').addEventListener('click', function () { chips.forEach(function (c, k) { c.className = 'chip'; c.textContent = chipLabels[k]; }); start(); });
   }
 
   start();
