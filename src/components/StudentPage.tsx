@@ -36,6 +36,64 @@ const getLocalDateString = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
+// 수업 종료 안내 — 여러 나라 학생이라 언어를 특정할 수 없어 몇 초마다 순환 표시한다.
+const END_NOTICE_LANGS: { code: string; label: string; dir?: 'rtl' | 'ltr'; title: string; lines: string[] }[] = [
+  {
+    code: 'ko', label: '한국어', title: '오늘 수업 끝!',
+    lines: [
+      '오늘 수업은 여기서 마무리합니다.',
+      '모두 수고 많으셨습니다! 다음에 또 만나요.',
+      '이제 정리해도 좋습니다.',
+      '더 연습하고 싶은 학생은 10분 정도 자율 연습 가능합니다.',
+    ],
+  },
+  {
+    code: 'ru', label: 'Русский', title: 'Урок окончен!',
+    lines: [
+      'На этом сегодняшний урок заканчивается.',
+      'Все большие молодцы! Увидимся в следующий раз.',
+      'Теперь можно собираться.',
+      'Кто хочет ещё потренироваться — можно заниматься самостоятельно около 10 минут.',
+    ],
+  },
+  {
+    code: 'vi', label: 'Tiếng Việt', title: 'Hết giờ học rồi!',
+    lines: [
+      'Buổi học hôm nay kết thúc ở đây.',
+      'Các em đã làm rất tốt! Hẹn gặp lại lần sau.',
+      'Bây giờ các em có thể dọn dẹp.',
+      'Bạn nào muốn luyện tập thêm có thể tự học khoảng 10 phút.',
+    ],
+  },
+  {
+    code: 'zh', label: '中文', title: '今天的课结束啦！',
+    lines: [
+      '今天的课到这里就结束了。',
+      '大家都辛苦了！下次再见。',
+      '现在可以收拾东西了。',
+      '想多练习的同学可以自己再练大约 10 分钟。',
+    ],
+  },
+  {
+    code: 'en', label: 'English', title: 'Class is over!',
+    lines: [
+      "That's the end of today's class.",
+      'Great job, everyone! See you next time.',
+      'You can pack up now.',
+      'If you want more practice, you can study on your own for about 10 minutes.',
+    ],
+  },
+  {
+    code: 'ur', label: 'اردو', dir: 'rtl', title: 'آج کی کلاس ختم!',
+    lines: [
+      'آج کی کلاس یہیں ختم ہوتی ہے۔',
+      'سب نے بہت اچھا کام کیا! اگلی بار ملیں گے۔',
+      'اب آپ سامان سمیٹ سکتے ہیں۔',
+      'جو طالب علم مزید مشق کرنا چاہتے ہیں وہ تقریباً 10 منٹ خود سے مشق کر سکتے ہیں۔',
+    ],
+  },
+];
+
 interface StudentPageProps {
   onBackToAdmin?: () => void;
   onLogin?: () => void;
@@ -298,6 +356,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
 
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isEndNoticeOpen, setIsEndNoticeOpen] = useState(false);
+  const [endNoticeLang, setEndNoticeLang] = useState(0);
   const [uploadStudentName, setUploadStudentName] = useState('');
   const [uploadTitle, setUploadTitle] = useState('');
   const [uploadAnonymous, setUploadAnonymous] = useState(false);
@@ -439,6 +498,16 @@ export const StudentPage: React.FC<StudentPageProps> = ({
     window.addEventListener('message', handleStudentWorkSave);
     return () => window.removeEventListener('message', handleStudentWorkSave);
   }, [activeClassroomId, getAuthToken]);
+
+  // 종료 안내가 열려 있는 동안 몇 초마다 언어를 바꾼다(읽을 수 있는 속도). 닫히면 멈추고 한국어로 초기화.
+  useEffect(() => {
+    if (!isEndNoticeOpen) return;
+    setEndNoticeLang(0);
+    const id = setInterval(() => {
+      setEndNoticeLang((i) => (i + 1) % END_NOTICE_LANGS.length);
+    }, 4500);
+    return () => clearInterval(id);
+  }, [isEndNoticeOpen]);
 
   const homeTranslationCacheRef = useRef<Record<string, string>>({});
   const homeTranslationRequestIdRef = useRef(0);
@@ -1219,28 +1288,41 @@ export const StudentPage: React.FC<StudentPageProps> = ({
 
       {isEndNoticeOpen && (
         <div
-          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-[110] flex cursor-pointer items-center justify-center bg-black/50 p-4"
           onClick={() => setIsEndNoticeOpen(false)}
+          title="화면을 누르면 닫혀요"
         >
-          <div
-            className="w-full max-w-lg rounded-[28px] bg-white p-8 text-center shadow-2xl sm:p-12"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="w-full max-w-lg rounded-[28px] bg-white p-8 text-center shadow-2xl sm:p-12">
             <div className="text-6xl">🎉</div>
-            <h2 className="mt-4 font-serif text-3xl font-bold text-[#141414]">오늘 수업 끝!</h2>
-            <div className="mt-6 space-y-3 text-xl font-medium leading-relaxed text-[#4A3728]">
-              <p>오늘 수업은 여기서 마무리합니다.</p>
-              <p>모두 수고 많으셨습니다! 다음에 또 만나요. 👋</p>
-              <p>이제 정리해도 좋습니다.</p>
-              <p className="text-lg text-[#8B7E74]">더 연습하고 싶은 학생은 10분 정도 자율 연습 가능합니다.</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setIsEndNoticeOpen(false)}
-              className="mt-8 rounded-2xl bg-[#8B5E3C] px-8 py-3 text-lg font-bold text-white transition-all hover:bg-[#75502F] active:scale-95"
+            <h2
+              className="mt-4 font-serif text-3xl font-bold text-[#141414]"
+              dir={END_NOTICE_LANGS[endNoticeLang].dir || 'ltr'}
             >
-              닫기
-            </button>
+              {END_NOTICE_LANGS[endNoticeLang].title}
+            </h2>
+            <div
+              className="mt-6 min-h-[180px] space-y-3 text-xl font-medium leading-relaxed text-[#4A3728]"
+              dir={END_NOTICE_LANGS[endNoticeLang].dir || 'ltr'}
+            >
+              {END_NOTICE_LANGS[endNoticeLang].lines.map((line, idx) => (
+                <p key={idx} className={idx === END_NOTICE_LANGS[endNoticeLang].lines.length - 1 ? 'text-lg text-[#8B7E74]' : ''}>
+                  {line}
+                </p>
+              ))}
+            </div>
+            <div className="mt-7 flex flex-wrap items-center justify-center gap-2" dir="ltr">
+              {END_NOTICE_LANGS.map((lang, idx) => (
+                <span
+                  key={lang.code}
+                  className={`rounded-full px-3 py-1 text-xs font-bold transition-colors ${
+                    idx === endNoticeLang ? 'bg-[#8B5E3C] text-white' : 'bg-[#F3F2EE] text-[#A89F94]'
+                  }`}
+                >
+                  {lang.label}
+                </span>
+              ))}
+            </div>
+            <p className="mt-4 text-xs text-[#A89F94]">화면을 누르면 닫혀요 · Tap anywhere to close</p>
           </div>
         </div>
       )}
