@@ -77,6 +77,14 @@ export interface NotebookLmFolderSyncResult {
   items: NotebookLmSyncItem[];
 }
 
+/** 이론 수업 슬라이드 한 개 (구글 슬라이드/드라이브 임베드 URL 또는 NotebookLM 등 외부 링크). */
+export interface TheorySlide {
+  /** 임베드 URL(슬라이드/드라이브) 또는 원본 링크(NotebookLM 등). */
+  url: string;
+  /** 표시용 라벨(예: "1시수"). 비우면 순서대로 "이론 N"으로 보인다. */
+  label?: string;
+}
+
 export interface ClassroomDateRecord {
   id: string;
   classroomId: string;
@@ -86,8 +94,10 @@ export interface ClassroomDateRecord {
   contentIds: string[];
   attendance: AttendanceRecord[];
   memo: string;
-  /** 이 날짜 이론 수업용 구글 슬라이드 임베드 URL (강사 화면 전용). 비어 있으면 미설정. */
+  /** @deprecated 단일 이론 슬라이드(구버전). 지금은 theorySlides 배열을 쓴다. 읽기 호환용으로만 남겨둠. */
   theorySlideUrl?: string;
+  /** 이 날짜 이론 수업 슬라이드들 (시수마다 1개씩 추가 가능, 강사 화면 전용). */
+  theorySlides?: TheorySlide[];
   createdAt: string;
   updatedAt: string;
   curriculumId?: string;

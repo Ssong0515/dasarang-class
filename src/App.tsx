@@ -209,6 +209,19 @@ const sortContents = (items: LessonContent[]) =>
     return left.title.localeCompare(right.title);
   });
 
+// 이론 슬라이드 배열 저장용 정규화: url 트리밍, 빈 항목 제거, 빈 label 키는 빼서 Firestore undefined를 피한다.
+const sanitizeTheorySlidesForStorage = (slides: unknown): { url: string; label?: string }[] => {
+  if (!Array.isArray(slides)) return [];
+  return slides
+    .map((slide) => {
+      const url = typeof slide?.url === 'string' ? slide.url.trim() : '';
+      const label = typeof slide?.label === 'string' ? slide.label.trim() : '';
+      return { url, label };
+    })
+    .filter((slide) => slide.url)
+    .map((slide) => (slide.label ? { url: slide.url, label: slide.label } : { url: slide.url }));
+};
+
 const getStudentsByClassroomId = (students: Student[]) => {
   const studentsByClassroomId = new Map<string, Student[]>();
 
@@ -850,6 +863,16 @@ export default function App() {
             contentIds: normalizeClassroomDateRecordContentIds(data),
             attendance: normalizeAttendanceRecords(data.attendance),
             memo: data.memo ?? '',
+            ...(typeof data.theorySlideUrl === 'string' ? { theorySlideUrl: data.theorySlideUrl } : {}),
+            ...(Array.isArray(data.theorySlides)
+              ? {
+                  theorySlides: data.theorySlides
+                    .filter((slide) => slide && typeof slide.url === 'string' && slide.url.trim())
+                    .map((slide): { url: string; label?: string } =>
+                      slide.label ? { url: slide.url, label: slide.label } : { url: slide.url }
+                    ),
+                }
+              : {}),
             createdAt: data.createdAt ?? '',
             updatedAt: data.updatedAt ?? '',
           } satisfies ClassroomDateRecord;
@@ -1623,7 +1646,7 @@ export default function App() {
         contentIds: normalizeClassroomDateRecordContentIds(record),
         attendance: sanitizeAttendanceRecordsForStorage(record.attendance),
         memo: record.memo ?? '',
-        theorySlideUrl: (record.theorySlideUrl ?? '').trim(),
+        theorySlides: sanitizeTheorySlidesForStorage(record.theorySlides),
         createdAt: existingRecord?.createdAt || record.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };

@@ -847,8 +847,8 @@ export const StudentPage: React.FC<StudentPageProps> = ({
             activeClassroomId && contentsByCategory.length > 0 ? 'space-y-5' : ''
           }`}
         >
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
               {SHOW_CLASSROOM_SELECTION && activeClassroomId && (
                 <button
                   onClick={handleGoHome}
@@ -857,11 +857,11 @@ export const StudentPage: React.FC<StudentPageProps> = ({
                   <ArrowLeft size={20} />
                 </button>
               )}
-              <div className="flex flex-col">
-                <h1 className="font-serif text-2xl font-bold text-[#141414]">
+              <div className="flex min-w-0 flex-col">
+                <h1 className="truncate font-serif text-xl font-bold text-[#141414] sm:text-2xl">
                   {SHOW_CLASSROOM_SELECTION && activeClassroom ? activeClassroom.name : currentT.title}
                 </h1>
-                <p className="text-xs font-medium text-[#8B7E74]">
+                <p className="truncate text-xs font-medium text-[#8B7E74]">
                   {SHOW_CLASSROOM_SELECTION && activeClassroom
                     ? `${visibleAssignedContentIds.size}개의 학습 콘텐츠`
                     : currentT.subtitle}
@@ -869,7 +869,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
               {!activeClassroomId && (
                 <div className="relative">
                   <button
@@ -923,12 +923,12 @@ export const StudentPage: React.FC<StudentPageProps> = ({
                   className="flex items-center gap-1.5 whitespace-nowrap rounded-xl bg-[#FFF5E9] px-3 py-2 text-sm font-bold text-[#8B5E3C]"
                   title="강사 미리보기 날짜 — 이 날짜에 공개된 실습을 미리 봅니다. 실제 학생 화면에는 영향이 없습니다."
                 >
-                  🔧 미리보기
+                  🔧 <span className="hidden sm:inline">미리보기</span>
                   <input
                     type="date"
                     value={previewDate}
                     onChange={(event) => setPreviewDate(event.target.value)}
-                    className="bg-transparent text-sm font-bold text-[#8B5E3C] outline-none"
+                    className="w-[7.5rem] bg-transparent text-sm font-bold text-[#8B5E3C] outline-none sm:w-auto"
                   />
                 </label>
               )}
@@ -936,9 +936,10 @@ export const StudentPage: React.FC<StudentPageProps> = ({
               {isAdmin && onBackToAdmin && (
                 <button
                   onClick={onBackToAdmin}
-                  className="whitespace-nowrap rounded-xl bg-[#8B5E3C] px-4 py-2 text-sm font-bold text-white transition-all hover:bg-[#724D31]"
+                  className="whitespace-nowrap rounded-xl bg-[#8B5E3C] px-3 py-2 text-sm font-bold text-white transition-all hover:bg-[#724D31] sm:px-4"
                 >
-                  {currentT.backToAdmin}
+                  <span className="sm:hidden">관리자</span>
+                  <span className="hidden sm:inline">{currentT.backToAdmin}</span>
                 </button>
               )}
             </div>
