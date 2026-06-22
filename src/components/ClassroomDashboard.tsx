@@ -72,7 +72,8 @@ import {
   splitStudentsByStatus,
 } from '../utils/students';
 import { isAttendanceExcluded } from '../utils/attendance';
-import { openDriveFolderPicker } from '../utils/drivePicker';
+import { openDriveFolderPicker, openDriveSlidePicker } from '../utils/drivePicker';
+import { SlideEmbed } from './StudentContentPreview';
 
 interface ClassroomDashboardProps {
   classroom: Classroom;
@@ -94,6 +95,8 @@ interface ClassroomDashboardProps {
     date: string,
     publishedContentIds: string[]
   ) => Promise<void>;
+  /** 수업 종료: 학생 화면을 잠그고 '오늘 수업 끝!' 안내를 모든 학생 화면에 띄운다. */
+  onEndLesson?: (classroomId: string, classroomName: string, date: string) => Promise<void>;
   onGenerateMemoDraft: (
     date: string,
     existingMemo?: string
@@ -124,6 +127,24 @@ const formatSchedule = (schedule: CalendarClassSummary['schedules'][number]) => 
   return `${days}${time}`;
 };
 type StudentAction = 'add' | 'edit' | 'delete' | 'move' | 'deactivate' | 'reactivate';
+
+// 붙여넣은 구글 슬라이드/드라이브 링크를 임베드 URL로 정규화한다 (ContentLibrary와 동일 규칙).
+const toSlideEmbedUrl = (raw: string): string => {
+  const trimmed = raw.trim();
+  const slidesMatch = trimmed.match(/\/presentation\/d\/([^/?#]+)/);
+  if (slidesMatch) return `https://docs.google.com/presentation/d/${slidesMatch[1]}/embed`;
+  const fileMatch = trimmed.match(/\/file\/d\/([^/?#]+)/);
+  if (fileMatch) return `https://drive.google.com/file/d/${fileMatch[1]}/preview`;
+  return trimmed;
+};
+
+// 임베드 URL을 새 탭에서 열기 좋은 발표(present) URL로 바꾼다. 슬라이드 임베드가 아니면(드라이브 미리보기 등) 원본 유지.
+const toSlidePresentUrl = (embedUrl: string): string =>
+  embedUrl.replace(/\/embed$/, '/present');
+
+// 화면에 iframe으로 바로 띄울 수 있는 링크인지(구글 슬라이드·드라이브). NotebookLM 등은 framing이 막혀 새 탭으로 연다.
+const isEmbeddableSlideUrl = (url: string): boolean =>
+  /docs\.google\.com\/presentation\/d\//.test(url) || /drive\.google\.com\/file\/d\//.test(url);
 
 const getLocalDateString = (date: Date) => {
   const year = date.getFullYear();
@@ -211,6 +232,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   onSaveDateRecord,
   onDeleteDateRecord,
   onUpdatePublishedLesson,
+  onEndLesson,
   onGenerateMemoDraft,
   onUpdateClassroom,
   onDeleteClassroom,
@@ -234,6 +256,9 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const [studentAction, setStudentAction] = useState<StudentAction | null>(null);
   const [studentMoveTargets, setStudentMoveTargets] = useState<Record<string, string>>({});
   const [localMemo, setLocalMemo] = useState('');
+  const [theoryUrlInput, setTheoryUrlInput] = useState('');
+  const [isPickingTheorySlide, setIsPickingTheorySlide] = useState(false);
+  const [isEndLessonModalOpen, setIsEndLessonModalOpen] = useState(false);
 
   const [generationMessage, setGenerationMessage] = useState<string | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
@@ -456,6 +481,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
 
   useEffect(() => {
     setLocalMemo(currentDateRecord?.memo || '');
+    setTheoryUrlInput('');
   }, [currentDateRecord?.id, currentDateRecord?.updatedAt, selectedDate]);
 
   useEffect(() => {
@@ -693,6 +719,49 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     });
   };
 
+  // 이 날짜의 이론 수업 슬라이드를 직접 연결한다 (강사 화면 전용). 붙여넣은 링크는 임베드 URL로 정규화해 저장.
+  const handleSetTheorySlideUrl = (rawUrl: string) => {
+    if (!currentDateRecord) {
+      return;
+    }
+    const embedUrl = toSlideEmbedUrl(rawUrl);
+    if (!embedUrl) {
+      return;
+    }
+    onSaveDateRecord({
+      ...currentDateRecord,
+      theorySlideUrl: embedUrl,
+    });
+  };
+
+  const handleClearTheorySlideUrl = () => {
+    if (!currentDateRecord) {
+      return;
+    }
+    onSaveDateRecord({
+      ...currentDateRecord,
+      theorySlideUrl: '',
+    });
+  };
+
+  const handlePickTheorySlide = async () => {
+    const clientId = import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID;
+    const apiKey = import.meta.env.VITE_GOOGLE_PICKER_API_KEY;
+    if (!clientId) {
+      return;
+    }
+    setIsPickingTheorySlide(true);
+    try {
+      const file = await openDriveSlidePicker(apiKey, clientId, userEmail);
+      if (file) {
+        setTheoryUrlInput('');
+        handleSetTheorySlideUrl(file.embedUrl);
+      }
+    } finally {
+      setIsPickingTheorySlide(false);
+    }
+  };
+
   // 실습 블록 하나를 학생에게 공개/잠금 토글 — Firestore 반영 즉시 학생 화면이 실시간으로 열린다.
   const handleTogglePublishContent = (content: LessonContent) => {
     if (!onUpdatePublishedLesson) {
@@ -722,6 +791,15 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       return;
     }
     void onUpdatePublishedLesson(classroom.id, classroom.name, selectedDate, []);
+  };
+
+  // 수업 종료 = 학생 화면의 모든 공개를 닫아 잠근다. 날짜 기록·메모·출석은 유지(되돌릴 수 있음).
+  const handleEndLesson = () => {
+    if (!onEndLesson) {
+      return;
+    }
+    void onEndLesson(classroom.id, classroom.name, selectedDate);
+    setIsEndLessonModalOpen(false);
   };
 
   const handleSaveMemo = () => {
@@ -1287,6 +1365,117 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
         {isCurrentDateActive && (
           <div className="rounded-[40px] border border-[#E5E3DD] bg-white p-8 shadow-sm sm:p-10">
             <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+              <div className="space-y-2">
+                <h2 className="flex items-center gap-2 text-xl font-bold text-[#4A3728]">
+                  <Presentation className="text-[#8B5E3C]" size={20} />
+                  이론 수업
+                  <DashboardInfoTooltip
+                    content="이 날짜 이론 수업용 슬라이드를 직접 연결합니다. 구글 슬라이드·드라이브는 화면에 바로 임베드되고, NotebookLM 등 임베드가 막힌 링크는 새 탭에서 열립니다. 강사 화면 전용이라 학생에게는 공개되지 않습니다."
+                    label="이론 수업 설명 보기"
+                  />
+                </h2>
+                <p className="text-sm text-[#8B7E74]">
+                  구글 슬라이드·NotebookLM 링크를 붙여넣거나 드라이브에서 선택하면 이 날짜 수업에 바로 연결됩니다.
+                </p>
+              </div>
+              {currentDateRecord?.theorySlideUrl?.trim() && (
+                <div className="flex items-center gap-2">
+                  <a
+                    href={toSlidePresentUrl(currentDateRecord.theorySlideUrl)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-[#E5E3DD] bg-white px-3 py-2 text-xs font-bold text-[#4A3728] transition-all hover:border-[#8B5E3C]"
+                  >
+                    <ExternalLink size={14} />
+                    새 탭에서 열기
+                  </a>
+                  <button
+                    onClick={handleClearTheorySlideUrl}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-[#FDECEC] px-3 py-2 text-xs font-bold text-[#B42318] transition-all hover:bg-[#FAD4D1]"
+                  >
+                    <X size={14} />
+                    연결 해제
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {currentDateRecord?.theorySlideUrl?.trim() ? (
+              isEmbeddableSlideUrl(currentDateRecord.theorySlideUrl) ? (
+                <div className="overflow-hidden rounded-[28px] border border-[#E5E3DD] bg-white">
+                  <SlideEmbed
+                    slideUrl={currentDateRecord.theorySlideUrl}
+                    title="이론 수업"
+                    roundedBottom
+                  />
+                </div>
+              ) : (
+                <a
+                  href={currentDateRecord.theorySlideUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex flex-col items-center justify-center gap-3 rounded-[28px] border-2 border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-6 py-12 text-center transition-all hover:border-[#8B5E3C] hover:bg-[#FFF5E9]"
+                >
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#FFF5E9]">
+                    <ExternalLink size={26} className="text-[#8B5E3C]" />
+                  </div>
+                  <p className="text-base font-bold text-[#4A3728]">이론 수업 자료 열기</p>
+                  <p className="max-w-md text-xs leading-relaxed text-[#8B7E74]">
+                    NotebookLM 등 일부 자료는 화면에 바로 띄울 수 없어 새 탭에서 열립니다. 클릭하면 자료가 열립니다.
+                  </p>
+                  <span className="max-w-full truncate text-xs font-medium text-[#A89F94]">
+                    {currentDateRecord.theorySlideUrl}
+                  </span>
+                </a>
+              )
+            ) : (
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  disabled={isPickingTheorySlide || !import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID}
+                  onClick={handlePickTheorySlide}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-6 py-4 font-bold text-[#8B7E74] transition-all hover:border-[#8B5E3C] hover:bg-[#FFF5E9] hover:text-[#8B5E3C] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <FolderOpen size={18} />
+                  {isPickingTheorySlide ? '드라이브 열기 중...' : 'Google Drive에서 슬라이드 선택'}
+                </button>
+                <div className="flex items-center gap-2">
+                  <div className="h-px flex-1 bg-[#E5E3DD]" />
+                  <span className="text-xs font-bold text-[#A89F94]">또는 URL 직접 입력</span>
+                  <div className="h-px flex-1 bg-[#E5E3DD]" />
+                </div>
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (!theoryUrlInput.trim()) return;
+                    handleSetTheorySlideUrl(theoryUrlInput);
+                    setTheoryUrlInput('');
+                  }}
+                  className="flex gap-2"
+                >
+                  <input
+                    type="text"
+                    value={theoryUrlInput}
+                    onChange={(event) => setTheoryUrlInput(event.target.value)}
+                    placeholder="구글 슬라이드 또는 NotebookLM 링크를 붙여넣으세요"
+                    className="flex-1 rounded-2xl border border-[#E5E3DD] bg-[#F3F2EE] px-4 py-3 text-sm text-[#4A3728] outline-none transition-all focus:border-[#8B5E3C] focus:ring-2 focus:ring-[#8B5E3C]"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!theoryUrlInput.trim()}
+                    className="rounded-2xl bg-[#8B5E3C] px-5 py-3 text-sm font-bold text-white transition-all hover:bg-[#724D31] disabled:cursor-not-allowed disabled:bg-[#B8AA9A]"
+                  >
+                    적용
+                  </button>
+                </form>
+              </div>
+            )}
+          </div>
+        )}
+
+        {isCurrentDateActive && (
+          <div className="rounded-[40px] border border-[#E5E3DD] bg-white p-8 shadow-sm sm:p-10">
+            <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
               <div className="space-y-3">
                 <h2 className="flex items-center gap-2 text-xl font-bold text-[#4A3728]">
                   <Clock className="text-[#8B5E3C]" size={20} />
@@ -1354,7 +1543,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               </div>
             )}
 
-            {onUpdatePublishedLesson && (recordedPracticeContents.length > 0 || recordedSlideContents.length > 0) && (
+            {onUpdatePublishedLesson && (
               <div className="mb-8 rounded-[28px] border border-[#E5E3DD] bg-[#FBFBFA] p-6">
                 <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-1">
@@ -1366,27 +1555,42 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                       이론(슬라이드)은 강사 화면 전용입니다. 실습을 공개하면 학생 화면에서 즉시 잠금이 풀립니다.
                     </p>
                   </div>
-                  {recordedPracticeContents.length > 0 && (
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={handlePublishAllPractice}
-                        disabled={publishedPracticeCount === recordedPracticeContents.length}
-                        className="inline-flex items-center gap-1.5 rounded-xl bg-[#EEF7F0] px-3 py-2 text-xs font-bold text-[#2D7A4D] transition-all hover:bg-[#DCEFE2] disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        <Unlock size={14} />
-                        전체 공개
-                      </button>
-                      <button
-                        onClick={handleUnpublishAll}
-                        disabled={publishedPracticeCount === 0}
-                        className="inline-flex items-center gap-1.5 rounded-xl bg-[#FDECEC] px-3 py-2 text-xs font-bold text-[#B42318] transition-all hover:bg-[#FAD4D1] disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        <Lock size={14} />
-                        전체 잠금
-                      </button>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {recordedPracticeContents.length > 0 && (
+                      <>
+                        <button
+                          onClick={handlePublishAllPractice}
+                          disabled={publishedPracticeCount === recordedPracticeContents.length}
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-[#EEF7F0] px-3 py-2 text-xs font-bold text-[#2D7A4D] transition-all hover:bg-[#DCEFE2] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <Unlock size={14} />
+                          전체 공개
+                        </button>
+                        <button
+                          onClick={handleUnpublishAll}
+                          disabled={publishedPracticeCount === 0}
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-[#FDECEC] px-3 py-2 text-xs font-bold text-[#B42318] transition-all hover:bg-[#FAD4D1] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <Lock size={14} />
+                          전체 잠금
+                        </button>
+                      </>
+                    )}
+                    <button
+                      onClick={() => setIsEndLessonModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-[#E5C9C6] bg-white px-3 py-2 text-xs font-bold text-[#B42318] transition-all hover:bg-[#FDECEC]"
+                    >
+                      <Power size={14} />
+                      수업 종료
+                    </button>
+                  </div>
                 </div>
+
+                {recordedPracticeContents.length === 0 && recordedSlideContents.length === 0 && (
+                  <p className="rounded-2xl border border-dashed border-[#E5E3DD] bg-white px-4 py-6 text-center text-sm text-[#8B7E74]">
+                    아직 이 날짜에 공개할 실습이 없습니다. 아래에서 수업 콘텐츠를 추가하면 학생에게 공개할 수 있고, 수업을 마치면 ‘수업 종료’로 학생 화면을 잠글 수 있어요.
+                  </p>
+                )}
 
                 {recordedSlideContents.length > 0 && (
                   <div className="mb-4">
@@ -1466,11 +1670,50 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                       })}
                     </div>
                   </div>
-                ) : (
-                  <p className="rounded-2xl border border-dashed border-[#E5E3DD] bg-white px-4 py-5 text-center text-sm text-[#8B7E74]">
-                    공개할 실습(HTML) 콘텐츠가 아직 없습니다. 위에서 실습 콘텐츠를 수업기록에 추가해주세요.
+                ) : null}
+              </div>
+            )}
+
+            {isEndLessonModalOpen && (
+              <div
+                className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4"
+                onClick={(event) => {
+                  if (event.target === event.currentTarget) setIsEndLessonModalOpen(false);
+                }}
+              >
+                <div className="w-full max-w-md rounded-[28px] bg-white p-7 shadow-2xl">
+                  <div className="mb-4 flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#FDECEC]">
+                      <Power size={20} className="text-[#B42318]" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-[#4A3728]">수업 종료</h3>
+                      <p className="text-xs text-[#8B7E74]">{selectedDate}</p>
+                    </div>
+                  </div>
+                  <p className="mb-6 text-sm leading-relaxed text-[#4A3728]">
+                    수업을 종료하면 <b>모든 학생 화면에 ‘오늘 수업 끝!’ 안내가 뜨고, 공개된 실습은 모두 잠깁니다.</b>
+                    <br />
+                    <span className="text-[#8B7E74]">
+                      수업 기록·메모·출석은 그대로 유지됩니다. 다시 공개하면 안내가 사라지고 이어서 진행할 수 있어요.
+                    </span>
                   </p>
-                )}
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => setIsEndLessonModalOpen(false)}
+                      className="rounded-2xl bg-[#F3F2EE] px-5 py-3 text-sm font-bold text-[#4A3728] transition-all hover:bg-[#EAE8E2]"
+                    >
+                      취소
+                    </button>
+                    <button
+                      onClick={handleEndLesson}
+                      className="inline-flex items-center gap-1.5 rounded-2xl bg-[#B42318] px-5 py-3 text-sm font-bold text-white transition-all hover:bg-[#8F1B12]"
+                    >
+                      <Power size={15} />
+                      수업 종료
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 

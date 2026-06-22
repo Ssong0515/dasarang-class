@@ -86,6 +86,8 @@ export interface ClassroomDateRecord {
   contentIds: string[];
   attendance: AttendanceRecord[];
   memo: string;
+  /** 이 날짜 이론 수업용 구글 슬라이드 임베드 URL (강사 화면 전용). 비어 있으면 미설정. */
+  theorySlideUrl?: string;
   createdAt: string;
   updatedAt: string;
   curriculumId?: string;
@@ -106,6 +108,8 @@ export interface PublishedLesson {
   publishedContentIds: string[];
   ownerUid: string;
   updatedAt: string;
+  /** 교사가 '수업 종료'를 누른 시각(ISO). 설정되면 학생 화면에 종료 안내가 뜬다. 다시 공개하면 새 문서로 덮여 해제된다. */
+  endNoticeAt?: string;
 }
 
 export interface Classroom {

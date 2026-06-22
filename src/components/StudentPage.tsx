@@ -357,6 +357,8 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isEndNoticeOpen, setIsEndNoticeOpen] = useState(false);
   const [endNoticeLang, setEndNoticeLang] = useState(0);
+  // 이미 닫은 종료 안내의 endNoticeAt. 교사가 다시 종료(새 시각)하면 값이 달라져 안내가 다시 뜬다.
+  const [dismissedEndNoticeAt, setDismissedEndNoticeAt] = useState<string | null>(null);
   const [uploadStudentName, setUploadStudentName] = useState('');
   const [uploadTitle, setUploadTitle] = useState('');
   const [uploadAnonymous, setUploadAnonymous] = useState(false);
@@ -534,6 +536,17 @@ export const StudentPage: React.FC<StudentPageProps> = ({
       .filter((lesson) => lesson.date === gatingDateString)
       .flatMap((lesson) => lesson.publishedContentIds)
   );
+  // 교사가 대시보드에서 '수업 종료'를 누르면 publishedLessons에 endNoticeAt가 찍힌다 → 모든 학생 화면에 종료 안내를 띄운다.
+  const activeEndNoticeAt =
+    publishedLessons
+      .filter((lesson) => lesson.date === gatingDateString && lesson.endNoticeAt)
+      .map((lesson) => lesson.endNoticeAt as string)
+      .sort()
+      .pop() || null;
+  // 종료 안내 신호가 오면 자동으로 띄우고, 학생이 이미 닫은 신호(같은 시각)면 닫아 둔다.
+  useEffect(() => {
+    setIsEndNoticeOpen(Boolean(activeEndNoticeAt) && activeEndNoticeAt !== dismissedEndNoticeAt);
+  }, [activeEndNoticeAt, dismissedEndNoticeAt]);
   const getAssignedContentIdsForClassroom = (_classroom?: Classroom) =>
     Array.from(categorizedContentIds);
   const visibleContents = categorizedContents.filter((content) =>
@@ -541,6 +554,9 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   );
   const visibleContentIds = new Set(visibleContents.map((content) => content.id));
   const visibleAssignedContentIds = visibleContentIds;
+  // 공개된 실습이 하나뿐이면 카테고리 선택 없이 바로 보여주고, 둘 이상일 때만 카테고리 UI를 쓴다.
+  const hasMultipleVisible = visibleContents.length >= 2;
+  const singleVisibleContent = visibleContents.length === 1 ? visibleContents[0] : null;
 
   const contentsByCategory = categories
     .map((category) => ({
@@ -928,7 +944,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
             </div>
           </div>
 
-          {isContentViewActive && contentsByCategory.length > 0 && (
+          {isContentViewActive && hasMultipleVisible && contentsByCategory.length > 0 && (
             <div className="flex flex-wrap items-center gap-2 border-t border-[#F0ECE6] pt-1">
               {contentsByCategory.map((group) => {
                 const isDropdownOpen = openDropdown === group.category.id;
@@ -1082,33 +1098,42 @@ export const StudentPage: React.FC<StudentPageProps> = ({
         </main>
       ) : (
         <main className="w-full px-4 pb-8 pt-6 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
-          {contentsByCategory.length > 0 ? (
-            <>
-              {selectedContent ? (
-                <motion.div
-                  key={selectedContent.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                >
-                  <StudentContentCard
-                    content={selectedContent}
-                    showDescriptionToggle={Boolean(isAdmin)}
-                  />
-                </motion.div>
-              ) : (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="w-full max-w-none rounded-[32px] border border-[#E5E3DD] bg-white p-10 text-center sm:p-16"
-                >
-                  <FileText size={48} className="mx-auto mb-4 text-[#E5E3DD]" />
-                  <p className="mb-2 text-lg font-bold text-[#8B7E74]">
-                    위의 카테고리를 클릭하여 콘텐츠를 선택하세요
-                  </p>
-                  <p className="text-sm text-[#A89F94]">학습 자료가 여기에 표시됩니다</p>
-                </motion.div>
-              )}
-            </>
+          {visibleContents.length > 0 ? (
+            singleVisibleContent ? (
+              <motion.div
+                key={singleVisibleContent.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                <StudentContentCard
+                  content={singleVisibleContent}
+                  showDescriptionToggle={Boolean(isAdmin)}
+                />
+              </motion.div>
+            ) : selectedContent ? (
+              <motion.div
+                key={selectedContent.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                <StudentContentCard
+                  content={selectedContent}
+                  showDescriptionToggle={Boolean(isAdmin)}
+                />
+              </motion.div>
+            ) : (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="w-full max-w-none rounded-[32px] border border-[#E5E3DD] bg-white p-10 text-center sm:p-16"
+              >
+                <FileText size={48} className="mx-auto mb-4 text-[#E5E3DD]" />
+                <p className="mb-2 text-lg font-bold text-[#8B7E74]">
+                  위의 카테고리를 클릭하여 콘텐츠를 선택하세요
+                </p>
+                <p className="text-sm text-[#A89F94]">학습 자료가 여기에 표시됩니다</p>
+              </motion.div>
+            )
           ) : (
             <motion.section
               initial={{ opacity: 0, y: 20 }}
@@ -1276,20 +1301,14 @@ export const StudentPage: React.FC<StudentPageProps> = ({
         )}
       </footer>
 
-      {/* 수업 마치기 — 항상 떠 있는 버튼. 교사가 수업 중 아무 때나 눌러 종료 안내를 띄운다. */}
-      <button
-        type="button"
-        onClick={() => setIsEndNoticeOpen(true)}
-        title="수업 마치기"
-        className="fixed bottom-5 right-5 z-[90] flex items-center gap-2 rounded-full bg-[#8B5E3C] px-5 py-3 text-base font-bold text-white shadow-lg transition-all hover:bg-[#75502F] active:scale-95"
-      >
-        🎒 수업 마치기
-      </button>
-
+      {/* 수업 종료 안내 — 교사가 대시보드에서 '수업 종료'를 누르면 실시간 신호로 모든 학생 화면에 뜬다. 학생은 띄우거나 닫을 수만 있다. */}
       {isEndNoticeOpen && (
         <div
           className="fixed inset-0 z-[110] flex cursor-pointer items-center justify-center bg-black/50 p-4"
-          onClick={() => setIsEndNoticeOpen(false)}
+          onClick={() => {
+            setDismissedEndNoticeAt(activeEndNoticeAt);
+            setIsEndNoticeOpen(false);
+          }}
           title="화면을 누르면 닫혀요"
         >
           <div className="w-full max-w-lg rounded-[28px] bg-white p-8 text-center shadow-2xl sm:p-12">
