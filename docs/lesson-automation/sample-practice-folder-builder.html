@@ -1,0 +1,497 @@
+<title>내 학습 폴더 만들기</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-user-select: none; user-select: none; }
+  body { font-family: "Malgun Gothic", "맑은 고딕", system-ui, sans-serif; color: #1f2330; }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 16px 16px 60px; }
+
+  .head { text-align: center; margin-bottom: 10px; }
+  .head h1 { font-size: 32px; letter-spacing: -1px; }
+  .head p { font-size: 18px; color: #5b6172; margin-top: 4px; }
+  .hud { display: inline-flex; gap: 14px; align-items: center; margin-top: 10px;
+    background: #fff7e6; border: 2px solid #ffe2a6; border-radius: 999px; padding: 6px 18px; }
+  .hud .sc { font-size: 20px; font-weight: 900; color: #d98a00; }
+  .hud .combo { font-size: 18px; font-weight: 900; color: #e8584f; min-width: 56px; text-align: left; }
+  .hud .combo.pop { animation: cpop .35s; }
+  @keyframes cpop { 0%{ transform: scale(.5); } 60%{ transform: scale(1.35); } 100%{ transform: scale(1); } }
+
+  .tracker { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap;
+    background: #f4f6fb; border-radius: 16px; padding: 10px; margin: 12px 0 16px; }
+  .chip { display: flex; align-items: center; gap: 5px; font-size: 14px; font-weight: 700;
+    color: #9aa0b4; background: #fff; border: 2px solid #e4e8f2; border-radius: 999px; padding: 6px 12px; transition: .25s; }
+  .chip.now { border-color: #3b6fe0; color: #3b6fe0; box-shadow: 0 0 0 3px #e8f0ff; }
+  .chip.done { color: #1a7f47; border-color: #56cf8c; background: #eafaf0; }
+
+  .card { background: #fff; border: 3px solid #e7ebf5; border-radius: 22px; padding: 22px 20px;
+    box-shadow: 0 10px 30px rgba(40,55,90,.06); min-height: 520px; display: flex; flex-direction: column; }
+  .step-no { font-size: 16px; font-weight: 800; color: #3b6fe0; margin-bottom: 2px; }
+  .title { font-size: 25px; font-weight: 800; line-height: 1.25; margin-bottom: 6px; }
+  .guide { font-size: 19px; color: #4a4f60; line-height: 1.45; margin-bottom: 6px; }
+  .guide b { color: #d6452b; }
+  .roundbar { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 4px; }
+  .round-badge { font-size: 14px; font-weight: 800; color: #8a5cf6; background: #f1ebff; border-radius: 999px; padding: 4px 12px; }
+  .round-badge.boss { color: #fff; background: linear-gradient(90deg,#f0a32e,#e8584f); }
+  .progress { font-size: 17px; font-weight: 800; color: #3b6fe0; text-align: center; margin-bottom: 6px; }
+
+  .feedback { text-align: center; font-size: 20px; font-weight: 800; color: #1a7f47; min-height: 28px; margin-top: 8px; }
+  .feedback.no { color: #d6452b; }   /* 틀리면 빨강, 맞으면 초록(기본) */
+  .btn { align-self: center; margin-top: 10px; font-family: inherit; font-size: 21px; font-weight: 800;
+    color: #fff; background: #3b6fe0; border: none; border-radius: 14px; padding: 14px 36px; cursor: pointer;
+    box-shadow: 0 6px 0 #2a55b8; transition: .1s; }
+  .btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #2a55b8; }
+  .btn.gray { background:#8b93a7; box-shadow:0 6px 0 #6c7589; }
+  .btn.gold { background: linear-gradient(90deg,#f0a32e,#e8884f); box-shadow:0 6px 0 #c06a1f; }
+
+  .name-in { font-family: inherit; font-size: 22px; text-align: center; padding: 12px 16px; width: 280px;
+    border: 3px solid #cfd6e6; border-radius: 12px; -webkit-user-select: text; user-select: text; }
+
+  /* ===== 가짜 파일 탐색기 ===== */
+  .explorer { width: 100%; max-width: 620px; margin: 6px auto 0; background:#fff;
+    border: 3px solid #cfd6e6; border-radius: 14px; overflow: hidden; box-shadow: 0 10px 24px rgba(40,55,90,.12); }
+  .ex-bar { display:flex; align-items:center; gap:10px; background:#eef2fb; padding:10px 12px; border-bottom:2px solid #dbe3f2; }
+  .ex-path { font-size:15px; font-weight:800; color:#2f3445; }
+  .newfolder { margin-left:auto; font-family:inherit; font-size:16px; font-weight:800; color:#fff; background:#1a7f47;
+    border:none; border-radius:10px; padding:9px 14px; cursor:pointer; box-shadow:0 4px 0 #136236; }
+  .newfolder:active{ transform:translateY(3px); box-shadow:0 1px 0 #136236; }
+  .ex-body { min-height: 200px; padding:14px; display:flex; flex-wrap:wrap; gap:14px; align-content:flex-start; }
+  .fold { width:100px; text-align:center; cursor:pointer; padding:6px 2px; border-radius:10px; transition:.1s; }
+  .fold .fe { font-size:48px; line-height:1; }
+  .fold small { display:block; font-size:13px; font-weight:800; color:#3a4256; margin-top:2px; word-break:break-all; }
+  .fold.pop { animation: fpop .4s; }
+  .fold.sel { background:#eaf1ff; outline:3px solid #3b6fe0; }
+  .fold.hit { animation: pophit .35s; }
+  .fold.wrongshake { animation: shake .4s; }
+  @keyframes fpop { 0%{ transform:scale(.3); opacity:0; } 60%{ transform:scale(1.15);} 100%{ transform:scale(1); opacity:1; } }
+  @keyframes pophit { 50% { transform: scale(1.22); } }
+  @keyframes shake { 0%,100%{transform:translateX(0);} 25%{transform:translateX(-6px);} 75%{transform:translateX(6px);} }
+
+  /* 카테고리 선택 칩 */
+  .catrow { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin:6px 0; }
+  .cat { font-size:17px; font-weight:800; color:#3b6fe0; background:#eaf1ff; border:2px solid #b9ccf3;
+    border-radius:999px; padding:8px 16px; cursor:pointer; transition:.1s; }
+  .cat .ce { font-size:22px; }
+  .cat.sel { outline:3px solid #3b6fe0; background:#dbe8ff; }
+  .cat.done { opacity:.4; pointer-events:none; }
+
+  /* 드래그 분류 */
+  .tray { display:flex; gap:10px; justify-content:center; width:100%; margin: 4px 0 14px; flex-wrap:wrap; }
+  .file-item { width:84px; height:96px; background:#fff; border:3px solid #cfd6e6; border-radius:14px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:34px;
+    cursor:grab; touch-action:none; box-shadow:0 6px 14px rgba(40,55,90,.12); }
+  .file-item small { font-size:11px; font-weight:700; color:#5b6172; margin-top:2px; text-align:center; }
+  .file-item.dragging { cursor:grabbing; opacity:.9; }
+  .file-item.placed { position:static !important; cursor:default; border-color:#56cf8c; transform:scale(.82); }
+  .zones { display:flex; gap:10px; justify-content:center; width:100%; flex-wrap:wrap; }
+  .dropzone { width:120px; min-height:128px; border:4px dashed #b7c0d6; border-radius:16px; background:#f8faff;
+    display:flex; flex-direction:column; align-items:center; justify-content:flex-start; gap:2px; padding:8px;
+    font-size:14px; font-weight:800; color:#7e879c; }
+  .dropzone .zlabel { font-size:30px; }
+  .dropzone.over { border-color:#3b6fe0; background:#eaf1ff; }
+  .dropzone.good { border-style:solid; border-color:#56cf8c; background:#eafaf0; }
+
+  .done-screen { text-align:center; }
+  .done-screen .big { font-size:56px; }
+  .done-screen h2 { font-size:27px; margin:6px 0; }
+  .stars { font-size:20px; font-weight:800; color:#f0a32e; margin:2px 0 6px; }
+  .badges { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin:8px 0; }
+  .badge { background:#fff7e6; border:2px solid #ffd98a; border-radius:14px; padding:8px 12px; font-size:15px; font-weight:800; color:#b5740a; }
+  .badge .be { font-size:24px; display:block; }
+  .tree { display:inline-block; text-align:left; background:#fbfdff; border:2px solid #dbe3f2;
+    border-radius:14px; padding:16px 26px; margin-top:6px; font-size:20px; line-height:1.85; color:#2f3445; }
+  .tree .root { font-weight:800; color:#1a7f47; font-size:21px; }
+  .tree .sub { padding-left:18px; }
+  .tree .who-line { margin-top:12px; padding-top:8px; border-top:1px dashed #dbe3f2; font-size:16px; color:#5b6172; }
+  .result-card { background:#fff; padding:8px 6px 16px; border-radius:18px; }
+  .row-btns { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-top:14px; }
+  @media print { .row-btns, .head p, .hud, .tracker { display:none; } .card { border:none; box-shadow:none; } }
+</style>
+
+<div class="wrap">
+  <div class="head">
+    <h1>📁 내 학습 폴더 만들기</h1>
+    <p>내 폴더를 만들고, 파일을 정리해요! ✨</p>
+    <div class="hud"><span class="sc">⭐ <span id="hs">0</span></span><span class="combo" id="hc"></span></div>
+  </div>
+
+  <div class="tracker" id="tracker">
+    <div class="chip" data-m="0">① 폴더 만들기</div>
+    <div class="chip" data-m="1">② 이름 붙이기</div>
+    <div class="chip" data-m="2">③ 하위 폴더 4개</div>
+    <div class="chip" data-m="3">④ 파일 정리</div>
+    <div class="chip" data-m="4">⑤ 정리 도전</div>
+  </div>
+
+  <div class="card" id="card"></div>
+</div>
+
+<script>
+(function () {
+  var card = document.getElementById('card');
+  var chips = [].slice.call(document.querySelectorAll('.chip'));
+  var chipLabels = ['① 폴더 만들기','② 이름 붙이기','③ 하위 폴더 4개','④ 파일 정리','⑤ 정리 도전'];
+  var studentName = '';
+  var folderName = '내_학습폴더';
+  var score = 0, combo = 0, maxCombo = 0, miss = 0;
+  var sorted = { doc:0, pic:0, ai:0, task:0 };
+  var SUBS = [{k:'doc',e:'📄',n:'문서'},{k:'pic',e:'🖼️',n:'사진'},{k:'ai',e:'🤖',n:'AI활동'},{k:'task',e:'📝',n:'과제'}];
+
+  function byId(id){ return document.getElementById(id); }
+  function setNow(i){ chips.forEach(function(c,k){ c.classList.toggle('now', k===i && !c.classList.contains('done')); }); }
+  function markDone(i){ var c=chips[i]; if(c){ c.classList.add('done'); c.classList.remove('now'); c.textContent='✅ '+c.textContent.replace(/^[①②③④⑤✅]\s*/, ''); } }
+  function btn(label, fn, cls){ var b=document.createElement('button'); b.className='btn'+(cls?' '+cls:''); b.textContent=label; b.addEventListener('click', fn); return b; }
+  function btnId(label, fn, id, cls){ var b=btn(label, fn, cls); b.id=id; return b; }
+  function pick(a){ return a[Math.floor(Math.random()*a.length)]; }
+  function shuffle(a){ a=a.slice(); for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
+  function subByK(k){ for(var i=0;i<SUBS.length;i++) if(SUBS[i].k===k) return SUBS[i]; return null; }
+  var cheers = ['좋아요!','잘했어요!','멋져요!','최고예요!','대단해요!','완벽해요!'];
+
+  function hud(){ byId('hs').textContent=score; var hc=byId('hc');
+    if(combo>=2){ hc.textContent='🔥 x'+combo; hc.classList.remove('pop'); void hc.offsetWidth; hc.classList.add('pop'); } else hc.textContent=''; }
+  function good(){ combo++; if(combo>maxCombo)maxCombo=combo; score += 1 + Math.max(0, combo-1); hud(); var fe=byId('fb'); if(fe) fe.classList.remove('no'); }
+  function bad(){ combo=0; miss++; hud(); var fe=byId('fb'); if(fe) fe.classList.add('no'); }
+  function comboMsg(base){ return combo>=3 ? base+' 🔥콤보 x'+combo+'!' : base; }
+
+  /* ===== 결과물 저장 헬퍼 (외부 라이브러리 0) ===== */
+  var SAVE = {
+    capture: function(node, done){
+      try {
+        var rect = node.getBoundingClientRect();
+        var w = Math.max(1, Math.ceil(rect.width)), h = Math.max(1, Math.ceil(rect.height));
+        var scale = 2, css = '';
+        for (var i=0;i<document.styleSheets.length;i++){ try { var rules=document.styleSheets[i].cssRules; for(var j=0;j<rules.length;j++) css+=rules[j].cssText+'\n'; } catch(e){} }
+        var holder=document.createElement('div'); holder.appendChild(node.cloneNode(true));
+        var svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'" height="'+h+'">'+
+          '<foreignObject x="0" y="0" width="'+w+'" height="'+h+'">'+
+          '<div xmlns="http://www.w3.org/1999/xhtml" style="width:'+w+'px;background:#ffffff;">'+
+          '<style>'+css+'</style>'+holder.innerHTML+'</div></foreignObject></svg>';
+        var img=new Image();
+        img.onload=function(){
+          try {
+            var canvas=document.createElement('canvas'); canvas.width=w*scale; canvas.height=h*scale;
+            var ctx=canvas.getContext('2d'); ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+            ctx.setTransform(scale,0,0,scale,0,0); ctx.drawImage(img,0,0);
+            done(canvas.toDataURL('image/png'));
+          } catch(e){ done(null); }
+        };
+        img.onerror=function(){ done(null); };
+        img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
+      } catch(e){ done(null); }
+    },
+    download: function(dataUrl, name){
+      var a=document.createElement('a'); a.href=dataUrl; a.download=name; document.body.appendChild(a); a.click(); a.remove();
+    }
+  };
+
+  function explorerHTML(path, withNew){
+    return '<div class="explorer">' +
+      '<div class="ex-bar"><span class="ex-path">📂 '+path+'</span>' +
+        (withNew===false?'':'<button class="newfolder" id="nf">➕ 새 폴더</button>')+'</div>' +
+      '<div class="ex-body" id="exbody"></div></div>';
+  }
+  function addFold(name, cls){ var f=document.createElement('div'); f.className='fold pop'+(cls?' '+cls:''); f.innerHTML='📁<small>'+name+'</small>'; byId('exbody').appendChild(f); return f; }
+  function flashHit(el){ el.classList.add('hit'); setTimeout(function(){ el.classList.remove('hit'); }, 350); }
+  function flashWrong(el){ if(!el) return; el.classList.remove('wrongshake'); void el.offsetWidth; el.classList.add('wrongshake'); }
+
+  /* ===== 시작 ===== */
+  function start(){
+    setNow(-1); score=0; combo=0; maxCombo=0; miss=0; sorted={doc:0,pic:0,ai:0,task:0}; folderName='내_학습폴더'; hud();
+    card.innerHTML =
+      '<div class="step-no">시작하기</div>' +
+      '<div class="title">내 폴더를 만들어요</div>' +
+      '<div class="guide">여기는 <b>연습용 화면</b>이에요. 진짜 컴퓨터는 바뀌지 않아요.<br><b>이름을 꼭 적어요.</b> 내 폴더에 이름이 들어가요.</div>' +
+      explorerHTML('바탕화면', false) +
+      '<input class="name-in" id="nm" placeholder="이름을 적어요" maxlength="12" style="margin:14px auto 0;display:block;">' +
+      '<div class="feedback" id="fb"></div>';
+    addFold('새 폴더'); addFold('사진'); addFold('음악');
+    card.appendChild(btn('미션 시작 ▶', function(){
+      var nm=(byId('nm').value||'').trim();
+      if(!nm){ byId('fb').classList.add('no'); byId('fb').textContent='먼저 이름을 적어 주세요. ✏️'; var el=byId('nm'); el.style.borderColor='#e8584f'; el.focus(); return; }
+      studentName=nm; level1();
+    }));
+    var nmEl=byId('nm'); if(nmEl) nmEl.addEventListener('input', function(){ this.style.borderColor='#cfd6e6'; });
+  }
+
+  /* ===== ① 새 폴더 3개 만들기 (➕ 반복) ===== */
+  function level1(){
+    setNow(0);
+    var need=3, made=0;
+    card.innerHTML =
+      '<div class="step-no">미션 ① 폴더 만들기</div>' +
+      '<div class="title">➕ 새 폴더 버튼을 눌러요</div>' +
+      '<div class="guide">오른쪽 위 <b>➕ 새 폴더</b>를 눌러 폴더 <b>3개</b>를 만들어요.</div>' +
+      '<div class="progress" id="pg">0 / 3</div>' +
+      explorerHTML('바탕화면') +
+      '<div class="feedback" id="fb">버튼을 눌러 보세요!</div>';
+    var fb=byId('fb'), pg=byId('pg');
+    byId('nf').addEventListener('click', function(){
+      if(made>=need){ fb.textContent='충분해요! 다음으로 가요.'; return; }
+      made++; good(); addFold('새 폴더'+(made>1?' ('+made+')':'')); pg.textContent=made+' / 3';
+      fb.textContent=comboMsg(pick(cheers)+' 📁');
+      if(made>=need){ markDone(0); fb.textContent='🎉 폴더 3개를 만들었어요!'; card.appendChild(btn('다음 ▶', level2)); }
+    });
+  }
+
+  /* ===== ② 이름 붙이기 + 내 폴더 찾기 (변별) ===== */
+  function level2(){
+    setNow(1);
+    // Part A: 이름 입력
+    card.innerHTML =
+      '<div class="step-no">미션 ② 이름 붙이기</div>' +
+      '<div class="title">폴더에 내 이름을 붙여요</div>' +
+      '<div class="guide">이름을 붙이면 <b>내 폴더를 쉽게 찾아요.</b> 아래에 적고 버튼을 눌러요.</div>' +
+      explorerHTML('바탕화면', false) +
+      '<input class="name-in" id="fn" placeholder="예: 마리아" maxlength="12" style="margin:6px auto 0;display:block;">' +
+      '<div class="feedback" id="fb"></div>';
+    var theFold=addFold('새 폴더'); theFold.id='theFold';
+    if(studentName) byId('fn').value=studentName;
+    card.appendChild(btn('이름 붙이기 ▶', function(){
+      if(byId('go2')) return;
+      var nm=(byId('fn').value||'').trim() || studentName || '내';
+      folderName = nm + '_학습폴더';
+      byId('theFold').innerHTML='📁<small>'+folderName+'</small>'; byId('theFold').classList.add('pop');
+      byId('fb').textContent='🎉 ['+folderName+'] 폴더가 되었어요!'; good(); markDone(1);
+      if(!byId('go2')) card.appendChild(btnId('내 폴더 찾기 ▶', partB, 'go2'));
+    }));
+
+    // Part B: 여러 폴더 중 내 폴더 찾기 (2라운드)
+    var ri=0;
+    function partB(){
+      var decoysAll=['새 폴더','새 폴더 (2)','새 폴더 (3)','문서','제목없음','새 폴더 (4)'];
+      var rounds=[3,5]; var n=rounds[ri];
+      var items=shuffle(decoysAll).slice(0,n).concat([folderName]); items=shuffle(items);
+      card.innerHTML =
+        '<div class="step-no">미션 ② 내 폴더 찾기</div>' +
+        '<div class="title">내 폴더는 어느 거예요?</div>' +
+        '<div class="guide">이름이 있는 <b>내 폴더</b>를 찾아 눌러요. (이름 없는 "새 폴더"는 헷갈려요!)</div>' +
+        '<div class="roundbar"><span class="round-badge">라운드 '+(ri+1)+' / 2</span></div>' +
+        explorerHTML('바탕화면') +
+        '<div class="feedback" id="fb"></div>';
+      byId('nf').style.visibility='hidden';
+      var fb=byId('fb'); var answered=false;
+      items.forEach(function(nm){
+        var f=addFold(nm); if(nm===folderName) f.dataset.mine='1';
+        f.addEventListener('click', function(){
+          if(answered) return;
+          if(f.dataset.mine){ answered=true; flashHit(f); good(); fb.textContent=comboMsg('맞아요! 내 폴더예요 ⭐');
+            if(ri<rounds.length-1){ ri++; card.appendChild(btn('라운드 '+(ri+1)+' ▶', partB)); }
+            else { markDone(1); fb.textContent='🎉 이름 덕분에 쉽게 찾았죠?'; card.appendChild(btn('다음 ▶', level3)); }
+          } else { bad(); flashWrong(f); fb.textContent='그건 이름 없는 폴더예요. 내 이름을 찾아요!'; }
+        });
+      });
+    }
+  }
+
+  /* ===== ③ 하위 폴더 4개 만들기 (아이콘으로 선택) ===== */
+  function level3(){
+    setNow(2);
+    var made={};
+    card.innerHTML =
+      '<div class="step-no">미션 ③ 하위 폴더 4개</div>' +
+      '<div class="title">안에 폴더 4개를 만들어요</div>' +
+      '<div class="guide" id="gd">아래에서 하나 고르고 ➕ 새 폴더를 눌러요.</div>' +
+      '<div class="progress" id="pg">0 / 4</div>' +
+      '<div class="catrow" id="catrow"></div>' +
+      explorerHTML(folderName) +
+      '<div class="feedback" id="fb"></div>';
+    var fb=byId('fb'), pg=byId('pg'), gd=byId('gd'); var chosen=null;
+    var catrow=byId('catrow');
+    SUBS.forEach(function(it){
+      var c=document.createElement('div'); c.className='cat'; c.dataset.k=it.k;
+      c.innerHTML='<span class="ce">'+it.e+'</span> '+it.n;
+      c.addEventListener('click', function(){
+        if(made[it.k]) return; chosen=it;
+        [].forEach.call(catrow.children,function(x){ x.classList.remove('sel'); }); c.classList.add('sel');
+        gd.innerHTML='<b>'+it.e+' '+it.n+'</b> 폴더를 만들 거예요. ➕ 새 폴더를 눌러요.';
+      });
+      catrow.appendChild(c);
+    });
+    byId('nf').addEventListener('click', function(){
+      if(!chosen){ fb.textContent='먼저 위에서 하나 골라요.'; return; }
+      if(made[chosen.k]){ fb.textContent='이미 만들었어요. 다른 걸 골라요.'; return; }
+      made[chosen.k]=1; good(); addFold(chosen.e+' '+chosen.n);
+      [].forEach.call(catrow.children,function(x){ if(x.dataset.k===chosen.k){ x.classList.add('done'); x.classList.remove('sel'); } });
+      pg.textContent=Object.keys(made).length+' / 4'; fb.textContent=comboMsg(pick(cheers)+' 📁'); gd.innerHTML='좋아요! 다음 폴더를 골라요.'; chosen=null;
+      if(Object.keys(made).length>=4){ markDone(2); fb.textContent='🎉 폴더 4개 완성!'; gd.innerHTML='폴더를 다 만들었어요.'; card.appendChild(btn('파일 정리하기 ▶', level4)); }
+    });
+  }
+
+  /* ===== 파일 풀 ===== */
+  function fileFor(t, e, n){ return {t:t, e:e, n:n}; }
+  var FILES = {
+    doc: [fileFor('doc','📄','메모.txt'), fileFor('doc','📃','쪽지.txt'), fileFor('doc','📄','일기.doc')],
+    pic: [fileFor('pic','🖼️','가족사진.jpg'), fileFor('pic','📷','셀카.jpg'), fileFor('pic','🏞️','풍경.png')],
+    ai:  [fileFor('ai','🤖','AI답변.txt'), fileFor('ai','💬','AI채팅.txt'), fileFor('ai','✨','AI그림.png')],
+    task:[fileFor('task','📝','숙제1.doc'), fileFor('task','✏️','받아쓰기.doc'), fileFor('task','📋','과제표.doc')]
+  };
+  function buildFiles(perCat){ // perCat: {doc:n,...}
+    var arr=[]; for(var k in perCat){ for(var i=0;i<perCat[k];i++) arr.push(FILES[k][i % FILES[k].length]); } return shuffle(arr);
+  }
+
+  /* 드래그 분류 엔진 (마우스+터치) — 완료 시 onDone(misses) */
+  function runSort(opts){
+    // opts: files[], boss(bool), onComplete(fn)
+    var files=opts.files;
+    var tray=byId('tray'), zones=byId('zones'), pg=byId('pg'), fb=byId('fb');
+    var total=files.length, placed=0; var zoneByType={};
+    SUBS.forEach(function(it){
+      var z=document.createElement('div'); z.className='dropzone'; z.dataset.type=it.k;
+      z.innerHTML='<div class="zlabel">📁</div><div>'+it.e+' '+it.n+'</div>';
+      zones.appendChild(z); zoneByType[it.k]=z;
+    });
+    files.forEach(function(it){
+      var f=document.createElement('div'); f.className='file-item'; f.dataset.type=it.t;
+      f.innerHTML=it.e+'<small>'+it.n+'</small>'; enableDrag(f, it);
+    });
+    function enableDrag(file, info){
+      tray.appendChild(file);
+      var dragging=false, ox=0, oy=0, ph=null;
+      function over(x,y,z){ var r=z.getBoundingClientRect(); return x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom; }
+      function begin(x,y){ if(file.classList.contains('placed')) return; dragging=true; file.classList.add('dragging');
+        var r=file.getBoundingClientRect(); ox=x-r.left; oy=y-r.top;
+        // 들어올리는 동안 자리를 차지할 placeholder → 아래 폴더들이 출렁이지 않게
+        ph=document.createElement('div'); ph.style.width=r.width+'px'; ph.style.height=r.height+'px'; file.parentNode.insertBefore(ph, file);
+        file.style.position='fixed'; file.style.zIndex=999; file.style.width=r.width+'px'; file.style.height=r.height+'px'; mv(x,y); }
+      function mv(x,y){ if(!dragging) return; file.style.left=(x-ox)+'px'; file.style.top=(y-oy)+'px';
+        for(var t in zoneByType) zoneByType[t].classList.toggle('over', over(x,y,zoneByType[t])); }
+      function end(x,y){ if(!dragging) return; dragging=false; file.classList.remove('dragging');
+        // ⚠️ placeholder 제거 전에 over() 판정 — 먼저 빼면 트레이가 붕괴해 폴더 위치가 어긋난다
+        var target=zoneByType[file.dataset.type]; var ok=over(x,y,target);
+        for(var t in zoneByType) zoneByType[t].classList.remove('over');
+        if(ph){ ph.parentNode.removeChild(ph); ph=null; }
+        file.style.position=''; file.style.left=''; file.style.top=''; file.style.width=''; file.style.height=''; file.style.zIndex='';
+        if(ok){ file.classList.add('placed'); target.appendChild(file); target.classList.add('good');
+          placed++; good(); sorted[info.t]=(sorted[info.t]||0)+1; pg.textContent=placed+' / '+total; fb.textContent=comboMsg(pick(cheers)+' 📦');
+          if(placed>=total) opts.onComplete();
+        } else {
+          // 잘못된 폴더 위 또는 빈 곳
+          var wrongZone=null; for(var t2 in zoneByType){ if(over(x,y,zoneByType[t2])){ wrongZone=t2; break; } }
+          if(wrongZone){ bad(); fb.textContent='그 폴더가 아니에요! '+subByK(file.dataset.type).e+' 그림과 같은 폴더에 넣어요.'; }
+          else { fb.textContent='폴더 위에 놓아요. 다시 끌어 봐요.'; }
+        }
+      }
+      file.addEventListener('mousedown', function(e){ e.preventDefault(); begin(e.clientX, e.clientY); });
+      window.addEventListener('mousemove', function(e){ mv(e.clientX, e.clientY); });
+      window.addEventListener('mouseup', function(e){ end(e.clientX, e.clientY); });
+      file.addEventListener('touchstart', function(e){ var t=e.touches[0]; begin(t.clientX, t.clientY); }, {passive:true});
+      window.addEventListener('touchmove', function(e){ if(dragging){ e.preventDefault(); var t=e.touches[0]; mv(t.clientX, t.clientY); } }, {passive:false});
+      window.addEventListener('touchend', function(e){ var t=e.changedTouches[0]; end(t.clientX, t.clientY); });
+    }
+  }
+
+  /* ===== ④ 파일 정리하기 (3라운드: 4 → 6 → 8) ===== */
+  function level4(){
+    setNow(3);
+    var rounds=[ {doc:1,pic:1,ai:1,task:1}, {doc:2,pic:1,ai:1,task:2}, {doc:2,pic:2,ai:2,task:2} ];
+    var ri=0;
+    function playRound(){
+      var files=buildFiles(rounds[ri]);
+      card.innerHTML =
+        '<div class="step-no">미션 ④ 파일 정리</div>' +
+        '<div class="title">파일을 같은 그림 폴더에 넣어요</div>' +
+        '<div class="guide">파일을 <b>꾹 눌러 끌어서</b> 같은 종류 폴더에 넣어요. (그림을 잘 봐요!)</div>' +
+        '<div class="roundbar"><span class="round-badge">라운드 '+(ri+1)+' / 3</span></div>' +
+        '<div class="progress" id="pg">0 / '+files.length+'</div>' +
+        '<div class="tray" id="tray"></div>' +
+        '<div class="zones" id="zones"></div>' +
+        '<div class="feedback" id="fb"></div>';
+      runSort({ files:files, onComplete:function(){
+        var fb=byId('fb');
+        if(ri<rounds.length-1){ fb.textContent='🎉 라운드 '+(ri+1)+' 완료!'; ri++; card.appendChild(btn('라운드 '+(ri+1)+' ▶', playRound)); }
+        else { markDone(3); fb.textContent='🎉 파일 정리 완성!'; card.appendChild(btn('정리 도전 ▶', level5, 'gold')); }
+      }});
+    }
+    playRound();
+  }
+
+  /* ===== ⑤ 정리 도전 (보스): 8개 섞어서, 무실수면 골드 ===== */
+  function level5(){
+    setNow(4);
+    var startMiss=miss;
+    var files=buildFiles({doc:2,pic:2,ai:2,task:2});
+    card.innerHTML =
+      '<div class="step-no">미션 ⑤ 정리 도전</div>' +
+      '<div class="title">한 번에 정리! 끝까지 도전 🏁</div>' +
+      '<div class="roundbar"><span class="round-badge boss">보스 도전 · 안 틀리면 골드 👑</span></div>' +
+      '<div class="progress" id="pg">0 / '+files.length+'</div>' +
+      '<div class="tray" id="tray"></div>' +
+      '<div class="zones" id="zones"></div>' +
+      '<div class="feedback" id="fb">그림을 잘 보고 한 번에 정리해요!</div>';
+    runSort({ files:files, boss:true, onComplete:function(){
+      var perfect=(miss===startMiss);
+      markDone(4); byId('fb').textContent = perfect ? '🏆 완벽해요! 한 번도 안 틀렸어요!' : '🎉 정리 도전 성공!';
+      card.appendChild(btn('결과 보기 🏆', finish, 'gold'));
+    }});
+  }
+
+  /* ===== 완료: 개인 학습 폴더 + 저장 ===== */
+  var RESULT_BASENAME='학습폴더', RESULT_TITLE='개인 학습 폴더';
+  var _saveDataUrl=null, _savePending=false, _saveTimer=null;
+  function badgesHTML(){
+    var b='';
+    b+='<div class="badge"><span class="be">🏅</span>완주</div>';
+    if(maxCombo>=5) b+='<div class="badge"><span class="be">🔥</span>콤보왕</div>';
+    if(miss<=2) b+='<div class="badge"><span class="be">🎯</span>정확왕</div>';
+    if(maxCombo>=5 && miss<=2) b+='<div class="badge"><span class="be">👑</span>정리마스터</div>';
+    return b;
+  }
+  function finish(){
+    setNow(-1);
+    var who=studentName?studentName+' 님':'여러분';
+    card.innerHTML =
+      '<div class="done-screen">' +
+        '<div id="result" class="result-card">' +
+          '<div class="big">🏆</div>' +
+          '<h2>'+who+', 폴더 완성!</h2>' +
+          '<div class="stars">⭐ 점수 '+score+'점 · 최고 콤보 🔥x'+maxCombo+'</div>' +
+          '<div class="badges">'+badgesHTML()+'</div>' +
+          '<div class="tree">' +
+            '<div class="root">📂 '+folderName+'</div>' +
+            '<div class="sub">├ 📁 문서 ('+sorted.doc+')</div>' +
+            '<div class="sub">├ 📁 사진 ('+sorted.pic+')</div>' +
+            '<div class="sub">├ 📁 AI활동 ('+sorted.ai+')</div>' +
+            '<div class="sub">└ 📁 과제 ('+sorted.task+')</div>' +
+            '<div class="who-line">만든 사람: <b>'+(studentName||'')+'</b></div>' +
+          '</div>' +
+        '</div>' +
+        '<p style="font-size:19px;color:#5b6172;margin:12px 0 0;">이제 내 파일을 여기에 정리해요. 👏</p>' +
+        '<div class="feedback" id="savefb">아래 버튼으로 내 폴더를 저장해요.</div>' +
+        '<div class="row-btns">' +
+          '<button class="btn" id="save">💾 내 작품 저장하기</button>' +
+          '<button class="btn gray" id="rt">다시 하기 🔄</button>' +
+        '</div>' +
+        '<div class="row-btns" id="dlrow" style="display:none;">' +
+          '<button class="btn gray" id="dl">이미지로 내려받기 📥</button>' +
+        '</div>' +
+      '</div>';
+    byId('save').addEventListener('click', doSave);
+    byId('rt').addEventListener('click', function(){ chips.forEach(function(c,k){ c.className='chip'; c.textContent=chipLabels[k]; }); start(); });
+    byId('dl').addEventListener('click', function(){ if(_saveDataUrl) SAVE.download(_saveDataUrl, (studentName?studentName+'_':'')+RESULT_BASENAME+'.png'); });
+  }
+
+  function doSave(){
+    var node=byId('result'), fb=byId('savefb'), sbtn=byId('save');
+    fb.style.color='#3b6fe0'; fb.textContent='저장 중… ⏳'; sbtn.disabled=true;
+    SAVE.capture(node, function(dataUrl){
+      if(!dataUrl){ fb.style.color='#d6452b'; fb.textContent='이미지를 만들지 못했어요. 다시 눌러 주세요.'; sbtn.disabled=false; return; }
+      _saveDataUrl=dataUrl;
+      if(window.parent && window.parent!==window){
+        _savePending=true;
+        window.parent.postMessage({ type:'student-work-save', mimeType:'image/png', dataUrl:dataUrl, fileName:RESULT_BASENAME+'.png', title:RESULT_TITLE, studentName:studentName }, '*');
+        _saveTimer=setTimeout(function(){ if(_savePending){ _savePending=false; fb.style.color='#d6452b'; fb.textContent='저장이 늦어요. 아래 버튼으로 내려받아요.'; byId('dlrow').style.display='flex'; sbtn.disabled=false; } }, 12000);
+      } else {
+        SAVE.download(dataUrl, (studentName?studentName+'_':'')+RESULT_BASENAME+'.png');
+        fb.style.color='#1a7f47'; fb.textContent='이미지를 내려받았어요! 📥'; sbtn.disabled=false;
+      }
+    });
+  }
+
+  window.addEventListener('message', function(e){
+    var d=e.data; if(!d || d.type!=='student-work-saved') return;
+    if(!_savePending) return; _savePending=false; if(_saveTimer) clearTimeout(_saveTimer);
+    var fb=byId('savefb'), sbtn=byId('save');
+    if(d.ok){ if(fb){ fb.style.color='#1a7f47'; fb.textContent='저장됐어요! 🎉 선생님이 확인 후 홈페이지에 올려요.'; } if(sbtn){ sbtn.textContent='✅ 저장 완료'; } }
+    else { if(fb){ fb.style.color='#d6452b'; fb.textContent='저장 실패: '+(d.error||'')+' 아래 버튼으로 내려받아요.'; } if(byId('dlrow')) byId('dlrow').style.display='flex'; if(sbtn) sbtn.disabled=false; }
+  });
+
+  start();
+})();
+</script>
