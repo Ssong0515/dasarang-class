@@ -1,7 +1,6 @@
-import type { CurriculumSession } from '../../src/types';
+import type { ClassroomSessionState, CurriculumSession } from '../../src/types';
 import { getAdminDb, getCalendarDb } from '../firebaseAdmin';
 import { AdminApiError } from './resources';
-import { mutateCurriculumSessions, type CurriculumSessionOp } from './services';
 
 const CLASSES_COLLECTION = 'classes';
 
@@ -175,8 +174,11 @@ export interface AssignCurriculumDatesInput {
 /**
  * 교실에 연결된 calendar 시간표의 수업 날짜들을, 교실 커리큘럼 회차에 순서대로 배정.
  * - 회차 order 순으로 정렬, done/skipped 회차는 건너뜀
- * - overwrite=false면 plannedDate가 비어 있는 회차에만 채움
+ * - overwrite=false면 날짜가 비어 있는 회차에만 채움
  * - 날짜가 회차보다 적으면 남는 회차는 그대로 둠
+ *
+ * 배정된 날짜는 커리큘럼(공유 템플릿)이 아니라 **교실(반)** 문서의 `sessionStates`에 쓴다.
+ * 같은 커리큘럼을 여러 반이 공유해도, 반마다 자기 시간표에 맞는 날짜를 따로 갖는다.
  */
 export const assignCurriculumDatesFromCalendar = async (
   input: AssignCurriculumDatesInput
@@ -187,11 +189,16 @@ export const assignCurriculumDatesFromCalendar = async (
   }
 
   const db = getAdminDb();
-  const classroomDoc = await db.collection('classrooms').doc(classroomId).get();
+  const classroomRef = db.collection('classrooms').doc(classroomId);
+  const classroomDoc = await classroomRef.get();
   if (!classroomDoc.exists) {
     throw new AdminApiError(404, `교실 '${classroomId}'을(를) 찾을 수 없습니다.`);
   }
-  const classroom = classroomDoc.data() as { curriculumId?: string; calendarClassId?: string };
+  const classroom = classroomDoc.data() as {
+    curriculumId?: string;
+    calendarClassId?: string;
+    sessionStates?: Record<string, ClassroomSessionState>;
+  };
 
   const calendarClassId = input.calendarClassId?.trim() || classroom.calendarClassId || '';
   if (!calendarClassId) {
@@ -214,27 +221,37 @@ export const assignCurriculumDatesFromCalendar = async (
     .slice()
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
+  // 이 반의 회차 상태(반별). 없으면 커리큘럼 레거시(plannedDate/status)로 폴백.
+  const states = classroom.sessionStates || {};
+  const resolveDate = (session: CurriculumSession) =>
+    states[session.id]?.date || session.plannedDate || '';
+  const resolveStatus = (session: CurriculumSession) =>
+    states[session.id]?.status || session.status || 'planned';
+
   const overwrite = input.overwrite !== false;
   const eligible = sessions.filter((session) => {
-    if (session.status === 'done' || session.status === 'skipped') return false;
-    if (!overwrite && session.plannedDate) return false;
+    const status = resolveStatus(session);
+    if (status === 'done' || status === 'skipped') return false;
+    if (!overwrite && resolveDate(session)) return false;
     return true;
   });
 
   // 필요한 만큼만 날짜 계산
   const dates = await getCalendarClassOccurrences(calendarClassId, { limit: eligible.length });
 
-  const ops: CurriculumSessionOp[] = [];
+  // 회차 날짜만 반별로 기록 (status 등 다른 반별 상태는 merge:true로 보존)
+  const assignedStates: Record<string, { date: string }> = {};
   const assignments: { sessionId: string; order: number; plannedDate: string }[] = [];
   for (let i = 0; i < eligible.length && i < dates.length; i += 1) {
     const session = eligible[i];
-    if (session.plannedDate === dates[i]) continue;
-    ops.push({ type: 'update', sessionId: session.id, session: { plannedDate: dates[i] } });
+    if (resolveDate(session) === dates[i]) continue;
+    assignedStates[session.id] = { date: dates[i] };
     assignments.push({ sessionId: session.id, order: session.order, plannedDate: dates[i] });
   }
 
-  if (ops.length > 0) {
-    await mutateCurriculumSessions(curriculumId, ops);
+  if (Object.keys(assignedStates).length > 0) {
+    // merge:true 라 다른 회차/다른 필드(status)의 기존 반별 값은 보존된다.
+    await classroomRef.set({ sessionStates: assignedStates }, { merge: true });
   }
 
   return {

@@ -310,19 +310,21 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     [classroomDateRecords]
   );
   // 이 교실에 연결된 커리큘럼의 예정 회차 (날짜 → 회차 목록)
+  // 날짜는 반별(classroom.sessionStates) → 커리큘럼 레거시(plannedDate) 순으로 해석한다.
   const plannedSessionsByDate = useMemo(() => {
     const map = new Map<string, CurriculumSession[]>();
     const linkedCurriculum = (curriculums || []).find(
       (curriculum) => curriculum.id === classroom.curriculumId
     );
     for (const session of linkedCurriculum?.sessions || []) {
-      if (!session.plannedDate) continue;
-      const sessionsOnDate = map.get(session.plannedDate) || [];
+      const plannedDate = classroom.sessionStates?.[session.id]?.date || session.plannedDate;
+      if (!plannedDate) continue;
+      const sessionsOnDate = map.get(plannedDate) || [];
       sessionsOnDate.push(session);
-      map.set(session.plannedDate, sessionsOnDate);
+      map.set(plannedDate, sessionsOnDate);
     }
     return map;
-  }, [curriculums, classroom.curriculumId]);
+  }, [curriculums, classroom.curriculumId, classroom.sessionStates]);
   const categorizedContents = useMemo(
     () => contents.filter((content) => content.categoryId !== null),
     [contents]
@@ -545,32 +547,68 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   );
 
   const [sessionDrafts, setSessionDrafts] = useState<CurriculumSession[]>([]);
+  // 회차 날짜·상태는 반별(classroom.sessionStates)로 저장한다. 회차id → { date, status } 초안.
+  const [sessionStateDrafts, setSessionStateDrafts] = useState<
+    Record<string, { date: string; status: CurriculumSession['status'] }>
+  >({});
   const [isSavingSessions, setIsSavingSessions] = useState(false);
   const [sessionSaveError, setSessionSaveError] = useState<string | null>(null);
+
+  // 이 반에 저장된 회차 날짜·상태(반별 우선, 없으면 커리큘럼 레거시로 폴백)
+  const savedSessionDate = (session: CurriculumSession) =>
+    classroom.sessionStates?.[session.id]?.date || session.plannedDate || '';
+  const savedSessionStatus = (session: CurriculumSession): CurriculumSession['status'] =>
+    classroom.sessionStates?.[session.id]?.status || session.status || 'planned';
+  const classroomSessionStatesKey = JSON.stringify(classroom.sessionStates ?? {});
 
   // 연결된 커리큘럼이 바뀌거나 외부(자동 배정·GPT)에서 갱신되면 편집 초안을 다시 맞춘다
   useEffect(() => {
     setSessionDrafts(sortedCurriculumSessions.map((session) => ({ ...session })));
+    setSessionStateDrafts(
+      Object.fromEntries(
+        sortedCurriculumSessions.map((session) => [
+          session.id,
+          { date: savedSessionDate(session), status: savedSessionStatus(session) },
+        ])
+      )
+    );
     setSessionSaveError(null);
-  }, [linkedCurriculum?.id, linkedCurriculum?.updatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [linkedCurriculum?.id, linkedCurriculum?.updatedAt, classroomSessionStatesKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // 주제·상세·순서(커리큘럼=공유 템플릿)만 비교. 날짜·상태는 반별이라 따로 본다.
   const normalizeSessionsForCompare = (sessions: CurriculumSession[]) =>
     JSON.stringify(
       sessions.map((session, index) => ({
         topic: session.topic || '',
         details: session.details || '',
-        plannedDate: session.plannedDate || '',
-        status: session.status,
         order: index + 1,
       }))
     );
-  const isSessionsDirty =
+  const isSharedFieldsDirty =
     normalizeSessionsForCompare(sessionDrafts) !== normalizeSessionsForCompare(sortedCurriculumSessions);
+  const isStatesDirty = sessionDrafts.some((session) => {
+    const draft = sessionStateDrafts[session.id];
+    return (
+      (draft?.date || '') !== savedSessionDate(session) ||
+      (draft?.status || 'planned') !== savedSessionStatus(session)
+    );
+  });
+  const isSessionsDirty = isSharedFieldsDirty || isStatesDirty;
 
   const updateSessionDraft = (id: string, patch: Partial<CurriculumSession>) => {
     setSessionDrafts((drafts) =>
       drafts.map((session) => (session.id === id ? { ...session, ...patch } : session))
     );
+  };
+
+  const updateSessionStateDraft = (
+    id: string,
+    patch: Partial<{ date: string; status: CurriculumSession['status'] }>
+  ) => {
+    setSessionStateDrafts((drafts) => ({
+      ...drafts,
+      [id]: { date: '', status: 'planned', ...drafts[id], ...patch },
+    }));
   };
 
   const addSessionDraft = () => {
@@ -616,10 +654,26 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     setSessionSaveError(null);
     setIsSavingSessions(true);
     try {
-      await onSaveCurriculumSessions(
-        linkedCurriculum.id,
-        sessionDrafts.map((session) => ({ ...session, topic: session.topic.trim() }))
-      );
+      // 주제·상세·순서만 커리큘럼(공유 템플릿)에 저장. 날짜·상태(plannedDate/status)는 건드리지 않는다.
+      if (isSharedFieldsDirty) {
+        await onSaveCurriculumSessions(
+          linkedCurriculum.id,
+          sessionDrafts.map((session) => ({ ...session, topic: session.topic.trim() }))
+        );
+      }
+      // 회차 날짜·상태는 이 반(classroom)에만 저장 → 같은 커리큘럼을 쓰는 다른 반과 섞이지 않는다.
+      if (isStatesDirty && onUpdateClassroom) {
+        const sessionStates = Object.fromEntries(
+          sessionDrafts.map((session) => {
+            const draft = sessionStateDrafts[session.id];
+            return [
+              session.id,
+              { date: (draft?.date || '').trim(), status: draft?.status || 'planned' },
+            ];
+          })
+        );
+        await onUpdateClassroom(classroom.id, { sessionStates });
+      }
     } catch {
       setSessionSaveError('회차를 저장하지 못했습니다. 잠시 후 다시 시도해주세요.');
     } finally {
@@ -629,6 +683,14 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
 
   const resetSessionDrafts = () => {
     setSessionDrafts(sortedCurriculumSessions.map((session) => ({ ...session })));
+    setSessionStateDrafts(
+      Object.fromEntries(
+        sortedCurriculumSessions.map((session) => [
+          session.id,
+          { date: savedSessionDate(session), status: savedSessionStatus(session) },
+        ])
+      )
+    );
     setSessionSaveError(null);
   };
 
@@ -2782,19 +2844,19 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                   />
                   <input
                     type="date"
-                    value={session.plannedDate || ''}
-                    onChange={(event) =>
-                      updateSessionDraft(session.id, { plannedDate: event.target.value })
-                    }
+                    value={sessionStateDrafts[session.id]?.date || ''}
+                    onChange={(event) => updateSessionStateDraft(session.id, { date: event.target.value })}
+                    title="이 반의 회차 날짜 (반별로 저장됩니다)"
                     className="shrink-0 rounded-xl border border-[#E5E3DD] bg-white px-3 py-2 text-sm font-medium text-[#2F5EA8] focus:border-[#8B5E3C] focus:outline-none"
                   />
                   <select
-                    value={session.status}
+                    value={sessionStateDrafts[session.id]?.status || 'planned'}
                     onChange={(event) =>
-                      updateSessionDraft(session.id, {
+                      updateSessionStateDraft(session.id, {
                         status: event.target.value as CurriculumSession['status'],
                       })
                     }
+                    title="이 반의 회차 진행 상태 (반별로 저장됩니다)"
                     className="shrink-0 rounded-xl border border-[#E5E3DD] bg-white px-3 py-2 text-sm font-bold text-[#8B7E74] focus:border-[#8B5E3C] focus:outline-none"
                   >
                     {(Object.keys(SESSION_STATUS_LABELS) as CurriculumSession['status'][]).map((status) => (

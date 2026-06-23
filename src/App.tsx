@@ -14,6 +14,7 @@ import {
   CalendarClassSummary,
   ClassroomDateRecord,
   Classroom,
+  ClassroomSessionState,
   Curriculum,
   CurriculumSession,
   DailyReview,
@@ -778,6 +779,10 @@ export default function App() {
           driveFolderName: typeof data.driveFolderName === 'string' ? data.driveFolderName : undefined,
           curriculumId: typeof data.curriculumId === 'string' ? data.curriculumId : undefined,
           calendarClassId: typeof data.calendarClassId === 'string' ? data.calendarClassId : undefined,
+          sessionStates:
+            data.sessionStates && typeof data.sessionStates === 'object'
+              ? (data.sessionStates as Record<string, ClassroomSessionState>)
+              : undefined,
           hidden: data.hidden === true,
         } satisfies Classroom;
       });

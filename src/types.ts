@@ -122,6 +122,18 @@ export interface PublishedLesson {
   endNoticeAt?: string;
 }
 
+/**
+ * 한 반(class)에서 커리큘럼 회차 하나를 실제로 진행하는 인스턴스 상태.
+ * 커리큘럼(템플릿)·시간표(일정)는 공유 참고자료일 뿐이고, "이 반이 이 회차를
+ * 언제(date) 어떤 진행상태(status)로 했는지"는 전부 반별로 여기에만 저장한다.
+ */
+export interface ClassroomSessionState {
+  /** YYYY-MM-DD. 이 반에서 이 회차를 진행하는 날짜. */
+  date?: string;
+  /** 이 반에서의 회차 진행 상태. 없으면 'planned'. */
+  status?: CurriculumSessionStatus;
+}
+
 export interface Classroom {
   id: string;
   name: string;
@@ -138,6 +150,12 @@ export interface Classroom {
   curriculumId?: string | null;
   /** calendar.damuna.org의 `classes` 문서 ID. FM 참고 시간표로 연결됨. */
   calendarClassId?: string | null;
+  /**
+   * 이 반만의 회차별 진행 상태. `커리큘럼 회차 id → { date, status }`.
+   * 같은 커리큘럼을 여러 반이 공유해도 날짜·상태가 섞이지 않도록 반별로 여기에만 저장한다.
+   * 값이 없는 회차는 커리큘럼의 레거시(plannedDate/status)로 폴백한다.
+   */
+  sessionStates?: Record<string, ClassroomSessionState>;
   /** 사이드바·홈에서 숨길지 여부 (삭제하지 않고 가리기) */
   hidden?: boolean;
 }
@@ -183,9 +201,18 @@ export interface CurriculumSession {
   order: number;
   topic: string;
   details?: string;
-  /** YYYY-MM-DD */
+  /**
+   * @deprecated 회차 날짜는 이제 반별로 `Classroom.sessionStates[id].date`에 저장한다.
+   * (같은 커리큘럼을 여러 반이 공유할 때 시간표별로 날짜가 달라야 하기 때문)
+   * 이 필드는 반별 값이 없을 때의 하위호환 폴백 및 GPT 편집 호환용으로만 남는다.
+   * YYYY-MM-DD.
+   */
   plannedDate?: string;
   contentIds?: string[];
+  /**
+   * @deprecated 회차 진행 상태도 반별이라 `Classroom.sessionStates[id].status`에 저장한다.
+   * 커리큘럼은 템플릿이므로 진행 상태를 갖지 않는다. 폴백/호환용으로만 남는다.
+   */
   status: CurriculumSessionStatus;
 }
 
