@@ -55,6 +55,8 @@ import {
 
 import { ClassroomDashboard } from './components/ClassroomDashboard';
 import { ContentLibrary, CONTENT_EDIT_DISCARD_WARNING } from './components/ContentLibrary';
+import { CurriculumManager } from './components/CurriculumManager';
+import { TimetableFrame } from './components/TimetableFrame';
 import { resolveAppPath } from './utils/appPaths';
 import {
   normalizeAttendanceRecords,
@@ -132,7 +134,7 @@ type ContentReorderUpdate = {
   order: number;
 };
 
-type AdminTab = 'home' | 'memo' | 'classroom-management' | 'content-library' | 'student-access' | 'student-showcase';
+type AdminTab = 'home' | 'memo' | 'classroom-management' | 'content-library' | 'curriculum-management' | 'timetable' | 'student-access' | 'student-showcase';
 
 const UNCATEGORIZED_CATEGORY_ID = null;
 const MISC_CATEGORY_NAME = '기타';
@@ -778,6 +780,8 @@ export default function App() {
           driveFolderId: typeof data.driveFolderId === 'string' ? data.driveFolderId : undefined,
           driveFolderName: typeof data.driveFolderName === 'string' ? data.driveFolderName : undefined,
           curriculumId: typeof data.curriculumId === 'string' ? data.curriculumId : undefined,
+          description: typeof data.description === 'string' ? data.description : undefined,
+          organization: typeof data.organization === 'string' ? data.organization : undefined,
           calendarClassId: typeof data.calendarClassId === 'string' ? data.calendarClassId : undefined,
           sessionStates:
             data.sessionStates && typeof data.sessionStates === 'object'
@@ -1390,6 +1394,63 @@ export default function App() {
     }
   };
 
+  const handleCreateCurriculum = async (
+    title: string,
+    description?: string
+  ): Promise<string | null> => {
+    if (!user) return null;
+    try {
+      const nowIso = new Date().toISOString();
+      const ref = await addDoc(
+        collection(db, 'curriculums'),
+        removeUndefinedFields({
+          ownerUid: user.uid,
+          title: title.trim() || '새 커리큘럼',
+          description: description?.trim() ? description.trim() : undefined,
+          sessions: [],
+          order: curriculums.length,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        })
+      );
+      return ref.id;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'curriculums');
+      return null;
+    }
+  };
+
+  const handleUpdateCurriculumMeta = async (
+    curriculumId: string,
+    data: { title?: string; description?: string }
+  ) => {
+    if (!user) return;
+    try {
+      await setDoc(
+        doc(db, 'curriculums', curriculumId),
+        {
+          ...(data.title !== undefined ? { title: data.title.trim() } : {}),
+          ...(data.description !== undefined ? { description: data.description } : {}),
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `curriculums/${curriculumId}`);
+      throw error;
+    }
+  };
+
+  const handleDeleteCurriculum = async (curriculumId: string) => {
+    if (!user) return;
+    try {
+      await deleteDoc(doc(db, 'curriculums', curriculumId));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `curriculums/${curriculumId}`);
+      throw error;
+    }
+  };
+
   const handleSaveCurriculumSessions = async (
     curriculumId: string,
     sessions: CurriculumSession[]
@@ -1986,6 +2047,17 @@ export default function App() {
               onClearInitialSelectedContentId={() => setSelectedContentIdInLibrary(null)}
             />
           )}
+          {activeTab === 'curriculum-management' && (
+            <CurriculumManager
+              curriculums={curriculums}
+              contents={contents}
+              onCreateCurriculum={handleCreateCurriculum}
+              onUpdateCurriculumMeta={handleUpdateCurriculumMeta}
+              onDeleteCurriculum={handleDeleteCurriculum}
+              onSaveCurriculumSessions={handleSaveCurriculumSessions}
+            />
+          )}
+          {activeTab === 'timetable' && <TimetableFrame />}
           {activeTab === 'student-access' && (
             <StudentAccessManager
               entries={studentAccessEntries}

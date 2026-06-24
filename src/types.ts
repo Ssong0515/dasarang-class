@@ -140,6 +140,10 @@ export interface Classroom {
   ownerUid: string;
   /** Runtime-only: hydrated from the canonical `students` collection, never persisted. */
   students?: Student[];
+  /** 클래스 특징·내용 (운영/강사용 내부 메모, 학생에게 노출 안 함). GPT/MCP API로 채울 수 있다. */
+  description?: string;
+  /** 기관/단체명 (예: "구로구청 / 디지털배움터"). 시간표 연결 시 자동으로 채워질 수 있다. */
+  organization?: string;
   isOpen?: boolean;
   order?: number;
   icon?: string;
@@ -171,6 +175,8 @@ export interface CalendarClassSummary {
   schedules: { days: number[]; start: string; end: string }[];
   startDate: string;
   endDate: string;
+  /** 기관/단체 목록 (calendar 앱의 orgs: [{org, project}]) */
+  orgs: { org: string; project: string }[];
 }
 
 /** 시간표 → 커리큘럼 회차 날짜 자동 배정 결과 */

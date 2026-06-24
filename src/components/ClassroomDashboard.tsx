@@ -77,6 +77,7 @@ import {
 import { isAttendanceExcluded } from '../utils/attendance';
 import { openDriveFolderPicker, openDriveSlidePicker } from '../utils/drivePicker';
 import { SlideEmbed } from './StudentContentPreview';
+import { SessionDetailModal } from './SessionDetailModal';
 
 interface ClassroomDashboardProps {
   classroom: Classroom;
@@ -124,11 +125,30 @@ const SESSION_STATUS_LABELS: Record<CurriculumSessionStatus, string> = {
   skipped: '건너뜀',
 };
 
+/** 날짜 상태 세그먼트 컨트롤 (예정=열림 기본 / 완료=열림 표시 / 건너뜀=닫힘). */
+const STATUS_SEGMENTS: {
+  value: CurriculumSessionStatus;
+  label: string;
+  icon: typeof Clock;
+  activeClass: string;
+}[] = [
+  { value: 'planned', label: '예정', icon: Clock, activeClass: 'bg-[#EAF7EE] text-[#2D7A4D] shadow-sm' },
+  { value: 'done', label: '완료', icon: CheckCircle2, activeClass: 'bg-[#EFEDE8] text-[#8B7E74] shadow-sm' },
+  { value: 'skipped', label: '건너뜀', icon: X, activeClass: 'bg-[#EFEDE8] text-[#B7AFA4] line-through shadow-sm' },
+];
+
 const formatSchedule = (schedule: CalendarClassSummary['schedules'][number]) => {
   const days = (schedule.days || []).map((day) => DOW_LABELS[day] ?? '?').join('·');
   const time = schedule.start && schedule.end ? ` ${schedule.start}~${schedule.end}` : '';
   return `${days}${time}`;
 };
+
+/** calendar 시간표의 orgs(기관/단체)를 "기관 / 프로젝트, …" 라벨로 합친다. */
+const formatCalendarOrgs = (orgs: CalendarClassSummary['orgs']) =>
+  (orgs || [])
+    .map((org) => [org.org, org.project].filter(Boolean).join(' / '))
+    .filter(Boolean)
+    .join(', ');
 type StudentAction = 'add' | 'edit' | 'delete' | 'move' | 'deactivate' | 'reactivate';
 
 // 붙여넣은 구글 슬라이드/드라이브 링크를 임베드 URL로 정규화한다 (ContentLibrary와 동일 규칙).
@@ -172,18 +192,22 @@ const getDaysInMonth = (date: Date) => {
   return days;
 };
 
-const getAttendanceStats = (record?: ClassroomDateRecord) => {
-  if (!record) {
-    return { present: 0, absent: 0, late: 0, total: 0 };
-  }
-
-  const includedAttendance = record.attendance.filter((attendance) => !isAttendanceExcluded(attendance));
+const getAttendanceStats = (attendance: AttendanceRecord[] = []) => {
+  const includedAttendance = attendance.filter((record) => !isAttendanceExcluded(record));
   const total = includedAttendance.length;
-  const present = includedAttendance.filter((attendance) => attendance.status === 'Present').length;
-  const absent = includedAttendance.filter((attendance) => attendance.status === 'Absent').length;
-  const late = includedAttendance.filter((attendance) => attendance.status === 'Late').length;
+  const present = includedAttendance.filter((record) => record.status === 'Present').length;
+  const absent = includedAttendance.filter((record) => record.status === 'Absent').length;
+  const late = includedAttendance.filter((record) => record.status === 'Late').length;
   return { present, absent, late, total };
 };
+
+/** 현재 등록 학생으로 기본 출석부를 만든다 (비활성 학생은 출석 제외로 시작). */
+const buildInitialAttendance = (students: Student[]): AttendanceRecord[] =>
+  students.map((student) => ({
+    studentId: student.id,
+    status: 'Present',
+    ...(isStudentInactive(student) ? { isExcluded: true } : {}),
+  }));
 
 const getRecordTimestamp = (record: Pick<ClassroomDateRecord, 'updatedAt' | 'createdAt'>) => {
   const updatedAt = new Date(record.updatedAt || '').getTime();
@@ -272,6 +296,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     name: classroom.name,
     color: classroom.color || DEFAULT_CLASSROOM_COLOR,
     icon: classroom.icon || DEFAULT_CLASSROOM_ICON,
+    description: classroom.description || '',
+    organization: classroom.organization || '',
     driveFolderId: classroom.driveFolderId || '',
     driveFolderName: classroom.driveFolderName || '',
   });
@@ -298,7 +324,24 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
         .sort((left, right) => getRecordTimestamp(right) - getRecordTimestamp(left))[0],
     [classroomDateRecords, selectedDate]
   );
+  // 저장된 날짜 기록이 있으면 '활성'. 회차와 무관한 임시 수업일은 이 활성/비활성으로만 운영한다.
   const isCurrentDateActive = Boolean(currentDateRecord);
+  // 선택한 날짜에 매칭되는 커리큘럼 회차 id (반별 sessionStates 날짜로 찾는다). 자동 배정된 수업일이 여기 잡힌다.
+  const currentSessionId = useMemo(() => {
+    const states = classroom.sessionStates || {};
+    return (
+      Object.keys(states).find((sessionId) => states[sessionId]?.date === selectedDate) || null
+    );
+  }, [classroom.sessionStates, selectedDate]);
+  // 회차(커리큘럼·시간표 자동 배정) 날짜의 진행 상태. 회차 날짜가 아니면 상태 개념을 쓰지 않는다.
+  const currentDateStatus: CurriculumSessionStatus = currentSessionId
+    ? classroom.sessionStates?.[currentSessionId]?.status || 'planned'
+    : 'planned';
+  const isDateSkipped = Boolean(currentSessionId) && currentDateStatus === 'skipped';
+  // 기록 영역 열림 규칙:
+  // - 회차(자동 배정) 날짜 → 기본 '예정'이라 열림, '건너뜀'일 때만 닫힘. (완료도 열림)
+  // - 그 외 임시 날짜 → 활성(기록 존재)일 때만 열림. 기본은 비활성(닫힘).
+  const isDateOpen = currentSessionId ? !isDateSkipped : isCurrentDateActive;
   const isMemoDirty = (currentDateRecord?.memo || '') !== localMemo;
   const [isAssignmentCardCollapsed, setIsAssignmentCardCollapsed] = useState(true);
   const [isContentPaletteCollapsed, setIsContentPaletteCollapsed] = useState(true);
@@ -326,6 +369,18 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     }
     return map;
   }, [curriculums, classroom.curriculumId, classroom.sessionStates]);
+  // 달력 색칠용 날짜→상태 맵. 회차(커리큘럼·시간표 자동 배정) 날짜만 상태를 가진다(반별 sessionStates).
+  const dateStatusByDate = useMemo(() => {
+    const map = new Map<string, CurriculumSessionStatus>();
+    const states: Record<string, { date?: string; status?: CurriculumSessionStatus }> =
+      classroom.sessionStates || {};
+    Object.values(states).forEach((state) => {
+      if (state?.date) {
+        map.set(state.date, state.status || 'planned');
+      }
+    });
+    return map;
+  }, [classroom.sessionStates]);
   const categorizedContents = useMemo(
     () => contents.filter((content) => content.categoryId !== null),
     [contents]
@@ -404,16 +459,17 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     () => getStudentCounts(students),
     [students]
   );
+  // 저장된 레코드가 없어도 현재 학생으로 기본 출석부를 보여 준다(열림 상태면 바로 체크 가능, 첫 입력 시 레코드 생성).
+  const effectiveAttendance = useMemo(
+    () => currentDateRecord?.attendance ?? buildInitialAttendance(students),
+    [currentDateRecord, students]
+  );
   const attendanceStats = useMemo(
-    () => getAttendanceStats(currentDateRecord),
-    [currentDateRecord]
+    () => getAttendanceStats(effectiveAttendance),
+    [effectiveAttendance]
   );
   const sortedAttendanceRecords = useMemo(() => {
-    if (!currentDateRecord) {
-      return [];
-    }
-
-    return currentDateRecord.attendance
+    return effectiveAttendance
       .map((record, index) => {
         const globalStudent = allStudentsById.get(record.studentId);
         const isExcluded = isAttendanceExcluded(record);
@@ -436,17 +492,27 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
         return left.index - right.index;
       })
       .map(({ record }) => record);
-  }, [allStudentsById, currentDateRecord]);
+  }, [allStudentsById, effectiveAttendance]);
 
   useEffect(() => {
     setSettingsDraft({
       name: classroom.name,
       color: classroom.color || DEFAULT_CLASSROOM_COLOR,
       icon: classroom.icon || DEFAULT_CLASSROOM_ICON,
+      description: classroom.description || '',
+      organization: classroom.organization || '',
       driveFolderId: classroom.driveFolderId || '',
       driveFolderName: classroom.driveFolderName || '',
     });
-  }, [classroom.color, classroom.icon, classroom.name, classroom.driveFolderId, classroom.driveFolderName]);
+  }, [
+    classroom.color,
+    classroom.icon,
+    classroom.name,
+    classroom.description,
+    classroom.organization,
+    classroom.driveFolderId,
+    classroom.driveFolderName,
+  ]);
 
   useEffect(() => {
     setStudents(classroom.students || []);
@@ -554,6 +620,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   >({});
   const [isSavingSessions, setIsSavingSessions] = useState(false);
   const [sessionSaveError, setSessionSaveError] = useState<string | null>(null);
+  // 회차 상세 설명 팝업에 표시할 회차 (null이면 닫힘)
+  const [detailSession, setDetailSession] = useState<CurriculumSession | null>(null);
 
   // 이 반에 저장된 회차 날짜·상태 (반별 sessionStates에만 있다. 커리큘럼은 날짜·상태를 갖지 않음)
   const savedSessionDate = (session: CurriculumSession) =>
@@ -694,6 +762,33 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     setSessionSaveError(null);
   };
 
+  // 시간표 연결. 연결하는 순간 기관/단체가 비어 있으면 그 시간표의 orgs로 자동 채운다.
+  const handleSelectCalendarClass = (nextCalendarClassId: string | null) => {
+    if (!onUpdateClassroom) {
+      return;
+    }
+    const patch: Partial<Classroom> = { calendarClassId: nextCalendarClassId };
+    if (nextCalendarClassId && !classroom.organization?.trim()) {
+      const selected = calendarClasses.find((item) => item.id === nextCalendarClassId);
+      const label = selected ? formatCalendarOrgs(selected.orgs) : '';
+      if (label) {
+        patch.organization = label;
+      }
+    }
+    onUpdateClassroom(classroom.id, patch);
+  };
+
+  // 연결된 시간표의 기관/단체를 클래스에 다시 가져온다(수동, 기존 값 덮어씀).
+  const handlePullOrganizationFromCalendar = () => {
+    if (!onUpdateClassroom || !linkedCalendarClass) {
+      return;
+    }
+    const label = formatCalendarOrgs(linkedCalendarClass.orgs);
+    if (label) {
+      onUpdateClassroom(classroom.id, { organization: label });
+    }
+  };
+
   const handleAssignCurriculumDatesClick = async () => {
     if (!onAssignCurriculumDates || isAssigningDates) {
       return;
@@ -738,28 +833,39 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     };
   };
 
+  // 임시(회차 미배정) 날짜 활성화: 빈 수업기록을 만들어 출석·메모·콘텐츠 입력을 연다.
   const handleActivateDate = () => {
     if (currentDateRecord) {
       return;
     }
-
     onSaveDateRecord(createDateRecord());
   };
 
+  // 임시 날짜 비활성화: 그 날짜 기록(출석·메모·콘텐츠)을 삭제한다.
   const handleDeactivateDate = () => {
     if (!currentDateRecord) {
       return;
     }
-
     const confirmed = window.confirm(
       `${selectedDate} 날짜를 비활성화하면 수업기록, 수업메모, 출석체크가 모두 삭제됩니다. 계속할까요?`
     );
-
     if (!confirmed) {
       return;
     }
-
     onDeleteDateRecord(currentDateRecord.id);
+  };
+
+  // 회차(커리큘럼·시간표 자동 배정) 날짜의 진행 상태(예정/완료/건너뜀)를 반별 sessionStates에 저장.
+  // '건너뜀'도 데이터를 지우지 않는다(화면만 닫힘). 기록은 첫 입력 시 지연 생성된다.
+  const setDateStatus = (next: CurriculumSessionStatus) => {
+    if (!currentSessionId || !onUpdateClassroom || next === currentDateStatus) {
+      return;
+    }
+    const states: Record<string, { date?: string; status?: CurriculumSessionStatus }> = {
+      ...(classroom.sessionStates || {}),
+    };
+    states[currentSessionId] = { ...states[currentSessionId], status: next };
+    onUpdateClassroom(classroom.id, { sessionStates: states });
   };
 
   const toggleAssignmentCard = () => {
@@ -769,11 +875,9 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const handleToggleContent = (_content: LessonContent) => {};
 
   const handleToggleDateRecordContent = (content: LessonContent) => {
-    if (!currentDateRecord) {
-      return;
-    }
+    const base = currentDateRecord ?? createDateRecord();
 
-    const currentIds = normalizeClassroomDateRecordContentIds(currentDateRecord).filter((contentId) =>
+    const currentIds = normalizeClassroomDateRecordContentIds(base).filter((contentId) =>
       assignedContentsById.has(contentId)
     );
     const nextIds = currentIds.includes(content.id)
@@ -781,7 +885,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       : [...currentIds, content.id];
 
     onSaveDateRecord({
-      ...currentDateRecord,
+      ...base,
       contentIds: orderClassroomDateRecordContentIds(nextIds, assignedContents),
     });
   };
@@ -797,17 +901,15 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
 
   // 이론 슬라이드 추가 (시수마다 하나씩). 붙여넣은 링크는 임베드 URL로 정규화해 저장.
   const handleAddTheorySlide = (rawUrl: string, label: string) => {
-    if (!currentDateRecord) {
-      return;
-    }
     const url = toSlideEmbedUrl(rawUrl);
     if (!url) {
       return;
     }
+    const base = currentDateRecord ?? createDateRecord();
     const trimmedLabel = label.trim();
     const nextSlide: TheorySlide = trimmedLabel ? { url, label: trimmedLabel } : { url };
     onSaveDateRecord({
-      ...currentDateRecord,
+      ...base,
       // effectiveTheorySlides가 구버전 단일 theorySlideUrl을 이미 흡수하므로, 저장 시 구버전 필드는 비워 중복을 막는다.
       theorySlideUrl: '',
       theorySlides: [...effectiveTheorySlides, nextSlide],
@@ -885,11 +987,9 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   };
 
   const handleSaveMemo = () => {
-    if (!currentDateRecord) {
-      return;
-    }
+    const base = currentDateRecord ?? createDateRecord();
 
-    if (currentDateRecord.memo === localMemo) {
+    if ((base.memo || '') === localMemo) {
       return;
     }
 
@@ -897,13 +997,13 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     setGenerationMessage('메모를 저장했습니다.');
 
     onSaveDateRecord({
-      ...currentDateRecord,
+      ...base,
       memo: localMemo,
     });
   };
 
   const handleGenerateMemoDraftClick = async () => {
-    if (!currentDateRecord || isGeneratingMemoDraft) {
+    if (isGeneratingMemoDraft) {
       return;
     }
 
@@ -935,29 +1035,25 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   };
 
   const updateAttendance = (studentId: string, status: 'Present' | 'Absent' | 'Late') => {
-    if (!currentDateRecord) {
-      return;
-    }
+    const base = currentDateRecord ?? createDateRecord();
 
-    const nextAttendance = currentDateRecord.attendance.map((attendance) =>
+    const nextAttendance = base.attendance.map((attendance) =>
       attendance.studentId === studentId && !isAttendanceExcluded(attendance)
         ? { ...attendance, status }
         : attendance
     );
 
     onSaveDateRecord({
-      ...currentDateRecord,
+      ...base,
       attendance: nextAttendance,
     });
   };
 
   // 출석부를 현재 등록 학생과 맞춘다. 기존 학생의 상태(출석/결석/지각/제외)는 유지하고, 새로 추가된 학생은 넣고, 빠진 학생은 뺀다.
   const handleSyncAttendance = () => {
-    if (!currentDateRecord) {
-      return;
-    }
+    const base = currentDateRecord ?? createDateRecord();
     const existingByStudentId = new Map(
-      currentDateRecord.attendance.map((attendance) => [attendance.studentId, attendance])
+      base.attendance.map((attendance) => [attendance.studentId, attendance])
     );
     const nextAttendance: AttendanceRecord[] = students.map((student) => {
       const existing = existingByStudentId.get(student.id);
@@ -971,17 +1067,15 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       };
     });
     onSaveDateRecord({
-      ...currentDateRecord,
+      ...base,
       attendance: nextAttendance,
     });
   };
 
   const toggleAttendanceExclusion = (studentId: string) => {
-    if (!currentDateRecord) {
-      return;
-    }
+    const base = currentDateRecord ?? createDateRecord();
 
-    const nextAttendance = currentDateRecord.attendance.map((attendance) => {
+    const nextAttendance = base.attendance.map((attendance) => {
       if (attendance.studentId !== studentId) {
         return attendance;
       }
@@ -998,7 +1092,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     });
 
     onSaveDateRecord({
-      ...currentDateRecord,
+      ...base,
       attendance: nextAttendance,
     });
   };
@@ -1236,18 +1330,21 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   };
 
   const renderDashboardTab = () => {
+    // 선택한 날짜에 매칭되는 커리큘럼 회차 (날짜 상태 카드의 회차 칩 표시용)
+    const linkedSessionForDate = plannedSessionsByDate.get(selectedDate)?.[0] || null;
     const assignmentTooltipText =
       '학생 페이지에는 여기에서 배정한 콘텐츠만 보입니다. 날짜를 바꿔도 이 목록은 달라지지 않습니다.';
     const dateStatusTooltipText =
-      '날짜를 활성화해야 수업기록, 수업메모, 출석체크를 남길 수 있습니다.';
+      '커리큘럼·시간표로 배정된 수업일은 "예정"으로 자동으로 열려 있습니다. "완료"는 열린 채 진행 표시, "건너뜀"은 닫힘(데이터 보존). 배정되지 않은 일반 날짜는 "활성화"해야 기록 영역이 열리고, "비활성화"하면 그 날짜 기록이 삭제됩니다.';
     const lessonRecordTooltipText =
       '학생 페이지 노출과는 별개로, 이 날짜에 실제 진행한 콘텐츠만 기록합니다.';
     const attendanceTooltipText =
-      '활성화된 날짜에만 출석 상태를 저장합니다. 비활성 학생은 기본적으로 오늘 제외 상태로 시작하며, 학생별로 오늘만 제외하거나 다시 포함할 수 있습니다.';
-    const calendarTooltipText = '날짜를 선택한 뒤 활성화하면 아래 기록 영역이 열립니다.';
-    const memoTooltipText = '활성화된 날짜에만 메모가 저장됩니다.';
+      '열려 있는 날짜에만 출석 상태를 저장합니다. 비활성 학생은 기본적으로 오늘 제외 상태로 시작하며, 학생별로 오늘만 제외하거나 다시 포함할 수 있습니다.';
+    const calendarTooltipText =
+      '날짜를 선택하면 아래 기록 영역이 열립니다. "건너뜀"으로 표시한 날만 닫힙니다.';
+    const memoTooltipText = '"건너뜀"이 아닌 날짜에 메모가 저장됩니다.';
     const waitingTooltipText =
-      '이 날짜는 아직 비활성 상태입니다. 활성화 버튼을 누르면 수업기록, 수업메모, 출석체크가 열리고 캘린더에도 표시됩니다.';
+      '닫혀 있는 날짜입니다. 회차(배정) 날짜는 "예정/완료"로 바꾸면 열리고, 그 외 날짜는 "활성화"하면 기록 영역이 열립니다.';
     const assignmentPreviewContents = assignedContents.slice(0, 3);
     const remainingAssignedContentCount = Math.max(
       assignedContents.length - assignmentPreviewContents.length,
@@ -1284,7 +1381,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                   학생 페이지 노출 기준
                 </span>
                 <span className="rounded-full bg-[#EEF7F0] px-3 py-1.5 text-[#2D7A4D]">
-                  {isCurrentDateActive ? '날짜 기록 선택 가능' : '날짜 활성화 후 기록 가능'}
+                  {isDateOpen ? '날짜 기록 선택 가능' : '건너뛴 날 · 기록 닫힘'}
                 </span>
               </div>
             </div>
@@ -1425,7 +1522,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
         </div>
 
         <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-6 shadow-sm sm:p-8">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="space-y-3">
               <h2 className="flex items-center gap-2 text-xl font-bold text-[#4A3728]">
                 <Clock className="text-[#8B5E3C]" size={20} />
@@ -1439,37 +1536,60 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 <span className="rounded-full bg-[#FFF5E9] px-4 py-2 text-xs font-bold text-[#8B5E3C]">
                   {selectedDate}
                 </span>
-                <span
-                  className={`rounded-full px-4 py-2 text-xs font-bold ${
-                    isCurrentDateActive
-                      ? 'bg-[#EEF7F0] text-[#2D7A4D]'
-                      : 'bg-[#F3F2EE] text-[#8B7E74]'
-                  }`}
-                >
-                  {isCurrentDateActive ? '활성' : '비활성'}
-                </span>
+                {linkedSessionForDate && (
+                  <span className="rounded-full bg-[#FBF4EA] px-4 py-2 text-xs font-bold text-[#8B5E3C]">
+                    {linkedSessionForDate.order}회차 · {linkedSessionForDate.topic || '주제 미정'}
+                  </span>
+                )}
                 <span className="text-sm text-[#8B7E74]">
-                  {isCurrentDateActive
-                    ? '수업기록, 메모, 출석 체크가 열려 있습니다.'
-                    : '활성화 전에는 기록 영역이 열리지 않습니다.'}
+                  {currentSessionId
+                    ? isDateSkipped
+                      ? '건너뛴 날 — 기록 영역이 닫혀 있어요. (기록은 지워지지 않습니다)'
+                      : currentDateStatus === 'done'
+                        ? '완료 처리된 날 — 수업기록·메모·출석은 계속 열려 있어요.'
+                        : '예정된 수업일이라 기록 영역이 열려 있습니다. 입력하면 자동 저장됩니다.'
+                    : isCurrentDateActive
+                      ? '활성 날짜 — 수업기록·메모·출석이 열려 있습니다.'
+                      : '비활성 날짜 — 활성화하면 기록을 남길 수 있어요. (커리큘럼·시간표로 배정된 날은 자동으로 열립니다.)'}
                 </span>
               </div>
             </div>
-            <button
-              onClick={isCurrentDateActive ? handleDeactivateDate : handleActivateDate}
-              className={`inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-3 text-sm font-bold transition-all ${
-                isCurrentDateActive
-                  ? 'bg-[#FDECEC] text-[#B42318] hover:bg-[#FAD4D1]'
-                  : 'bg-[#8B5E3C] text-white hover:bg-[#724D31]'
-              }`}
-            >
-              <Power size={16} />
-              {isCurrentDateActive ? '비활성화' : '활성화'}
-            </button>
+            {currentSessionId ? (
+              <div className="inline-flex shrink-0 rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] p-1">
+                {STATUS_SEGMENTS.map((segment) => {
+                  const SegmentIcon = segment.icon;
+                  const isActive = currentDateStatus === segment.value;
+                  return (
+                    <button
+                      key={segment.value}
+                      onClick={() => setDateStatus(segment.value)}
+                      className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-bold transition-all ${
+                        isActive ? segment.activeClass : 'text-[#8B7E74] hover:bg-[#F3F2EE]'
+                      }`}
+                    >
+                      <SegmentIcon size={15} />
+                      {segment.label}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <button
+                onClick={isCurrentDateActive ? handleDeactivateDate : handleActivateDate}
+                className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl px-6 py-3 text-sm font-bold transition-all ${
+                  isCurrentDateActive
+                    ? 'bg-[#FDECEC] text-[#B42318] hover:bg-[#FAD4D1]'
+                    : 'bg-[#8B5E3C] text-white hover:bg-[#724D31]'
+                }`}
+              >
+                <Power size={16} />
+                {isCurrentDateActive ? '비활성화' : '활성화'}
+              </button>
+            )}
           </div>
         </div>
 
-        {isCurrentDateActive && (
+        {isDateOpen && (
           <div className="rounded-[40px] border border-[#E5E3DD] bg-white p-8 shadow-sm sm:p-10">
             <div className="mb-6">
               <h2 className="flex items-center gap-2 text-xl font-bold text-[#4A3728]">
@@ -1599,7 +1719,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
           </div>
         )}
 
-        {isCurrentDateActive && (
+        {isDateOpen && (
           <div className="rounded-[40px] border border-[#E5E3DD] bg-white p-8 shadow-sm sm:p-10">
             <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
               <div className="space-y-3">
@@ -1897,7 +2017,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
           </div>
         )}
 
-        {isCurrentDateActive && (
+        {isDateOpen && (
           <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-8 text-left shadow-sm">
             <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
               <div className="space-y-3">
@@ -2070,12 +2190,22 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                   </span>
                   <span
                     className={`rounded-full px-3 py-1.5 ${
-                      isCurrentDateActive
-                        ? 'bg-[#EEF7F0] text-[#2D7A4D]'
-                        : 'bg-[#F3F2EE] text-[#8B7E74]'
+                      currentSessionId
+                        ? currentDateStatus === 'planned'
+                          ? 'bg-[#EAF7EE] text-[#2D7A4D]'
+                          : currentDateStatus === 'done'
+                            ? 'bg-[#EFEDE8] text-[#6B625A]'
+                            : 'bg-[#EFEDE8] text-[#B7AFA4] line-through'
+                        : isCurrentDateActive
+                          ? 'bg-[#EEF7F0] text-[#2D7A4D]'
+                          : 'bg-[#F3F2EE] text-[#8B7E74]'
                     }`}
                   >
-                    {isCurrentDateActive ? '활성 날짜' : '비활성 날짜'}
+                    {currentSessionId
+                      ? SESSION_STATUS_LABELS[currentDateStatus]
+                      : isCurrentDateActive
+                        ? '활성'
+                        : '비활성'}
                   </span>
                 </div>
               </div>
@@ -2107,10 +2237,10 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               ))}
             </div>
 
-            <div className="grid grid-cols-7 gap-1">
+            <div className="grid grid-cols-7 gap-1.5">
               {calendarDays.map((date, idx) => {
                 if (!date) {
-                  return <div key={`empty-${idx}`} className="h-8" />;
+                  return <div key={`empty-${idx}`} className="h-11" />;
                 }
 
                 const dateStr = getLocalDateString(date);
@@ -2119,39 +2249,49 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 const isActive = activeDateSet.has(dateStr);
                 const hasMemo = memoDateSet.has(dateStr);
                 const plannedSessions = plannedSessionsByDate.get(dateStr);
+                const status = dateStatusByDate.get(dateStr);
+                // 오늘은 선택·상태와 무관하게 항상 파란색(선택돼 있어도 파랑 유지).
+                const isDarkCell = isToday || isSelected;
+                const cellTone = isToday
+                  ? 'bg-[#2F5EA8] text-white shadow-md shadow-[#2F5EA8]/25'
+                  : isSelected
+                    ? 'bg-[#8B5E3C] text-white shadow-md shadow-[#8B5E3C]/20'
+                    : status === 'planned'
+                      ? 'bg-[#EAF7EE] text-[#2D7A4D] hover:bg-[#DCF0E2]'
+                      : status === 'done'
+                        ? 'bg-[#EFEDE8] text-[#8B7E74] hover:bg-[#E7E3DB]'
+                        : status === 'skipped'
+                          ? 'bg-[#F7F5F1] text-[#B7AFA4] line-through hover:bg-[#EFEDE8]'
+                          : 'text-[#4A3728] hover:bg-[#F3F2EE]';
 
                 return (
                   <button
                     key={dateStr}
                     onClick={() => setSelectedDate(dateStr)}
                     title={
-                      plannedSessions
-                        ? plannedSessions.map((session) => `${session.order}회차 ${session.topic}`).join(', ')
-                        : undefined
+                      [
+                        plannedSessions
+                          ? plannedSessions.map((session) => `${session.order}회차 ${session.topic}`).join(', ')
+                          : null,
+                        status ? SESSION_STATUS_LABELS[status] : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ') || undefined
                     }
-                    className={`relative flex h-8 w-full items-center justify-center rounded-lg text-xs font-bold transition-all ${
-                      isSelected
-                        ? 'bg-[#8B5E3C] text-white shadow-md shadow-[#8B5E3C]/20'
-                        : isToday
-                          ? 'bg-[#FFF5E9] text-[#8B5E3C]'
-                          : 'text-[#4A3728] hover:bg-[#F3F2EE]'
-                    }`}
+                    className={`relative flex h-11 w-full flex-col items-center justify-center rounded-xl text-sm font-bold transition-all ${cellTone}`}
                   >
-                    {date.getDate()}
-                    <span className="absolute bottom-1 flex items-center gap-0.5">
+                    <span className="leading-none">{date.getDate()}</span>
+                    <span className="mt-1 flex h-1.5 items-center gap-0.5">
                       {isActive && (
                         <span
-                          className={`h-1.5 w-1.5 rounded-full transition-all ${
+                          className={`h-1.5 w-1.5 rounded-full ${
                             hasMemo
-                              ? isSelected ? 'bg-white' : 'bg-[#8B5E3C]'
-                              : isSelected ? 'border border-white' : 'border border-[#8B5E3C]'
-                          }`}
-                        />
-                      )}
-                      {plannedSessions && (
-                        <span
-                          className={`h-1.5 w-1.5 rounded-full border border-dashed transition-all ${
-                            isSelected ? 'border-white/80' : 'border-[#C4956A]'
+                              ? isDarkCell
+                                ? 'bg-white'
+                                : 'bg-[#8B5E3C]'
+                              : isDarkCell
+                                ? 'bg-white/60'
+                                : 'bg-[#C4B6A4]'
                           }`}
                         />
                       )}
@@ -2160,12 +2300,26 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 );
               })}
             </div>
-            {plannedSessionsByDate.size > 0 && (
-              <p className="mt-2 text-right text-[10px] text-[#A89F94]">점선 ○ = 커리큘럼 예정일</p>
-            )}
+            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[10px] font-medium text-[#A89F94]">
+              <span className="flex items-center gap-1">
+                <span className="h-3 w-3 rounded-md bg-[#EAF7EE] ring-1 ring-[#CDEAD6]" />
+                예정
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="h-3 w-3 rounded-md bg-[#EFEDE8] ring-1 ring-[#E0DBD2]" />
+                완료
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="text-xs font-bold text-[#B7AFA4] line-through">건너뜀</span>
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#8B5E3C]" />
+                기록·메모
+              </span>
+            </div>
           </div>
 
-          {isCurrentDateActive ? (
+          {isDateOpen ? (
             <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-6 text-left shadow-sm">
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div className="space-y-2">
@@ -2218,18 +2372,55 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 <p className="mt-3 text-xs font-medium text-[#B42318]">{generationError}</p>
               )}
             </div>
-          ) : (
+          ) : currentSessionId ? (
             <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-6 shadow-sm">
-              <div className="mb-4 flex items-start gap-2 text-[#8B5E3C]">
+              <div className="mb-4 flex items-start gap-2 text-[#8B7E74]">
                 <AlertCircle size={18} className="mt-0.5 shrink-0" />
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <h2 className="flex items-center gap-2 text-lg font-bold text-[#4A3728]">
-                    기록 대기 상태
+                    건너뛴 날
                     <DashboardInfoTooltip
                       content={waitingTooltipText}
-                      label="기록 대기 상태 설명 보기"
+                      label="건너뛴 날 설명 보기"
                     />
                   </h2>
+                  <p className="text-sm text-[#8B7E74]">
+                    이 날짜는 "건너뜀"으로 표시돼 수업기록·메모·출석 영역이 닫혀 있습니다. 입력해 둔 기록이 있다면 지워지지 않으니, 다시 열려면 아래 버튼을 누르세요.
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
+                    <span className="rounded-full bg-[#FFF5E9] px-3 py-1.5 text-[#8B5E3C]">
+                      {selectedDate}
+                    </span>
+                    <span className="rounded-full bg-[#EFEDE8] px-3 py-1.5 text-[#6B625A]">
+                      건너뜀
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDateStatus('planned')}
+                    className="inline-flex items-center gap-2 rounded-xl bg-[#8B5E3C] px-4 py-2 text-xs font-bold text-white transition-all hover:bg-[#724D31]"
+                  >
+                    <Undo2 size={14} />
+                    예정으로 되돌리기
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-6 shadow-sm">
+              <div className="mb-4 flex items-start gap-2 text-[#8B7E74]">
+                <AlertCircle size={18} className="mt-0.5 shrink-0" />
+                <div className="space-y-3">
+                  <h2 className="flex items-center gap-2 text-lg font-bold text-[#4A3728]">
+                    비활성 날짜
+                    <DashboardInfoTooltip
+                      content={waitingTooltipText}
+                      label="비활성 날짜 설명 보기"
+                    />
+                  </h2>
+                  <p className="text-sm text-[#8B7E74]">
+                    커리큘럼·시간표로 배정되지 않은 날짜입니다. 위 "활성화" 버튼을 누르면 수업기록·메모·출석 영역이 열립니다.
+                  </p>
                   <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
                     <span className="rounded-full bg-[#FFF5E9] px-3 py-1.5 text-[#8B5E3C]">
                       {selectedDate}
@@ -2237,10 +2428,15 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                     <span className="rounded-full bg-[#F3F2EE] px-3 py-1.5 text-[#8B7E74]">
                       비활성
                     </span>
-                    <span className="rounded-full bg-[#FBFBFA] px-3 py-1.5 text-[#8B7E74]">
-                      활성화 전
-                    </span>
                   </div>
+                  <button
+                    type="button"
+                    onClick={handleActivateDate}
+                    className="inline-flex items-center gap-2 rounded-xl bg-[#8B5E3C] px-4 py-2 text-xs font-bold text-white transition-all hover:bg-[#724D31]"
+                  >
+                    <Power size={14} />
+                    활성화
+                  </button>
                 </div>
               </div>
             </div>
@@ -2674,7 +2870,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               참고 시간표 연결
             </h3>
             <p className="mb-4 text-sm text-[#8B7E74]">
-              calendar.damuna.org에 FM으로 짜둔 시간표를 고르면, 그 수업 날짜로 회차 일정을 자동 배정할 수 있습니다.
+              calendar.damuna.org에 FM으로 짜둔 시간표를 고르면, 그 수업 날짜로 회차 일정을 자동 배정할 수 있습니다. (왼쪽 사이드바 "시간표"에서 바로 편집할 수 있어요.)
             </p>
             {calendarClassesError ? (
               <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
@@ -2684,9 +2880,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               <select
                 value={classroom.calendarClassId || ''}
                 disabled={calendarClassesLoading || !onUpdateClassroom}
-                onChange={(event) =>
-                  onUpdateClassroom?.(classroom.id, { calendarClassId: event.target.value || null })
-                }
+                onChange={(event) => handleSelectCalendarClass(event.target.value || null)}
                 className="w-full rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] px-4 py-3 text-sm font-medium text-[#4A3728] focus:border-[#8B5E3C] focus:outline-none disabled:opacity-60"
               >
                 <option value="">{calendarClassesLoading ? '불러오는 중...' : '연결 안 함'}</option>
@@ -2715,6 +2909,24 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                   <p className="text-xs text-[#A2906F]">
                     기간: {linkedCalendarClass.startDate || '제한 없음'} ~ {linkedCalendarClass.endDate || '제한 없음'}
                   </p>
+                )}
+                {formatCalendarOrgs(linkedCalendarClass.orgs) && (
+                  <div className="flex flex-wrap items-center gap-2 border-t border-[#EBD9C1] pt-2">
+                    <span className="text-xs font-bold text-[#A2906F]">기관/단체</span>
+                    <span className="rounded-full bg-white px-3 py-1 text-xs font-bold shadow-sm">
+                      {formatCalendarOrgs(linkedCalendarClass.orgs)}
+                    </span>
+                    {onUpdateClassroom && (
+                      <button
+                        type="button"
+                        onClick={handlePullOrganizationFromCalendar}
+                        className="ml-auto inline-flex items-center gap-1 rounded-full border border-[#EBD9C1] bg-white px-3 py-1 text-xs font-bold text-[#8B5E3C] transition-all hover:bg-[#FFF5E9]"
+                      >
+                        <RefreshCw size={12} />
+                        클래스에 가져오기
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             )}
@@ -2867,6 +3079,13 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                   </select>
                   <div className="flex shrink-0 items-center gap-1">
                     <button
+                      onClick={() => setDetailSession(session)}
+                      title="상세 설명 보기"
+                      className="rounded-lg p-1.5 text-[#8B5E3C] transition-all hover:bg-[#FFF5E9]"
+                    >
+                      <FileText size={16} />
+                    </button>
+                    <button
                       onClick={() => moveSessionDraft(session.id, -1)}
                       disabled={index === 0}
                       title="위로"
@@ -2948,6 +3167,40 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
             onChange={(event) => setSettingsDraft({ ...settingsDraft, name: event.target.value })}
             className="w-full rounded-2xl border-2 border-[#E5E3DD] px-5 py-3.5 text-lg font-bold text-[#4A3728] transition-all focus:border-[#8B5E3C] focus:outline-none"
             placeholder="클래스 이름을 입력하세요."
+          />
+        </div>
+
+        <div className="mb-10">
+          <div className="mb-4 flex items-center gap-2">
+            <Link2 size={18} className="text-[#8B5E3C]" />
+            <h3 className="text-lg font-bold text-[#4A3728]">기관 · 단체</h3>
+          </div>
+          <input
+            type="text"
+            value={settingsDraft.organization}
+            onChange={(event) =>
+              setSettingsDraft({ ...settingsDraft, organization: event.target.value })
+            }
+            className="w-full rounded-2xl border-2 border-[#E5E3DD] px-5 py-3.5 text-base font-medium text-[#4A3728] transition-all focus:border-[#8B5E3C] focus:outline-none"
+            placeholder='예: "구로구청 / 디지털배움터" (시간표 연결 시 자동으로 채워질 수 있어요)'
+          />
+        </div>
+
+        <div className="mb-10">
+          <div className="mb-2 flex items-center gap-2">
+            <FileText size={18} className="text-[#8B5E3C]" />
+            <h3 className="text-lg font-bold text-[#4A3728]">클래스 특징 · 내용</h3>
+          </div>
+          <p className="mb-4 text-sm text-[#8B7E74]">
+            반의 구성·수준·중점 등 운영 참고용 메모입니다.
+          </p>
+          <textarea
+            value={settingsDraft.description}
+            onChange={(event) =>
+              setSettingsDraft({ ...settingsDraft, description: event.target.value })
+            }
+            placeholder="예: 9~24세 이주민 학생 12명. 한국어 학습 중이라 텍스트보다 시각 자료 위주로 진행. 디지털 기기 사용 편차 큼."
+            className="custom-scrollbar min-h-[120px] w-full resize-none rounded-2xl border-2 border-[#E5E3DD] p-4 text-sm text-[#4A3728] outline-none transition-all focus:border-[#8B5E3C]"
           />
         </div>
 
@@ -3186,17 +3439,28 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     <main className="flex-1 overflow-y-auto bg-[#FBFBFA] p-8">
       <div className="mx-auto max-w-6xl">
         <div className="mb-8">
-          <div className="mb-2 flex items-center gap-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-[#FFF5E9] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#8B5E3C]">
               클래스 관리
             </span>
+            {classroom.organization?.trim() && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-[#FBF4EA] px-3 py-1 text-[11px] font-bold text-[#8B5E3C]">
+                <Link2 size={12} />
+                {classroom.organization}
+              </span>
+            )}
           </div>
-          <h1 className="mb-4 text-5xl font-serif font-bold text-[#4A3728]">{classroom.name}</h1>
+          <h1 className="mb-3 text-5xl font-serif font-bold text-[#4A3728]">{classroom.name}</h1>
+          {classroom.description?.trim() && (
+            <p className="mb-4 max-w-2xl whitespace-pre-wrap rounded-2xl border border-[#F0EAE0] bg-[#FCF8F2] px-4 py-3 text-sm leading-relaxed text-[#6B5E51]">
+              {classroom.description}
+            </p>
+          )}
           <p className="hidden max-w-md text-[#8B7E74]">
             클래스별 콘텐츠 배정과 날짜별 운영 기록을 한 화면에서 관리합니다.
           </p>
           <p className="hidden mt-3 max-w-2xl text-sm text-[#8B7E74]">
-            콘텐츠는 학생 페이지 노출 기준이고, 날짜 기록은 활성화한 날에만 별도로 저장됩니다.
+            콘텐츠는 학생 페이지 노출 기준이고, 날짜 기록은 '건너뜀'이 아닌 날에 그날 진행한 수업만 별도로 저장됩니다.
           </p>
           <p className="max-w-md text-[#8B7E74]">
             날짜별 수업 기록과 실제 진행한 콘텐츠, 출석, 메모를 한 화면에서 관리합니다.
@@ -3242,6 +3506,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 : renderSettingsTab()}
         </AnimatePresence>
       </div>
+      <SessionDetailModal session={detailSession} onClose={() => setDetailSession(null)} />
     </main>
   );
 };

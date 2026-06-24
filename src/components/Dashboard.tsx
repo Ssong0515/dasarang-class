@@ -312,11 +312,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
         >
           <div className="max-w-md">
             <h2 className="mb-4 text-3xl font-serif font-bold text-[#4A3728]">
-              날짜는 활성화할 때만 기록됩니다
+              날짜는 기본적으로 열려 있어요
             </h2>
             <p className="mb-8 leading-relaxed text-[#8B7E74]">
-              달력에서 날짜를 고른 뒤 활성화하면 수업 기록, 메모, 출석체크가 열리고, 비활성화하면
-              그 날짜 기록은 삭제됩니다.
+              달력에서 날짜를 고르면 수업 기록·메모·출석이 바로 열립니다. '건너뜀'으로 표시한 날만 닫히고,
+              '완료'로 진행 상태를 남길 수 있어요.
             </p>
             <button
               onClick={() => {
@@ -347,7 +347,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
             <h2 className="mb-4 text-2xl font-bold">관리자 팁</h2>
             <p className="hidden text-sm leading-relaxed text-white/80">
-              클래스 배정은 학생 페이지 노출 기준이고, 날짜 기록은 실제로 수업을 진행한 날만 활성화해서
+              클래스 배정은 학생 페이지 노출 기준이고, 날짜 기록은 실제로 수업을 진행한 날만
               남겨두면 됩니다.
             </p>
             <p className="text-sm leading-relaxed text-white/80">

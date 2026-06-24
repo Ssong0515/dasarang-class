@@ -1,14 +1,25 @@
 import React from 'react';
 import { Bell, Settings } from 'lucide-react';
 
-type AdminTab = 'home' | 'memo' | 'classroom-management' | 'content-library' | 'student-access';
+type AdminTab =
+  | 'home'
+  | 'memo'
+  | 'classroom-management'
+  | 'content-library'
+  | 'curriculum-management'
+  | 'timetable'
+  | 'student-access'
+  | 'student-showcase';
 
 const TAB_LABELS: Record<AdminTab, string> = {
   home: '대시보드',
   memo: '메모장',
   'classroom-management': '교실 관리',
   'content-library': '콘텐츠 라이브러리',
+  'curriculum-management': '커리큘럼',
+  timetable: '시간표',
   'student-access': '접근 아이디',
+  'student-showcase': '홈페이지 공유',
 };
 
 interface HeaderProps {

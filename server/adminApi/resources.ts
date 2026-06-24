@@ -60,11 +60,17 @@ export const isDateString = (value: unknown): value is string =>
 export const RESOURCE_SPECS: Record<ResourceName, ResourceSpec> = {
   classrooms: {
     collection: 'classrooms',
-    description: '교실(반). curriculumId로 커리큘럼과 연결할 수 있다.',
+    description:
+      '교실(반). curriculumId로 커리큘럼과 연결할 수 있다. description=클래스 특징/내용(운영·강사용 내부 메모, 학생 비공개)이며 GPT로 채우는 칸이다.',
     filterFields: ['curriculumId'],
     sort: { field: 'order', direction: 'asc' },
     fields: {
       name: { type: 'string', required: true, description: '반 이름' },
+      description: {
+        type: 'string',
+        description: '클래스 특징/내용 (운영·강사용 내부 메모, 학생에게 노출 안 함). 수업 자동생성 등 내부 참고용.',
+      },
+      organization: { type: 'string', description: '기관/단체명 (예: "구로구청 / 디지털배움터")' },
       isOpen: { type: 'boolean', description: 'UI에서 펼침 여부' },
       order: { type: 'number', description: '정렬 순서' },
       icon: { type: 'string', description: '아이콘 이름' },

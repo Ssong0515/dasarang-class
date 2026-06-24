@@ -5,6 +5,8 @@ import {
   StickyNote,
   LogOut,
   Library,
+  BookOpen,
+  CalendarDays,
   KeyRound,
   Plus,
   GripVertical,
@@ -48,6 +50,8 @@ type AdminTab =
   | 'memo'
   | 'classroom-management'
   | 'content-library'
+  | 'curriculum-management'
+  | 'timetable'
   | 'student-access'
   | 'student-showcase';
 
@@ -281,6 +285,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
             isActive={!isStudentView && activeTab === 'content-library'}
             extraClassName="mt-2"
             onClick={() => onTabChange('content-library')}
+          />
+
+          <SidebarNavButton
+            icon={<BookOpen size={20} />}
+            label="커리큘럼"
+            isCollapsed={isCollapsed}
+            isActive={!isStudentView && activeTab === 'curriculum-management'}
+            extraClassName="mt-2"
+            onClick={() => onTabChange('curriculum-management')}
+          />
+
+          <SidebarNavButton
+            icon={<CalendarDays size={20} />}
+            label="시간표"
+            isCollapsed={isCollapsed}
+            isActive={!isStudentView && activeTab === 'timetable'}
+            extraClassName="mt-2"
+            onClick={() => onTabChange('timetable')}
           />
 
           <SidebarNavButton

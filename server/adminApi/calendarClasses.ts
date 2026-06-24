@@ -18,6 +18,11 @@ interface CalendarException {
   scheduleKey?: string;
 }
 
+interface CalendarOrg {
+  org?: string;
+  project?: string;
+}
+
 interface CalendarClassDoc {
   name?: string;
   instructor?: string;
@@ -25,6 +30,8 @@ interface CalendarClassDoc {
   exceptions?: CalendarException[];
   startDate?: string;
   endDate?: string;
+  /** 기관/단체 목록 (calendar 앱 UI의 "기관/단체명") */
+  orgs?: CalendarOrg[];
   /** calendar 앱에서 '숨기기'한 수업 (가져오기 목록에서 제외) */
   hidden?: boolean;
 }
@@ -38,6 +45,7 @@ export interface CalendarClassSummary {
   schedules: { days: number[]; start: string; end: string }[];
   startDate: string;
   endDate: string;
+  orgs: { org: string; project: string }[];
 }
 
 /**
@@ -81,6 +89,9 @@ const toSummary = (id: string, data: CalendarClassDoc): CalendarClassSummary => 
   })),
   startDate: data.startDate || '',
   endDate: data.endDate || '',
+  orgs: (data.orgs || [])
+    .map((org) => ({ org: org.org || '', project: org.project || '' }))
+    .filter((org) => org.org || org.project),
 });
 
 /** calendar의 참고 시간표 목록 (프론트 선택용) */
