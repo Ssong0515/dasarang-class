@@ -46,6 +46,7 @@ import {
   ClassroomDateRecord,
   Curriculum,
   CurriculumSession,
+  CurriculumSessionStatus,
   LessonCategory,
   LessonContent,
   Classroom,
@@ -117,7 +118,7 @@ interface ClassroomDashboardProps {
 type Tab = 'dashboard' | 'students' | 'curriculum' | 'settings';
 
 const DOW_LABELS = ['월', '화', '수', '목', '금', '토'];
-const SESSION_STATUS_LABELS: Record<CurriculumSession['status'], string> = {
+const SESSION_STATUS_LABELS: Record<CurriculumSessionStatus, string> = {
   planned: '예정',
   done: '완료',
   skipped: '건너뜀',
@@ -317,7 +318,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       (curriculum) => curriculum.id === classroom.curriculumId
     );
     for (const session of linkedCurriculum?.sessions || []) {
-      const plannedDate = classroom.sessionStates?.[session.id]?.date || session.plannedDate;
+      const plannedDate = classroom.sessionStates?.[session.id]?.date;
       if (!plannedDate) continue;
       const sessionsOnDate = map.get(plannedDate) || [];
       sessionsOnDate.push(session);
@@ -549,16 +550,16 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const [sessionDrafts, setSessionDrafts] = useState<CurriculumSession[]>([]);
   // 회차 날짜·상태는 반별(classroom.sessionStates)로 저장한다. 회차id → { date, status } 초안.
   const [sessionStateDrafts, setSessionStateDrafts] = useState<
-    Record<string, { date: string; status: CurriculumSession['status'] }>
+    Record<string, { date: string; status: CurriculumSessionStatus }>
   >({});
   const [isSavingSessions, setIsSavingSessions] = useState(false);
   const [sessionSaveError, setSessionSaveError] = useState<string | null>(null);
 
-  // 이 반에 저장된 회차 날짜·상태(반별 우선, 없으면 커리큘럼 레거시로 폴백)
+  // 이 반에 저장된 회차 날짜·상태 (반별 sessionStates에만 있다. 커리큘럼은 날짜·상태를 갖지 않음)
   const savedSessionDate = (session: CurriculumSession) =>
-    classroom.sessionStates?.[session.id]?.date || session.plannedDate || '';
-  const savedSessionStatus = (session: CurriculumSession): CurriculumSession['status'] =>
-    classroom.sessionStates?.[session.id]?.status || session.status || 'planned';
+    classroom.sessionStates?.[session.id]?.date || '';
+  const savedSessionStatus = (session: CurriculumSession): CurriculumSessionStatus =>
+    classroom.sessionStates?.[session.id]?.status || 'planned';
   const classroomSessionStatesKey = JSON.stringify(classroom.sessionStates ?? {});
 
   // 연결된 커리큘럼이 바뀌거나 외부(자동 배정·GPT)에서 갱신되면 편집 초안을 다시 맞춘다
@@ -603,7 +604,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
 
   const updateSessionStateDraft = (
     id: string,
-    patch: Partial<{ date: string; status: CurriculumSession['status'] }>
+    patch: Partial<{ date: string; status: CurriculumSessionStatus }>
   ) => {
     setSessionStateDrafts((drafts) => ({
       ...drafts,
@@ -621,7 +622,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
             : `session-${Date.now()}`,
         order: drafts.length + 1,
         topic: '',
-        status: 'planned',
       },
     ]);
   };
@@ -2853,13 +2853,13 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                     value={sessionStateDrafts[session.id]?.status || 'planned'}
                     onChange={(event) =>
                       updateSessionStateDraft(session.id, {
-                        status: event.target.value as CurriculumSession['status'],
+                        status: event.target.value as CurriculumSessionStatus,
                       })
                     }
                     title="이 반의 회차 진행 상태 (반별로 저장됩니다)"
                     className="shrink-0 rounded-xl border border-[#E5E3DD] bg-white px-3 py-2 text-sm font-bold text-[#8B7E74] focus:border-[#8B5E3C] focus:outline-none"
                   >
-                    {(Object.keys(SESSION_STATUS_LABELS) as CurriculumSession['status'][]).map((status) => (
+                    {(Object.keys(SESSION_STATUS_LABELS) as CurriculumSessionStatus[]).map((status) => (
                       <option key={status} value={status}>
                         {SESSION_STATUS_LABELS[status]}
                       </option>

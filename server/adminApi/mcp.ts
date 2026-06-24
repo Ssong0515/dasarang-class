@@ -149,9 +149,7 @@ const buildMcpServer = () => {
               .object({
                 topic: z.string().optional(),
                 details: z.string().optional(),
-                plannedDate: z.string().optional().describe('YYYY-MM-DD'),
                 contentIds: z.array(z.string()).optional(),
-                status: z.enum(['planned', 'done', 'skipped']).optional(),
               })
               .optional(),
             order: z.number().optional().describe('1-based 위치 (add 삽입/reorder 이동)'),
@@ -226,7 +224,7 @@ const buildMcpServer = () => {
     {
       classroomId: z.string(),
       calendarClassId: z.string().optional(),
-      overwrite: z.boolean().optional().describe('이미 plannedDate가 있는 회차도 덮어쓸지 (기본 true)'),
+      overwrite: z.boolean().optional().describe('이미 날짜가 배정된 회차도 덮어쓸지 (기본 true)'),
     },
     async ({ classroomId, calendarClassId, overwrite }) =>
       run(() => assignCurriculumDatesFromCalendar({ classroomId, calendarClassId, overwrite }))

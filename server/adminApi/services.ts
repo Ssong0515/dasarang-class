@@ -2,7 +2,6 @@ import crypto from 'crypto';
 import type {
   AttendanceRecord,
   CurriculumSession,
-  CurriculumSessionStatus,
 } from '../../src/types';
 import { getClassroomDateRecordId } from '../../src/utils/classroomDomain';
 import { getAdminDb } from '../firebaseAdmin';
@@ -358,20 +357,12 @@ export interface CurriculumSessionOp {
   order?: number;
 }
 
-const VALID_SESSION_STATUSES: CurriculumSessionStatus[] = ['planned', 'done', 'skipped'];
-
 const validateSessionPatch = (patch: Partial<Omit<CurriculumSession, 'id'>>, requireTopic: boolean) => {
   if (requireTopic && !patch.topic?.trim()) {
     throw new AdminApiError(400, '회차에는 topic이 필요합니다.');
   }
   if (patch.topic !== undefined && typeof patch.topic !== 'string') {
     throw new AdminApiError(400, 'topic은 문자열이어야 합니다.');
-  }
-  if (patch.plannedDate !== undefined && patch.plannedDate !== '' && !isDateString(patch.plannedDate)) {
-    throw new AdminApiError(400, 'plannedDate는 YYYY-MM-DD 형식이어야 합니다.');
-  }
-  if (patch.status !== undefined && !VALID_SESSION_STATUSES.includes(patch.status)) {
-    throw new AdminApiError(400, `status는 ${VALID_SESSION_STATUSES.join('|')} 중 하나여야 합니다.`);
   }
   if (patch.contentIds !== undefined && !Array.isArray(patch.contentIds)) {
     throw new AdminApiError(400, 'contentIds는 배열이어야 합니다.');
@@ -412,9 +403,7 @@ export const mutateCurriculumSessions = async (curriculumId: string, ops: Curric
             id: crypto.randomUUID(),
             order: 0, // 아래에서 재계산
             topic: op.session.topic!.trim(),
-            status: op.session.status || 'planned',
             ...(op.session.details !== undefined ? { details: op.session.details } : {}),
-            ...(op.session.plannedDate ? { plannedDate: op.session.plannedDate } : {}),
             ...(op.session.contentIds ? { contentIds: op.session.contentIds } : {}),
           };
           const index = clampInsertIndex(op.order ?? op.session.order, sessions.length);
@@ -430,7 +419,13 @@ export const mutateCurriculumSessions = async (curriculumId: string, ops: Curric
           if (!target) {
             throw new AdminApiError(404, `회차 '${op.sessionId}'을(를) 찾을 수 없습니다.`);
           }
-          const { order: _ignoredOrder, ...patch } = op.session;
+          // order는 자동 재계산하고, plannedDate/status는 커리큘럼에 저장하지 않는다(반별 전용).
+          const {
+            order: _ignoredOrder,
+            plannedDate: _ignoredPlannedDate,
+            status: _ignoredStatus,
+            ...patch
+          } = op.session as Partial<CurriculumSession> & { plannedDate?: string; status?: string };
           Object.assign(target, patch);
           break;
         }
@@ -602,8 +597,6 @@ export const getOverview = async () => {
       id: doc.id,
       title: data.title as string,
       sessionCount: sessions.length,
-      doneCount: sessions.filter((session) => session.status === 'done').length,
-      nextPlanned: sessions.find((session) => session.status === 'planned') || null,
     };
   });
 

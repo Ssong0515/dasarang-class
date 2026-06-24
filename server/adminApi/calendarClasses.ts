@@ -221,12 +221,10 @@ export const assignCurriculumDatesFromCalendar = async (
     .slice()
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
-  // 이 반의 회차 상태(반별). 없으면 커리큘럼 레거시(plannedDate/status)로 폴백.
+  // 이 반의 회차 날짜·상태는 전부 반별(sessionStates)에만 있다. 커리큘럼은 날짜·상태를 갖지 않음.
   const states = classroom.sessionStates || {};
-  const resolveDate = (session: CurriculumSession) =>
-    states[session.id]?.date || session.plannedDate || '';
-  const resolveStatus = (session: CurriculumSession) =>
-    states[session.id]?.status || session.status || 'planned';
+  const resolveDate = (session: CurriculumSession) => states[session.id]?.date || '';
+  const resolveStatus = (session: CurriculumSession) => states[session.id]?.status || 'planned';
 
   const overwrite = input.overwrite !== false;
   const eligible = sessions.filter((session) => {

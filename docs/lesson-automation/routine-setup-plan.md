@@ -19,6 +19,8 @@
 
 ## 3. 루틴이 매일 하는 일 (알고리즘)
 
+> ⚠️ **2026-06-24 변경 — 회차 날짜·상태가 커리큘럼에서 빠졌다.** 커리큘럼은 이제 순수 템플릿(주제·상세·순서)이라 `session.plannedDate`/`session.status`가 **없다**. 회차 날짜·진행상태는 **반별**(`classrooms/{id}.sessionStates[sessionId] = {date, status}`)에만 있다. 아래 알고리즘에서 날짜·상태는 커리큘럼이 아니라 **각 반 문서**(`get_resource(classrooms, <classroomId>)`의 `sessionStates`)에서 읽어야 한다. 루틴을 실제 구현·등록하기 전에 이 절(및 §6 프롬프트)의 `session.plannedDate`·`session.status` 참조를 반별 `sessionStates[sessionId].date/.status`로 바꿀 것.
+
 매일 새벽 1회:
 1. `get_overview` → 커리큘럼/교실 파악. 대상 = `curriculumId`가 연결된 활성 교실의 커리큘럼(현재 `3u4YLYCstBfvW4sz5occ`).
 2. `get_resource(curriculums, <id>)`로 `sessions` 조회 → **"아직 콘텐츠 없는, plannedDate가 오늘 이후로 가장 가까운 회차 1개"** 선택:

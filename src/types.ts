@@ -195,25 +195,18 @@ export interface Memo {
 
 export type CurriculumSessionStatus = 'planned' | 'done' | 'skipped';
 
+/**
+ * 커리큘럼 회차 = 순수 템플릿(주제·상세·순서·기본 콘텐츠)만 담는다.
+ * "이 반이 이 회차를 언제(date)·어떤 진행상태(status)로 했는지"는 회차가 아니라
+ * 반(Classroom.sessionStates[id])에만 저장한다. 그래서 여기엔 날짜·상태 필드가 없다.
+ */
 export interface CurriculumSession {
   id: string;
   /** 1-based 회차 */
   order: number;
   topic: string;
   details?: string;
-  /**
-   * @deprecated 회차 날짜는 이제 반별로 `Classroom.sessionStates[id].date`에 저장한다.
-   * (같은 커리큘럼을 여러 반이 공유할 때 시간표별로 날짜가 달라야 하기 때문)
-   * 이 필드는 반별 값이 없을 때의 하위호환 폴백 및 GPT 편집 호환용으로만 남는다.
-   * YYYY-MM-DD.
-   */
-  plannedDate?: string;
   contentIds?: string[];
-  /**
-   * @deprecated 회차 진행 상태도 반별이라 `Classroom.sessionStates[id].status`에 저장한다.
-   * 커리큘럼은 템플릿이므로 진행 상태를 갖지 않는다. 폴백/호환용으로만 남는다.
-   */
-  status: CurriculumSessionStatus;
 }
 
 export interface Curriculum {

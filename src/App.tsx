@@ -1395,9 +1395,14 @@ export default function App() {
     sessions: CurriculumSession[]
   ) => {
     if (!user) return;
+    // 커리큘럼은 순수 템플릿: 주제·상세·순서·기본 콘텐츠만 저장한다.
+    // 날짜·상태(반별)는 절대 커리큘럼에 쓰지 않는다 — 옛 문서/드래프트에 남아 있어도 여기서 떨군다.
     const orderedSessions = sessions.map((session, index) => ({
-      ...session,
+      id: session.id,
       order: index + 1,
+      topic: session.topic,
+      ...(session.details !== undefined ? { details: session.details } : {}),
+      ...(session.contentIds !== undefined ? { contentIds: session.contentIds } : {}),
     }));
     try {
       await setDoc(

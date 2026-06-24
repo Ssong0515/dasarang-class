@@ -264,7 +264,7 @@ export const buildOpenApiDocument = () => {
                     ops: {
                       type: 'array',
                       description:
-                        "작업 배열. add: {type:'add', session:{topic,details?,plannedDate?,status?}, order?(1-based 삽입 위치)} / update: {type:'update', sessionId, session:{...}} / remove: {type:'remove', sessionId} / reorder: {type:'reorder', sessionId, order}",
+                        "작업 배열. add: {type:'add', session:{topic,details?,contentIds?}, order?(1-based 삽입 위치)} / update: {type:'update', sessionId, session:{...}} / remove: {type:'remove', sessionId} / reorder: {type:'reorder', sessionId, order}",
                       items: genericObjectSchema,
                     },
                   },
@@ -370,7 +370,7 @@ export const buildOpenApiDocument = () => {
                   properties: {
                     classroomId: { type: 'string' },
                     calendarClassId: { type: 'string', description: '미지정 시 교실에 저장된 연결 사용' },
-                    overwrite: { type: 'boolean', description: '기존 plannedDate 덮어쓰기 (기본 true)' },
+                    overwrite: { type: 'boolean', description: '기존 배정 날짜 덮어쓰기 (기본 true)' },
                   },
                 },
               },
