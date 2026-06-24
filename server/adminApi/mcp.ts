@@ -132,14 +132,17 @@ const buildMcpServer = () => {
       curriculumId: z.string().optional(),
       curriculumSessionId: z.string().optional().describe('커리큘럼 회차에 연결할 때'),
       theoryPrompts: z
-        .array(
-          z.object({
-            label: z.string().optional().describe('시수 라벨 (예: "1시수 · 앞 40분 기초")'),
-            prompt: z.string().describe('NotebookLM 입력 칸에 붙여넣을 프롬프트 본문'),
-          })
-        )
+        .union([
+          z.array(
+            z.object({
+              label: z.string().optional().describe('시수 라벨 (예: "1시수 · 앞 40분 기초")'),
+              prompt: z.string().describe('NotebookLM 입력 칸에 붙여넣을 프롬프트 본문'),
+            })
+          ),
+          z.string().describe('위 배열의 JSON 문자열도 허용 — 중첩 배열을 문자열로 직렬화하는 클라이언트 대비'),
+        ])
         .optional()
-        .describe('시수별 이론 슬라이드 프롬프트(시수 순서대로). 줄 때마다 그 날짜의 theoryPrompts 전체를 교체한다.'),
+        .describe('시수별 이론 슬라이드 프롬프트(시수 순서대로; 배열 또는 그 JSON 문자열). 줄 때마다 그 날짜의 theoryPrompts 전체를 교체한다.'),
     },
     async (input) => run(() => upsertLessonRecord(input as UpsertLessonRecordInput))
   );

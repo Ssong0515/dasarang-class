@@ -225,7 +225,7 @@ export interface UpsertLessonRecordInput {
   attendance?: AttendanceRecord[];
   curriculumId?: string;
   curriculumSessionId?: string;
-  theoryPrompts?: Array<{ label?: string; prompt: string }>;
+  theoryPrompts?: Array<{ label?: string; prompt: string }> | string;
 }
 
 const VALID_ATTENDANCE_STATUSES = new Set(['Present', 'Absent', 'Late']);
@@ -320,11 +320,20 @@ export const upsertLessonRecord = async (input: UpsertLessonRecordInput) => {
     updates.attendance = validateAttendance(input.attendance);
   }
   if (input.theoryPrompts !== undefined) {
-    if (!Array.isArray(input.theoryPrompts)) {
+    // 일부 MCP 클라이언트는 중첩 객체 배열을 JSON 문자열로 보낸다 → 문자열이면 먼저 파싱한다.
+    let prompts: unknown = input.theoryPrompts;
+    if (typeof prompts === 'string') {
+      try {
+        prompts = JSON.parse(prompts);
+      } catch {
+        throw new AdminApiError(400, 'theoryPrompts가 올바른 JSON 배열이 아닙니다.');
+      }
+    }
+    if (!Array.isArray(prompts)) {
       throw new AdminApiError(400, 'theoryPrompts는 배열이어야 합니다.');
     }
     // 시수별 NotebookLM 이론 프롬프트. 빈 prompt는 버리고, 빈 label 키는 빼서 Firestore undefined를 피한다.
-    updates.theoryPrompts = input.theoryPrompts
+    updates.theoryPrompts = (prompts as Array<{ label?: unknown; prompt?: unknown }>)
       .map((entry) => {
         const label = typeof entry?.label === 'string' ? entry.label.trim() : '';
         const prompt = typeof entry?.prompt === 'string' ? entry.prompt : '';
