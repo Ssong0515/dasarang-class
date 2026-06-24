@@ -896,6 +896,25 @@ export default function App() {
                     ),
                 }
               : {}),
+            // 새벽 루틴이 써둔 NotebookLM 이론 프롬프트(강사 대시보드 표시용). 빼먹으면 화면에 안 뜨고,
+            // 강사가 날짜기록을 저장(setDoc)할 때 통째로 덮어써져 사라진다.
+            ...(Array.isArray(data.theoryPrompts)
+              ? {
+                  theoryPrompts: data.theoryPrompts
+                    .filter((entry) => entry && typeof entry.prompt === 'string' && entry.prompt.trim())
+                    .map((entry): { prompt: string; label?: string } =>
+                      typeof entry.label === 'string' && entry.label.trim()
+                        ? { prompt: entry.prompt, label: entry.label.trim() }
+                        : { prompt: entry.prompt }
+                    ),
+                }
+              : {}),
+            ...(typeof data.curriculumId === 'string' && data.curriculumId.trim()
+              ? { curriculumId: data.curriculumId.trim() }
+              : {}),
+            ...(typeof data.curriculumSessionId === 'string' && data.curriculumSessionId.trim()
+              ? { curriculumSessionId: data.curriculumSessionId.trim() }
+              : {}),
             createdAt: data.createdAt ?? '',
             updatedAt: data.updatedAt ?? '',
           } satisfies ClassroomDateRecord;

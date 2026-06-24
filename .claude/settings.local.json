@@ -28,7 +28,9 @@
       "Bash(curl -s \"https://class.damuna.org/\")",
       "Bash(curl -s \"https://class.damuna.org/assets/index-BDgKAQev.js\")",
       "Bash(firebase apphosting:rollouts:create dasarang-class-1 --project gen-lang-client-0507712225 --help)",
-      "Bash(firebase apphosting:rollouts:create dasarang-class-1 --project gen-lang-client-0507712225 --git-branch main --force)"
+      "Bash(firebase apphosting:rollouts:create dasarang-class-1 --project gen-lang-client-0507712225 --git-branch main --force)",
+      "Bash(grep -iE \"firebase|setDoc|collection|^import \\\\{|doc,\")",
+      "mcp__e813776e-7a16-4f45-9bf0-683a36397a69__get_overview"
     ]
   }
 }
