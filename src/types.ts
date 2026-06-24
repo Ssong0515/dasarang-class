@@ -85,6 +85,14 @@ export interface TheorySlide {
   label?: string;
 }
 
+/** 이론 슬라이드를 만들기 위해 NotebookLM에 붙여넣는 입력 프롬프트 한 개(시수별). 새벽 루틴이 자동 생성하고, 대시보드에서는 강사가 복사만 하는 읽기 전용 항목. */
+export interface TheoryPrompt {
+  /** 표시용 라벨(예: "1시수 · 앞 40분 기초"). 비우면 순서대로 "N번째 이론수업 프롬프트"로 보인다. */
+  label?: string;
+  /** NotebookLM 입력 칸에 그대로 붙여넣을 프롬프트 본문. */
+  prompt: string;
+}
+
 export interface ClassroomDateRecord {
   id: string;
   classroomId: string;
@@ -98,6 +106,8 @@ export interface ClassroomDateRecord {
   theorySlideUrl?: string;
   /** 이 날짜 이론 수업 슬라이드들 (시수마다 1개씩 추가 가능, 강사 화면 전용). */
   theorySlides?: TheorySlide[];
+  /** 이 날짜 이론 슬라이드용 NotebookLM 입력 프롬프트들 (시수마다 1개, 새벽 루틴이 자동 생성, 강사 화면 전용·읽기 전용). */
+  theoryPrompts?: TheoryPrompt[];
   createdAt: string;
   updatedAt: string;
   curriculumId?: string;

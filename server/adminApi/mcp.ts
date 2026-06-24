@@ -114,7 +114,7 @@ const buildMcpServer = () => {
 
   server.tool(
     'upsert_lesson_record',
-    '특정 반의 특정 날짜 수업 기록(메모/출석/배정 콘텐츠) 생성·수정. 문서 id는 {classroomId}_{date}로 고정되며 calendar.damuna.org에 자동 동기화된다.',
+    '특정 반의 특정 날짜 수업 기록(메모/출석/배정 콘텐츠) 생성·수정. 문서 id는 {classroomId}_{date}로 고정되며 calendar.damuna.org에 자동 동기화된다. theoryPrompts로 시수별 NotebookLM 이론 슬라이드 프롬프트도 저장할 수 있다(강사 대시보드 표시용, 줄 때마다 전체 교체).',
     {
       classroomId: z.string(),
       date: z.string().describe('YYYY-MM-DD'),
@@ -131,6 +131,15 @@ const buildMcpServer = () => {
         .optional(),
       curriculumId: z.string().optional(),
       curriculumSessionId: z.string().optional().describe('커리큘럼 회차에 연결할 때'),
+      theoryPrompts: z
+        .array(
+          z.object({
+            label: z.string().optional().describe('시수 라벨 (예: "1시수 · 앞 40분 기초")'),
+            prompt: z.string().describe('NotebookLM 입력 칸에 붙여넣을 프롬프트 본문'),
+          })
+        )
+        .optional()
+        .describe('시수별 이론 슬라이드 프롬프트(시수 순서대로). 줄 때마다 그 날짜의 theoryPrompts 전체를 교체한다.'),
     },
     async (input) => run(() => upsertLessonRecord(input as UpsertLessonRecordInput))
   );

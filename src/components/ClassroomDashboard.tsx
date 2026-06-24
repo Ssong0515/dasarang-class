@@ -39,6 +39,9 @@ import {
   Unlock,
   RefreshCw,
   Images,
+  Copy,
+  Check,
+  Sparkles,
 } from 'lucide-react';
 import {
   AssignCurriculumDatesResult,
@@ -55,6 +58,7 @@ import {
   Student,
   StudentPost,
   TheorySlide,
+  TheoryPrompt,
 } from '../types';
 import {
   normalizeClassroomDateRecordContentIds,
@@ -298,6 +302,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const [theoryUrlInput, setTheoryUrlInput] = useState('');
   const [theoryLabelInput, setTheoryLabelInput] = useState('');
   const [isPickingTheorySlide, setIsPickingTheorySlide] = useState(false);
+  const [copiedPromptIndex, setCopiedPromptIndex] = useState<number | null>(null);
   const [isEndLessonModalOpen, setIsEndLessonModalOpen] = useState(false);
 
   const [generationMessage, setGenerationMessage] = useState<string | null>(null);
@@ -910,6 +915,37 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
         ? [{ url: currentDateRecord.theorySlideUrl.trim() }]
         : []
     : [];
+
+  // 이 날짜 이론 슬라이드용 NotebookLM 입력 프롬프트 (시수별, 새벽 루틴이 자동 생성·읽기 전용).
+  const effectiveTheoryPrompts: TheoryPrompt[] = currentDateRecord?.theoryPrompts ?? [];
+
+  // 프롬프트를 클립보드에 복사. clipboard API가 없으면 textarea+execCommand로 폴백.
+  const handleCopyTheoryPrompt = (text: string, index: number) => {
+    const markCopied = () => {
+      setCopiedPromptIndex(index);
+      window.setTimeout(
+        () => setCopiedPromptIndex((current) => (current === index ? null : current)),
+        1500
+      );
+    };
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).then(markCopied).catch(() => {});
+      return;
+    }
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      markCopied();
+    } catch {
+      // 복사 실패는 조용히 무시
+    }
+  };
 
   // 이론 슬라이드 추가 (시수마다 하나씩). 붙여넣은 링크는 임베드 URL로 정규화해 저장.
   const handleAddTheorySlide = (rawUrl: string, label: string) => {
@@ -1671,6 +1707,52 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                           <span className="max-w-full truncate text-xs font-medium text-[#A89F94]">{slide.url}</span>
                         </a>
                       )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {effectiveTheoryPrompts.length > 0 && (
+              <div className="mb-5 space-y-3">
+                <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#8B7E74]">
+                  <Sparkles size={14} className="text-[#8B5E3C]" />
+                  NotebookLM 이론 프롬프트
+                  <DashboardInfoTooltip
+                    content="새벽 루틴이 이 회차 시수별로 자동 만든 NotebookLM 입력 프롬프트입니다. [복사]해서 NotebookLM 입력 칸에 붙여 슬라이드를 만든 뒤, 완성된 슬라이드 링크를 아래 '이론 수업 추가'에 붙이세요. 강사 화면 전용입니다."
+                    label="이론 프롬프트 설명 보기"
+                  />
+                </p>
+                {effectiveTheoryPrompts.map((item, index) => {
+                  const promptLabel = item.label?.trim();
+                  const isCopied = copiedPromptIndex === index;
+                  return (
+                    <div
+                      key={`${index}-${promptLabel ?? ''}`}
+                      className="rounded-[28px] border border-[#E5E3DD] bg-[#FBFBFA] p-4"
+                    >
+                      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                        <span className="flex flex-col gap-0.5">
+                          <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-[#FFF5E9] px-3 py-1.5 text-xs font-bold text-[#8B5E3C]">
+                            <Sparkles size={13} />
+                            {index + 1}번째 이론수업 프롬프트
+                          </span>
+                          {promptLabel && (
+                            <span className="px-1 text-[11px] font-medium text-[#A89F94]">{promptLabel}</span>
+                          )}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyTheoryPrompt(item.prompt, index)}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-[#E5E3DD] bg-white px-3 py-2 text-xs font-bold text-[#4A3728] transition-all hover:border-[#8B5E3C]"
+                        >
+                          {isCopied ? <Check size={14} className="text-[#3A7D44]" /> : <Copy size={14} />}
+                          {isCopied ? '복사됨' : '복사'}
+                        </button>
+                      </div>
+                      <div className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-2xl border border-[#E5E3DD] bg-white px-4 py-3 text-xs leading-relaxed text-[#4A3728]">
+                        {item.prompt}
+                      </div>
                     </div>
                   );
                 })}

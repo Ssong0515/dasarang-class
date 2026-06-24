@@ -225,6 +225,20 @@ const sanitizeTheorySlidesForStorage = (slides: unknown): { url: string; label?:
     .map((slide) => (slide.label ? { url: slide.url, label: slide.label } : { url: slide.url }));
 };
 
+// 이론 프롬프트 배열 저장용 정규화: prompt 트리밍·빈 항목 제거, 빈 label 키는 빼서 Firestore undefined를 피한다.
+// 루틴(MCP)이 써넣는 읽기 전용 필드라 클라이언트는 만들지 않지만, 통째 setDoc 저장 시 보존하기 위해 정규화해 다시 쓴다.
+const sanitizeTheoryPromptsForStorage = (prompts: unknown): { label?: string; prompt: string }[] => {
+  if (!Array.isArray(prompts)) return [];
+  return prompts
+    .map((entry) => {
+      const label = typeof entry?.label === 'string' ? entry.label.trim() : '';
+      const prompt = typeof entry?.prompt === 'string' ? entry.prompt : '';
+      return { label, prompt };
+    })
+    .filter((entry) => entry.prompt.trim())
+    .map((entry) => (entry.label ? { label: entry.label, prompt: entry.prompt } : { prompt: entry.prompt }));
+};
+
 const getStudentsByClassroomId = (students: Student[]) => {
   const studentsByClassroomId = new Map<string, Student[]>();
 
@@ -1718,6 +1732,8 @@ export default function App() {
         attendance: sanitizeAttendanceRecordsForStorage(record.attendance),
         memo: record.memo ?? '',
         theorySlides: sanitizeTheorySlidesForStorage(record.theorySlides),
+        // 루틴이 써둔 이론 프롬프트를 통째 setDoc 저장에서 잃지 않도록 보존(클라이언트는 편집하지 않음).
+        theoryPrompts: sanitizeTheoryPromptsForStorage(record.theoryPrompts ?? existingRecord?.theoryPrompts),
         createdAt: existingRecord?.createdAt || record.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };

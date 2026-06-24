@@ -8,7 +8,7 @@
 2. **스케줄**: 매일 `04:03`(KST, Asia/Seoul).
 3. **커넥터**: **다사랑 class MCP**가 켜져 있는지 확인(계정 커넥터 상속). 없으면 계정 커넥터로 먼저 연결: `https://class.damuna.org/mcp` + `ADMIN_API_KEY`. **키는 커넥터 설정에만**, 프롬프트엔 넣지 말 것.
 4. **저장소(repo)**: 불필요(아래 프롬프트가 자체완결).
-5. **지시문(Instructions)**: 아래 프롬프트를 그대로 붙여넣는다.
+5. **지시문(Instructions)**: 아래 프롬프트를 그대로 붙여넣는다. ⚠️ **이 문서의 지시문을 고치면**(예: theoryPrompts 추가) claude.ai 루틴 지시문에 **다시 붙여넣어야** 반영된다 — 코드로 자동 반영되지 않는다. 수정 후 한 번 **Run now**로 확인.
 6. 저장 후 **한 번 수동 실행(Run now)**으로 권한·접속 승인 + 동작 확인.
 7. 잘 돌면, 임시로 둔 앱-로컬 예약작업(`dasarang-practice-daily`)은 삭제해 중복을 없앤다.
 
@@ -42,14 +42,25 @@
       - 완료화면=인쇄 아님. 결과물을 id="result"로 감싸고 "💾 내 작품 저장하기" 버튼: 단순 결과물=PNG(외부 라이브러리 없이 foreignObject→canvas→toDataURL), 인터랙티브 산출물=HTML. window.parent.postMessage({type:'student-work-save', mimeType, dataUrl|html, fileName(학생이름 빼고), title, studentName},'*'). 부모가 {type:'student-work-saved',ok}로 답하면 "저장됐어요". 최상위로 열렸거나 12초 무응답이면 파일 다운로드 폴백.
       - 사실 자료가 필요한 칸은 지어내지 말고 학습자가 채우게 하거나 보편 사실만.
    c) 시수마다 create_practice_content(title="[AI초안] {회차order}회차 {시수번호}시수 {시수제목}", description=2~4문장 충분히(대상·활동·결과물·아키타입·분량), categoryName=AI모듈이면 "AI" 그 외 입문/기초는 "기초", html). 반환 id 수집.
-   d) 그 cid를 쓰는 각 반에 대해 먼저 그 반·그 날짜 날짜기록을 읽어 기존 contentIds 확보 후 upsert_lesson_record(classroomId, date=plannedDate, curriculumId=cid, curriculumSessionId=session.id, contentIds=기존∪새id). 반드시 합집합(기존 보존).
+   c2) 시수마다 그 시수의 **NotebookLM 이론 슬라이드용 프롬프트**도 작성(강사가 대시보드에서 복사해 NotebookLM에 붙임). ⚠️ 디자인·형식 지침은 NotebookLM 소스에 이미 고정 → 여기선 **그 시수 '내용'만** 담는다(디자인/형식 재설명 금지). details에서 값을 가져와 아래 형식으로:
+      ```
+      이번 시수의 이론 슬라이드 내용을 만들어 주세요.
+      - 회차/시수: {회차order}회차 {시수번호}시수
+      - 주제: {시수제목}
+      - 모듈: {모듈}
+      - 주요 활동/내용: {가르칠 내용 또는 주요활동}
+      - 이 시수의 결과물(정리): {결과물 또는 정리 문장}
+      - 흐름: 위 내용을 하나씩 익히고, 마지막에 결과물을 완성한 뒤 이어지는 인터랙티브 실습으로 연결.
+      ```
+      시수 순서대로 모아 theoryPrompts 배열을 만든다: `[{label:"{시수번호}시수 · {예: 앞 40분 기초}", prompt:"<위 프롬프트 전문>"}, ...]`.
+   d) 그 cid를 쓰는 각 반에 대해 먼저 그 반·그 날짜 날짜기록을 읽어 기존 contentIds 확보 후 upsert_lesson_record(classroomId, date=plannedDate, curriculumId=cid, curriculumSessionId=session.id, contentIds=기존∪새id, theoryPrompts=c2의 배열). contentIds는 반드시 합집합(기존 보존). theoryPrompts는 그 회차 시수 전체로 **교체**(union 아님; 공유 반 모두 동일하게 줌). → 강사 대시보드 '이론 수업'에 "N번째 이론수업 프롬프트"(복사 버튼)로 뜬다.
 3) (선택) mutate_curriculum_sessions(update)로 회차 plan contentIds도 합집합 동기화. status 변경 금지.
 
 ## 절대 금지
 - publishedLessons 안 건드림(학생 공개 X, 게이팅 유지). 회차 status를 done/skipped로 안 바꿈. 이미 [AI초안] 있는 회차 중복 생성 금지. 커리큘럼당 한 번에 1회차(모든 시수)만.
 
 ## 종료
-- 어느 커리큘럼/회차/반/날짜에 무엇을 만들었는지, 어떤 contentId가 어느 날짜기록에 들어갔는지 짧게 로그. 별도 알림 없음.
+- 어느 커리큘럼/회차/반/날짜에 무엇을 만들었는지, 어떤 contentId가 어느 날짜기록에 들어갔는지, theoryPrompts를 몇 개 어느 회차에 넣었는지 짧게 로그. 별도 알림 없음.
 ```
 
 ---

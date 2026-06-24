@@ -225,6 +225,7 @@ export interface UpsertLessonRecordInput {
   attendance?: AttendanceRecord[];
   curriculumId?: string;
   curriculumSessionId?: string;
+  theoryPrompts?: Array<{ label?: string; prompt: string }>;
 }
 
 const VALID_ATTENDANCE_STATUSES = new Set(['Present', 'Absent', 'Late']);
@@ -317,6 +318,19 @@ export const upsertLessonRecord = async (input: UpsertLessonRecordInput) => {
   }
   if (input.attendance !== undefined) {
     updates.attendance = validateAttendance(input.attendance);
+  }
+  if (input.theoryPrompts !== undefined) {
+    if (!Array.isArray(input.theoryPrompts)) {
+      throw new AdminApiError(400, 'theoryPrompts는 배열이어야 합니다.');
+    }
+    // 시수별 NotebookLM 이론 프롬프트. 빈 prompt는 버리고, 빈 label 키는 빼서 Firestore undefined를 피한다.
+    updates.theoryPrompts = input.theoryPrompts
+      .map((entry) => {
+        const label = typeof entry?.label === 'string' ? entry.label.trim() : '';
+        const prompt = typeof entry?.prompt === 'string' ? entry.prompt : '';
+        return label ? { label, prompt } : { prompt };
+      })
+      .filter((entry) => entry.prompt.trim());
   }
   if (curriculumId) {
     updates.curriculumId = curriculumId;
