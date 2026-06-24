@@ -303,6 +303,9 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const [theoryLabelInput, setTheoryLabelInput] = useState('');
   const [isPickingTheorySlide, setIsPickingTheorySlide] = useState(false);
   const [copiedPromptIndex, setCopiedPromptIndex] = useState<number | null>(null);
+  // 이론 프롬프트 보기·수정 팝업: 열린 프롬프트 index와 편집 중 본문.
+  const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null);
+  const [promptDraft, setPromptDraft] = useState('');
   const [isEndLessonModalOpen, setIsEndLessonModalOpen] = useState(false);
 
   const [generationMessage, setGenerationMessage] = useState<string | null>(null);
@@ -975,6 +978,37 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       theorySlideUrl: '',
       theorySlides: effectiveTheorySlides.filter((_, slideIndex) => slideIndex !== index),
     });
+  };
+
+  // 이론 슬라이드 순서 바꾸기 (위/아래). 만든 순서 고정이 아니라 강사가 직접 정렬한다.
+  const handleMoveTheorySlide = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= effectiveTheorySlides.length) {
+      return;
+    }
+    const base = currentDateRecord ?? createDateRecord();
+    const reordered = [...effectiveTheorySlides];
+    [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+    onSaveDateRecord({ ...base, theorySlideUrl: '', theorySlides: reordered });
+  };
+
+  // 이론 프롬프트 보기·수정 팝업 열기 (본문을 편집 버퍼로 복사).
+  const handleOpenPromptEditor = (index: number) => {
+    setPromptDraft(effectiveTheoryPrompts[index]?.prompt ?? '');
+    setEditingPromptIndex(index);
+  };
+
+  // 편집한 이론 프롬프트 저장. 해당 index의 prompt만 교체하고 나머지는 보존한다.
+  const handleSaveTheoryPrompt = () => {
+    if (editingPromptIndex === null || !currentDateRecord) {
+      setEditingPromptIndex(null);
+      return;
+    }
+    const nextPrompts = effectiveTheoryPrompts.map((item, idx) =>
+      idx === editingPromptIndex ? { ...item, prompt: promptDraft } : item
+    );
+    onSaveDateRecord({ ...currentDateRecord, theoryPrompts: nextPrompts });
+    setEditingPromptIndex(null);
   };
 
   const handlePickTheorySlide = async () => {
@@ -1653,6 +1687,52 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               </p>
             </div>
 
+            {effectiveTheoryPrompts.length > 0 && (
+              <div className="mb-5 space-y-2">
+                <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#8B7E74]">
+                  <Sparkles size={14} className="text-[#8B5E3C]" />
+                  NotebookLM 이론 프롬프트
+                  <DashboardInfoTooltip
+                    content="새벽 루틴이 이 회차 시수별로 자동 만든 NotebookLM 입력 프롬프트입니다. [복사]해서 NotebookLM 입력 칸에 붙여 슬라이드를 만든 뒤, 완성된 슬라이드 링크를 아래 '이론 수업'에 붙이세요. 내용은 [보기·수정]에서 확인하거나 고칠 수 있습니다. 강사 화면 전용입니다."
+                    label="이론 프롬프트 설명 보기"
+                  />
+                </p>
+                {effectiveTheoryPrompts.map((item, index) => {
+                  const promptLabel = item.label?.trim() || `${index + 1}번째 이론수업 프롬프트`;
+                  const isCopied = copiedPromptIndex === index;
+                  return (
+                    <div
+                      key={`${index}-${item.label ?? ''}`}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] px-4 py-2.5"
+                    >
+                      <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#8B5E3C]">
+                        <Sparkles size={13} />
+                        {promptLabel}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleCopyTheoryPrompt(item.prompt, index)}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-[#E5E3DD] bg-white px-3 py-1.5 text-xs font-bold text-[#4A3728] transition-all hover:border-[#8B5E3C]"
+                        >
+                          {isCopied ? <Check size={14} className="text-[#3A7D44]" /> : <Copy size={14} />}
+                          {isCopied ? '복사됨' : '복사'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenPromptEditor(index)}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-[#E5E3DD] bg-white px-3 py-1.5 text-xs font-bold text-[#8B7E74] transition-all hover:border-[#8B5E3C] hover:text-[#8B5E3C]"
+                        >
+                          <Eye size={14} />
+                          보기·수정
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {effectiveTheorySlides.length > 0 && (
               <div className="mb-5 space-y-4">
                 {effectiveTheorySlides.map((slide, index) => {
@@ -1668,6 +1748,26 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                           {slideLabel}
                         </span>
                         <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleMoveTheorySlide(index, -1)}
+                              disabled={index === 0}
+                              aria-label="위로 이동"
+                              className="inline-flex items-center justify-center rounded-xl border border-[#E5E3DD] bg-white p-2 text-[#4A3728] transition-all hover:border-[#8B5E3C] disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              <ChevronUp size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleMoveTheorySlide(index, 1)}
+                              disabled={index === effectiveTheorySlides.length - 1}
+                              aria-label="아래로 이동"
+                              className="inline-flex items-center justify-center rounded-xl border border-[#E5E3DD] bg-white p-2 text-[#4A3728] transition-all hover:border-[#8B5E3C] disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              <ChevronDown size={14} />
+                            </button>
+                          </div>
                           <a
                             href={toSlidePresentUrl(slide.url)}
                             target="_blank"
@@ -1707,52 +1807,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                           <span className="max-w-full truncate text-xs font-medium text-[#A89F94]">{slide.url}</span>
                         </a>
                       )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {effectiveTheoryPrompts.length > 0 && (
-              <div className="mb-5 space-y-3">
-                <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#8B7E74]">
-                  <Sparkles size={14} className="text-[#8B5E3C]" />
-                  NotebookLM 이론 프롬프트
-                  <DashboardInfoTooltip
-                    content="새벽 루틴이 이 회차 시수별로 자동 만든 NotebookLM 입력 프롬프트입니다. [복사]해서 NotebookLM 입력 칸에 붙여 슬라이드를 만든 뒤, 완성된 슬라이드 링크를 아래 '이론 수업 추가'에 붙이세요. 강사 화면 전용입니다."
-                    label="이론 프롬프트 설명 보기"
-                  />
-                </p>
-                {effectiveTheoryPrompts.map((item, index) => {
-                  const promptLabel = item.label?.trim();
-                  const isCopied = copiedPromptIndex === index;
-                  return (
-                    <div
-                      key={`${index}-${promptLabel ?? ''}`}
-                      className="rounded-[28px] border border-[#E5E3DD] bg-[#FBFBFA] p-4"
-                    >
-                      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                        <span className="flex flex-col gap-0.5">
-                          <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-[#FFF5E9] px-3 py-1.5 text-xs font-bold text-[#8B5E3C]">
-                            <Sparkles size={13} />
-                            {index + 1}번째 이론수업 프롬프트
-                          </span>
-                          {promptLabel && (
-                            <span className="px-1 text-[11px] font-medium text-[#A89F94]">{promptLabel}</span>
-                          )}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleCopyTheoryPrompt(item.prompt, index)}
-                          className="inline-flex items-center gap-1.5 rounded-xl border border-[#E5E3DD] bg-white px-3 py-2 text-xs font-bold text-[#4A3728] transition-all hover:border-[#8B5E3C]"
-                        >
-                          {isCopied ? <Check size={14} className="text-[#3A7D44]" /> : <Copy size={14} />}
-                          {isCopied ? '복사됨' : '복사'}
-                        </button>
-                      </div>
-                      <div className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-2xl border border-[#E5E3DD] bg-white px-4 py-3 text-xs leading-relaxed text-[#4A3728]">
-                        {item.prompt}
-                      </div>
                     </div>
                   );
                 })}
@@ -1810,6 +1864,75 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 </div>
               </form>
             </div>
+
+            {editingPromptIndex !== null && (
+              <div
+                className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4"
+                onClick={(event) => {
+                  if (event.target === event.currentTarget) setEditingPromptIndex(null);
+                }}
+              >
+                <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-[28px] bg-white p-7 shadow-2xl">
+                  <div className="mb-4 flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#FFF5E9]">
+                        <Sparkles size={20} className="text-[#8B5E3C]" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-[#4A3728]">
+                          {effectiveTheoryPrompts[editingPromptIndex]?.label?.trim() ||
+                            `${editingPromptIndex + 1}번째 이론수업 프롬프트`}
+                        </h3>
+                        <p className="text-xs text-[#8B7E74]">NotebookLM 입력 프롬프트 · 보기·수정</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEditingPromptIndex(null)}
+                      aria-label="닫기"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-[#8B7E74] transition-all hover:bg-[#F3F2EE]"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+                  <textarea
+                    value={promptDraft}
+                    onChange={(event) => setPromptDraft(event.target.value)}
+                    className="min-h-[280px] flex-1 resize-none overflow-auto whitespace-pre-wrap rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] px-4 py-3 text-sm leading-relaxed text-[#4A3728] outline-none transition-all focus:border-[#8B5E3C] focus:ring-2 focus:ring-[#8B5E3C]"
+                  />
+                  <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleCopyTheoryPrompt(promptDraft, editingPromptIndex)}
+                      className="inline-flex items-center gap-1.5 rounded-2xl border border-[#E5E3DD] bg-white px-5 py-3 text-sm font-bold text-[#4A3728] transition-all hover:border-[#8B5E3C]"
+                    >
+                      {copiedPromptIndex === editingPromptIndex ? (
+                        <Check size={15} className="text-[#3A7D44]" />
+                      ) : (
+                        <Copy size={15} />
+                      )}
+                      {copiedPromptIndex === editingPromptIndex ? '복사됨' : '복사'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingPromptIndex(null)}
+                      className="rounded-2xl bg-[#F3F2EE] px-5 py-3 text-sm font-bold text-[#4A3728] transition-all hover:bg-[#EAE8E2]"
+                    >
+                      닫기
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveTheoryPrompt}
+                      disabled={promptDraft === (effectiveTheoryPrompts[editingPromptIndex]?.prompt ?? '')}
+                      className="inline-flex items-center gap-1.5 rounded-2xl bg-[#8B5E3C] px-5 py-3 text-sm font-bold text-white transition-all hover:bg-[#724D31] disabled:cursor-not-allowed disabled:bg-[#B8AA9A]"
+                    >
+                      <Save size={15} />
+                      저장
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
