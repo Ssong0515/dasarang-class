@@ -18,6 +18,13 @@ interface CalendarException {
   scheduleKey?: string;
 }
 
+/** calendar 앱의 방학/휴강 기간 — 이 기간엔 수업이 통째로 빠진다 */
+interface CalendarBreak {
+  start?: string;
+  end?: string;
+  label?: string;
+}
+
 interface CalendarOrg {
   org?: string;
   project?: string;
@@ -32,6 +39,8 @@ interface CalendarClassDoc {
   endDate?: string;
   /** 기관/단체 목록 (calendar 앱 UI의 "기관/단체명") */
   orgs?: CalendarOrg[];
+  /** 방학/휴강 기간 목록 — 이 기간의 정규 수업은 날짜 배정에서 제외 */
+  breaks?: CalendarBreak[];
   /** calendar 앱에서 '숨기기'한 수업 (가져오기 목록에서 제외) */
   hidden?: boolean;
 }
@@ -127,9 +136,16 @@ export const computeOccurrenceDates = (
       .map((ex) => `${ex.sourceDate}|${ex.scheduleKey}`)
   );
 
+  // 방학/휴강 기간 (calendar getClassBreak와 동일: start~end 양끝 포함, end 없으면 당일)
+  const breaks = (data.breaks || [])
+    .filter((b): b is CalendarBreak & { start: string } => Boolean(b && b.start))
+    .map((b) => ({ start: b.start, end: b.end || b.start }));
+  const isInBreak = (dateStr: string) =>
+    breaks.some((b) => dateStr >= b.start && dateStr <= b.end);
+
   const dates = new Set<string>();
 
-  // 정규 반복 일정 펼치기
+  // 정규 반복 일정 펼치기 (방학 기간은 통째로 제외)
   const cursor = startBound ? new Date(`${startBound}T00:00:00`) : new Date();
   cursor.setHours(0, 0, 0, 0);
   for (let step = 0; step < MAX_LOOKAHEAD_DAYS; step += 1) {
@@ -138,7 +154,7 @@ export const computeOccurrenceDates = (
     if (options.limit && dates.size >= options.limit) break;
 
     const dow = cursor.getDay();
-    if (dow !== 0) {
+    if (dow !== 0 && !isInBreak(dateStr)) {
       const dayIdx = dow - 1; // 월=0 … 토=5
       schedules.forEach((sched, index) => {
         if (!(sched.days || []).includes(dayIdx)) return;
