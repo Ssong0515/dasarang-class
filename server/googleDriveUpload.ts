@@ -64,6 +64,36 @@ export interface UploadResult {
   webViewLink: string;
 }
 
+/**
+ * 관리자(강사) 전용: 학생 결과물 Drive 파일을 스트리밍으로 가져온다.
+ * 파일을 외부 공개(anyone reader)로 전환하지 않고 서버가 서비스 계정으로 대신 읽어 전달한다.
+ * 수업 중 결과물 갤러리에서 비공개 파일을 강사에게만 보여주기 위함.
+ */
+export async function getStudentWorkFile(fileId: string): Promise<{
+  mimeType: string;
+  fileName: string;
+  stream: Readable;
+}> {
+  const drive = getDriveClient();
+
+  const meta = await drive.files.get({
+    fileId,
+    fields: 'mimeType,name',
+    supportsAllDrives: true,
+  });
+
+  const media = await drive.files.get(
+    { fileId, alt: 'media', supportsAllDrives: true },
+    { responseType: 'stream' }
+  );
+
+  return {
+    mimeType: (meta.data.mimeType as string) || 'application/octet-stream',
+    fileName: (meta.data.name as string) || 'file',
+    stream: media.data as unknown as Readable,
+  };
+}
+
 export async function uploadStudentWork(params: {
   classroomId: string;
   studentName: string;

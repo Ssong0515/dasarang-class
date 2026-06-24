@@ -21,7 +21,7 @@ import {
 import { translateText, validateTranslatePayload } from './server/geminiTranslate';
 import { ADMIN_EMAIL, getAdminDb, getFirebaseAdminApp, verifyAdminIdToken, verifyStudentOrAdminIdToken } from './server/firebaseAdmin';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
-import { uploadStudentWork } from './server/googleDriveUpload';
+import { getStudentWorkFile, uploadStudentWork } from './server/googleDriveUpload';
 import {
   syncNotebookLmPptxFolder,
   validateNotebookLmSyncPayload,
@@ -219,6 +219,39 @@ async function startServer() {
         res.json({ ok: true, ...result, postId });
       } catch (error) {
         res.status(500).json({ error: error instanceof Error ? error.message : '업로드에 실패했습니다.' });
+      }
+    }
+  );
+
+  // 강사(관리자) 전용: 학생 결과물 파일을 서버가 대신 읽어 스트리밍한다.
+  // 수업 중 결과물 갤러리에서 비공개 Drive 파일을 외부 공개 없이 보여주기 위함. <img>는 헤더를 못 붙이므로
+  // 프론트가 fetch(Bearer)로 받아 objectURL로 표시한다.
+  app.get(
+    withBasePath(APP_BASE_PATH, '/api/drive/file/:fileId'),
+    requireAdmin,
+    async (req, res) => {
+      const { fileId } = req.params as { fileId?: string };
+      if (!fileId) {
+        res.status(400).json({ error: 'fileId가 필요합니다.' });
+        return;
+      }
+      try {
+        const file = await getStudentWorkFile(fileId);
+        res.setHeader('Content-Type', file.mimeType);
+        res.setHeader('Cache-Control', 'private, max-age=300');
+        file.stream.on('error', (streamError) => {
+          console.error('[drive/file] 스트림 오류:', streamError);
+          if (!res.headersSent) {
+            res.status(502).end();
+          } else {
+            res.end();
+          }
+        });
+        file.stream.pipe(res);
+      } catch (error) {
+        res
+          .status(500)
+          .json({ error: error instanceof Error ? error.message : '파일을 불러오지 못했습니다.' });
       }
     }
   );

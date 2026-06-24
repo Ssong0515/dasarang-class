@@ -2010,6 +2010,9 @@ export default function App() {
               contents={contents}
               curriculums={curriculums}
               publishedLessons={publishedLessons}
+              studentPosts={studentPosts}
+              onReviewStudentPost={handleReviewStudentPost}
+              getAuthToken={getUserIdToken}
               userEmail={user?.email ?? undefined}
               onSaveStudents={handleSaveStudents}
               onMoveStudent={handleMoveStudent}

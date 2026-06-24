@@ -38,6 +38,7 @@ import {
   Lock,
   Unlock,
   RefreshCw,
+  Images,
 } from 'lucide-react';
 import {
   AssignCurriculumDatesResult,
@@ -52,6 +53,7 @@ import {
   Classroom,
   PublishedLesson,
   Student,
+  StudentPost,
   TheorySlide,
 } from '../types';
 import {
@@ -78,6 +80,7 @@ import { isAttendanceExcluded } from '../utils/attendance';
 import { openDriveFolderPicker, openDriveSlidePicker } from '../utils/drivePicker';
 import { SlideEmbed } from './StudentContentPreview';
 import { SessionDetailModal } from './SessionDetailModal';
+import { ClassroomResultGallery } from './ClassroomResultGallery';
 
 interface ClassroomDashboardProps {
   classroom: Classroom;
@@ -88,6 +91,12 @@ interface ClassroomDashboardProps {
   contents: LessonContent[];
   curriculums?: Curriculum[];
   publishedLessons?: PublishedLesson[];
+  /** 학생 작품(전체). 결과물 탭에서 이 반 + 날짜로 걸러 보여준다. */
+  studentPosts?: StudentPost[];
+  /** 결과물 탭의 '홈페이지에 공유'(승인)/숨김 — 기존 쇼케이스 파이프라인 재사용. */
+  onReviewStudentPost?: (id: string, action: 'approve' | 'hide') => Promise<void>;
+  /** 비공개 Drive 결과물 파일을 강사 토큰으로 받아오기 위한 ID 토큰 게터. */
+  getAuthToken?: () => Promise<string | null>;
   userEmail?: string;
   onSaveStudents: (classroomId: string, students: Student[]) => Promise<void>;
   onMoveStudent: (sourceClassroomId: string, targetClassroomId: string, studentId: string) => Promise<void>;
@@ -116,7 +125,7 @@ interface ClassroomDashboardProps {
   onNavigateToContent?: (contentId: string) => void;
 }
 
-type Tab = 'dashboard' | 'students' | 'curriculum' | 'settings';
+type Tab = 'dashboard' | 'results' | 'students' | 'curriculum' | 'settings';
 
 const DOW_LABELS = ['월', '화', '수', '목', '금', '토'];
 const SESSION_STATUS_LABELS: Record<CurriculumSessionStatus, string> = {
@@ -253,6 +262,9 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   contents,
   curriculums,
   publishedLessons,
+  studentPosts,
+  onReviewStudentPost,
+  getAuthToken,
   userEmail,
   onSaveStudents,
   onMoveStudent,
@@ -2711,6 +2723,23 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     </section>
   );
 
+  const renderResultsTab = () =>
+    getAuthToken ? (
+      <motion.div
+        key="results"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10 }}
+      >
+        <ClassroomResultGallery
+          classroom={classroom}
+          posts={studentPosts || []}
+          getAuthToken={getAuthToken}
+          onReview={onReviewStudentPost}
+        />
+      </motion.div>
+    ) : null;
+
   const renderStudentsTab = () => (
     <motion.div
       key="students"
@@ -3473,6 +3502,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
         <div className="mb-8 flex gap-8 border-b border-[#E5E3DD]">
           {[
             { id: 'dashboard', label: '수업 대시보드', icon: ClipboardList },
+            { id: 'results', label: '결과물', icon: Images },
             { id: 'students', label: '학생 명단 관리', icon: Users },
             { id: 'curriculum', label: '커리큘럼·시간표', icon: CalendarClock },
             { id: 'settings', label: '클래스 설정', icon: Settings },
@@ -3499,11 +3529,13 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
         <AnimatePresence mode="wait">
           {activeTab === 'dashboard'
             ? renderDashboardTab()
-            : activeTab === 'students'
-              ? renderStudentsTab()
-              : activeTab === 'curriculum'
-                ? renderCurriculumTab()
-                : renderSettingsTab()}
+            : activeTab === 'results'
+              ? renderResultsTab()
+              : activeTab === 'students'
+                ? renderStudentsTab()
+                : activeTab === 'curriculum'
+                  ? renderCurriculumTab()
+                  : renderSettingsTab()}
         </AnimatePresence>
       </div>
       <SessionDetailModal session={detailSession} onClose={() => setDetailSession(null)} />
