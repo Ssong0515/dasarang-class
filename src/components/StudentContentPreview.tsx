@@ -187,42 +187,24 @@ const iframeHeightScriptTag = `
   <\/script>
 `;
 
-// 실습 iframe 안에 떠 있는 🌐 번역 버튼 + 브리지. 크롬 페이지 번역은 샌드박스 iframe 내부를 번역하지 않으므로
-// (크로뮴 41090662, wontfix), 실습 HTML이 화면의 한국어 텍스트를 부모(StudentPage)에 보내 Gemini로 번역받아 채운다.
-// 부모 메시지 규약: 실습→부모 { type:'practice-translate', requestId, texts:string[], targetLanguage }, 부모→실습 { type:'practice-translate-result', requestId, map }.
+// 실습 iframe 안에 떠 있는 🌐 번역 버튼. 크롬 페이지 번역은 샌드박스 iframe 내부를 번역하지 않으므로
+// (크로뮴 41090662, wontfix), 실습 HTML 자체에 번역 사전을 심어 두고(루틴이 생성 시 주입) 버튼으로 치환한다.
+// 사전 규약: window.__DSR_TR__ = { "러시아어": { "원문": "번역", ... }, "영어": {...} }. 사전이 없으면 버튼을 띄우지 않는다.
 const iframeTranslateScriptTag = `
   <script>
   (function () {
-    if (window.self === window.top) return;            // 앱 밖(단독 실행)에서는 부모가 없어 번역 불가 → 버튼 숨김
     if (window.__dsrTrInit) return; window.__dsrTrInit = true;
 
-    var LANGS = [
-      { ko: '러시아어', api: 'Russian' },
-      { ko: '영어', api: 'English' },
-      { ko: '중국어', api: 'Chinese (Simplified)' },
-      { ko: '베트남어', api: 'Vietnamese' },
-      { ko: '우즈베크어', api: 'Uzbek' },
-      { ko: '몽골어', api: 'Mongolian' },
-      { ko: '네팔어', api: 'Nepali' },
-      { ko: '필리핀어', api: 'Filipino' },
-      { ko: '태국어', api: 'Thai' },
-      { ko: '인도네시아어', api: 'Indonesian' },
-      { ko: '캄보디아어', api: 'Khmer' },
-      { ko: '미얀마어', api: 'Burmese' }
-    ];
+    var TR = window.__DSR_TR__;                       // 루틴이 실습 HTML에 심어 둔 번역 사전(언어명 -> {원문: 번역})
+    if (!TR || typeof TR !== 'object') return;        // 사전이 없으면(옛 콘텐츠 등) 번역 버튼 자체를 띄우지 않는다
+    var LANGS = Object.keys(TR).filter(function (k) { return TR[k] && typeof TR[k] === 'object'; });
+    if (LANGS.length === 0) return;
+
     var KO = /[\\uAC00-\\uD7A3]/;       // 한글이 든 텍스트만 번역
-    var cache = {};                     // api언어 -> { 원문: 번역 }
     var originals = [];                  // 번역으로 바뀐 텍스트 노드 모음(원문 복원용)
-    var state = { lang: null, showOriginal: false, busy: false };
-    var pending = {};                    // requestId -> api언어
-    var reqId = 0;
+    var state = { lang: null, showOriginal: false };
     var root = null, menuOpen = false;
 
-    function koLabelFor(api) {
-      for (var i = 0; i < LANGS.length; i++) if (LANGS[i].api === api) return LANGS[i].ko;
-      return api;
-    }
-    function noPending() { for (var k in pending) if (pending.hasOwnProperty(k)) return false; return true; }
     function notifyHeight() { try { window.dispatchEvent(new Event('resize')); } catch (e) {} }
 
     function isSkippable(node) {
@@ -249,17 +231,9 @@ const iframeTranslateScriptTag = `
         fn(n, key);
       }
     }
-    function collectUntranslated(api) {
-      var dict = cache[api] || {};
-      var seen = {}, list = [];
-      eachKoTextNode(function (n, key) {
-        if (dict[key] == null && !seen[key]) { seen[key] = 1; list.push(key); }
-      });
-      return list;
-    }
     function applyTranslations() {
       if (!state.lang || state.showOriginal) return;
-      var dict = cache[state.lang] || {};
+      var dict = TR[state.lang] || {};
       eachKoTextNode(function (n, key) {
         var tr = dict[key];
         if (tr == null || n.__dsrTr === tr) return;
@@ -276,41 +250,13 @@ const iframeTranslateScriptTag = `
       }
       notifyHeight();
     }
-    function requestTranslate(api, list) {
-      setBusy(true);
-      var id = ++reqId; pending[id] = api;
-      window.parent.postMessage({ type: 'practice-translate', requestId: id, texts: list, targetLanguage: api }, '*');
-      setTimeout(function () { if (pending[id]) { delete pending[id]; if (noPending()) setBusy(false); } }, 20000);
-    }
-    function ensureTranslated() {
-      if (!state.lang || state.showOriginal) return;
-      var todo = collectUntranslated(state.lang);
-      if (todo.length) requestTranslate(state.lang, todo);
-      applyTranslations();
-    }
-    function selectLang(api) { state.lang = api; state.showOriginal = false; menuOpen = false; renderUI(); ensureTranslated(); }
+    function selectLang(lang) { state.lang = lang; state.showOriginal = false; menuOpen = false; renderUI(); applyTranslations(); }
     function toggleOriginal() {
       state.showOriginal = !state.showOriginal;
       if (state.showOriginal) restoreOriginals(); else applyTranslations();
       renderUI();
     }
     function turnOff() { restoreOriginals(); state.lang = null; state.showOriginal = false; menuOpen = false; renderUI(); }
-    function setBusy(b) { state.busy = b; renderUI(); }
-
-    window.addEventListener('message', function (e) {
-      var d = e.data;
-      if (!d) return;
-      if (d.type === 'practice-translate-pong') { init(); return; }   // 부모가 번역을 지원할 때만 버튼을 띄운다
-      if (d.type !== 'practice-translate-result') return;
-      var api = pending[d.requestId];
-      if (api == null) return;
-      delete pending[d.requestId];
-      var dict = cache[api] || (cache[api] = {});
-      var m = d.map || {};
-      for (var k in m) if (m.hasOwnProperty(k)) dict[k] = m[k];
-      if (noPending()) setBusy(false);
-      if (state.lang === api && !state.showOriginal) applyTranslations();
-    });
 
     function ensureRoot() {
       if (root) return;
@@ -334,10 +280,10 @@ const iframeTranslateScriptTag = `
       document.body.appendChild(root);
     }
     function buildMenu(container) {
-      LANGS.forEach(function (l) {
+      LANGS.forEach(function (lang) {
         var b = document.createElement('button');
-        b.textContent = l.ko;
-        b.onclick = function () { selectLang(l.api); };
+        b.textContent = lang;
+        b.onclick = function () { selectLang(lang); };
         container.appendChild(b);
       });
       if (menuOpen) container.classList.add('open');
@@ -350,13 +296,13 @@ const iframeTranslateScriptTag = `
       if (!state.lang) {
         var main = document.createElement('button');
         main.className = 'dsr-btn';
-        main.textContent = state.busy ? '번역 중…' : '🌐 번역';
+        main.textContent = '🌐 번역';
         main.onclick = function () { menuOpen = !menuOpen; renderUI(); };
         row.appendChild(main);
       } else {
         var chip = document.createElement('span');
         chip.className = 'dsr-chip';
-        chip.textContent = state.busy ? '번역 중…' : ('🌐 ' + koLabelFor(state.lang));
+        chip.textContent = '🌐 ' + state.lang;
         row.appendChild(chip);
         var toggle = document.createElement('button');
         toggle.className = 'dsr-btn ghost';
@@ -387,16 +333,13 @@ const iframeTranslateScriptTag = `
         var mo = new MutationObserver(function () {
           if (!state.lang || state.showOriginal) return;
           clearTimeout(moTimer);
-          moTimer = setTimeout(ensureTranslated, 250);
+          moTimer = setTimeout(applyTranslations, 250);
         });
         mo.observe(document.body, { childList: true, subtree: true });
       } catch (e) {}
     }
-    // 부모(학생 페이지)가 번역 브리지를 지원하는지 핑/퐁으로 확인 → 지원할 때만 버튼 표시. (관리자 미리보기 등 미지원 화면에선 안 뜸)
-    function pingParent() { try { window.parent.postMessage({ type: 'practice-translate-ping' }, '*'); } catch (e) {} }
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pingParent);
-    else pingParent();
-    setTimeout(pingParent, 600);   // 부모 리스너가 늦게 붙는 경우 대비
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+    else init();
   })();
   <\/script>
 `;

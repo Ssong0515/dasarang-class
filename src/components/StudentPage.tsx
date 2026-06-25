@@ -107,7 +107,6 @@ interface StudentPageProps {
 }
 
 type Language = 'KO' | 'EN' | 'RU' | 'ZH';
-type TranslationLanguage = Exclude<Language, 'KO'>;
 
 type StudentHistoryState = {
   studentPageView?: typeof STUDENT_HOME_HISTORY_VIEW | typeof STUDENT_CLASSROOM_HISTORY_VIEW;
@@ -272,39 +271,6 @@ const getInitialActiveClassroomId = () => {
   return null;
 };
 
-const getClassroomTranslationCacheKey = (
-  classroomId: string,
-  classroomName: string,
-  language: TranslationLanguage
-) => `${classroomId}::${classroomName}::${language}`;
-
-const translateText = async (
-  text: string,
-  targetLanguage: TranslationLanguage,
-  signal: AbortSignal,
-  idToken?: string | null
-) => {
-  const response = await fetch(resolveAppPath('api/translate'), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-    },
-    body: JSON.stringify({
-      text,
-      targetLanguage,
-    }),
-    signal,
-  });
-
-  if (!response.ok) {
-    throw new Error('Translation failed');
-  }
-
-  const payload = (await response.json()) as { translatedText?: string };
-  return payload.translatedText?.trim() || null;
-};
-
 const calculateContentDropdownPosition = (button: HTMLElement): ContentDropdownPosition => {
   const rect = button.getBoundingClientRect();
   const viewportWidth = window.innerWidth;
@@ -348,9 +314,6 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   const [selectedContent, setSelectedContent] = useState<LessonContent | null>(null);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [contentDropdownPosition, setContentDropdownPosition] = useState<ContentDropdownPosition | null>(null);
-  const [translatedClassroomNames, setTranslatedClassroomNames] = useState<Record<string, string>>(
-    {}
-  );
   // 강사 미리보기 전용: 이 날짜 기준으로 '공개된 실습'을 본다. 실제 학생(isAdmin=false)은 항상 실제 오늘만 본다.
   const [previewDate, setPreviewDate] = useState(getLocalDateString(new Date()));
 
@@ -507,83 +470,6 @@ export const StudentPage: React.FC<StudentPageProps> = ({
     // 저장 대상 반은 effectiveClassroomIdRef(ref)로 항상 최신값을 읽으므로 deps에 넣지 않는다.
   }, [getAuthToken]);
 
-  // 실습(iframe) 번역 브리지: 실습 HTML의 🌐 번역 버튼이 보낸 한국어 문구들을 Gemini(/api/translate)로 번역해 돌려준다.
-  // iframe 내부는 크롬 번역이 안 되므로(샌드박스 iframe), 앱이 대신 번역해 준다. 답신은 보낸 iframe(event.source)에만.
-  useEffect(() => {
-    const handlePracticeTranslate = async (event: MessageEvent) => {
-      const data = event.data as
-        | { type?: string; requestId?: number; texts?: unknown; targetLanguage?: unknown }
-        | null;
-      if (!data) return;
-      // 실습 iframe의 핑에 응답 → 실습 쪽이 번역 버튼을 띄운다(이 핸들러가 있는 화면에서만 번역 지원).
-      if (data.type === 'practice-translate-ping') {
-        try {
-          (event.source as Window | null)?.postMessage({ type: 'practice-translate-pong' }, '*');
-        } catch {
-          /* iframe이 사라진 경우 등 무시 */
-        }
-        return;
-      }
-      if (data.type !== 'practice-translate') return;
-      const source = event.source as Window | null;
-      const requestId = data.requestId;
-      const reply = (map: Record<string, string>) => {
-        try {
-          source?.postMessage({ type: 'practice-translate-result', requestId, map }, '*');
-        } catch {
-          /* iframe이 사라진 경우 등 무시 */
-        }
-      };
-
-      const targetLanguage = typeof data.targetLanguage === 'string' ? data.targetLanguage.trim() : '';
-      const texts = Array.isArray(data.texts)
-        ? Array.from(
-            new Set(
-              data.texts
-                .filter((value): value is string => typeof value === 'string')
-                .map((value) => value.trim())
-                .filter(Boolean)
-            )
-          ).slice(0, 200)
-        : [];
-      if (!targetLanguage || texts.length === 0) return reply({});
-
-      let idToken: string | null = null;
-      try {
-        idToken = (await getAuthToken?.()) ?? null;
-      } catch {
-        idToken = null;
-      }
-
-      const controller = new AbortController();
-      const map: Record<string, string> = {};
-      let cursor = 0;
-      const worker = async () => {
-        while (cursor < texts.length) {
-          const original = texts[cursor++];
-          try {
-            const translated = await translateText(
-              original,
-              targetLanguage as TranslationLanguage,
-              controller.signal,
-              idToken
-            );
-            if (translated) map[original] = translated;
-          } catch {
-            /* 개별 문구 실패는 건너뛴다(부분 번역 허용) */
-          }
-        }
-      };
-      await Promise.all(
-        Array.from({ length: Math.min(6, texts.length) }, () => worker())
-      );
-      reply(map);
-    };
-
-    window.addEventListener('message', handlePracticeTranslate);
-    return () => window.removeEventListener('message', handlePracticeTranslate);
-  }, [getAuthToken]);
-
   // 종료 안내가 열려 있는 동안 몇 초마다 언어를 바꾼다(읽을 수 있는 속도). 닫히면 멈추고 한국어로 초기화.
   useEffect(() => {
     if (!isEndNoticeOpen) return;
@@ -594,8 +480,6 @@ export const StudentPage: React.FC<StudentPageProps> = ({
     return () => clearInterval(id);
   }, [isEndNoticeOpen]);
 
-  const homeTranslationCacheRef = useRef<Record<string, string>>({});
-  const homeTranslationRequestIdRef = useRef(0);
   const hasManagedHistoryEntryRef = useRef(false);
 
   // Set to true to restore the classroom selection home screen
@@ -743,13 +627,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
     applyHomeViewState();
   };
 
-  const getClassroomDisplayName = (classroom: Classroom) => {
-    if (lang === 'KO') {
-      return classroom.name;
-    }
-
-    return translatedClassroomNames[classroom.id] || classroom.name;
-  };
+  const getClassroomDisplayName = (classroom: Classroom) => classroom.name;
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -840,111 +718,6 @@ export const StudentPage: React.FC<StudentPageProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [openDropdown]);
-
-  useEffect(() => {
-    if (lang === 'KO') {
-      setTranslatedClassroomNames({});
-      return;
-    }
-
-    if (activeClassroomId) {
-      return;
-    }
-
-    const targetLanguage = lang as TranslationLanguage;
-    const requestId = ++homeTranslationRequestIdRef.current;
-    const controller = new AbortController();
-
-    const cachedTranslations = classrooms.reduce<Record<string, string>>(
-      (accumulator, classroom) => {
-        const cacheKey = getClassroomTranslationCacheKey(
-          classroom.id,
-          classroom.name,
-          targetLanguage
-        );
-        const cachedValue = homeTranslationCacheRef.current[cacheKey];
-        if (cachedValue) {
-          accumulator[classroom.id] = cachedValue;
-        }
-        return accumulator;
-      },
-      {}
-    );
-
-    setTranslatedClassroomNames(cachedTranslations);
-
-    const pendingClassrooms = classrooms.filter((classroom) => {
-      const cacheKey = getClassroomTranslationCacheKey(
-        classroom.id,
-        classroom.name,
-        targetLanguage
-      );
-      return Boolean(classroom.name.trim()) && !homeTranslationCacheRef.current[cacheKey];
-    });
-
-    if (pendingClassrooms.length === 0) {
-      return () => controller.abort();
-    }
-
-    void (async () => {
-      const idToken = await getAuthToken?.();
-      if (!idToken) {
-        return;
-      }
-
-      const results = await Promise.allSettled(
-        pendingClassrooms.map(async (classroom) => ({
-          classroomId: classroom.id,
-          cacheKey: getClassroomTranslationCacheKey(
-            classroom.id,
-            classroom.name,
-            targetLanguage
-          ),
-          translatedName: await translateText(
-            classroom.name,
-            targetLanguage,
-            controller.signal,
-            idToken
-          ),
-        }))
-      );
-
-      if (controller.signal.aborted || requestId !== homeTranslationRequestIdRef.current) {
-        return;
-      }
-
-      const nextTranslations: Record<string, string> = {};
-      results.forEach((result) => {
-        if (result.status !== 'fulfilled') {
-          const reason = result.reason;
-          if (!(reason instanceof DOMException && reason.name === 'AbortError')) {
-            console.error('Classroom translation failed', reason);
-          }
-          return;
-        }
-
-        if (!result.value.translatedName) {
-          return;
-        }
-
-        homeTranslationCacheRef.current[result.value.cacheKey] = result.value.translatedName;
-        nextTranslations[result.value.classroomId] = result.value.translatedName;
-      });
-
-      if (Object.keys(nextTranslations).length > 0) {
-        setTranslatedClassroomNames((current) => ({
-          ...current,
-          ...nextTranslations,
-        }));
-      }
-    })().catch((error) => {
-      if (!(error instanceof DOMException && error.name === 'AbortError')) {
-        console.error('Classroom translation batch failed', error);
-      }
-    });
-
-    return () => controller.abort();
-  }, [activeClassroomId, classrooms, getAuthToken, lang]);
 
   return (
     <div

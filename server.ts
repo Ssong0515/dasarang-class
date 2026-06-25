@@ -11,14 +11,6 @@ import {
   type ClassroomSyncPayload,
   type StudentSyncPayload,
 } from './server/googleSheetsSync';
-import {
-  ApiError,
-  generateDailyReview,
-  generateMemoDraft,
-  validateGenerateDailyReviewPayload,
-  validateGenerateMemoDraftPayload,
-} from './server/geminiClassNotes';
-import { translateText, validateTranslatePayload } from './server/geminiTranslate';
 import { ADMIN_EMAIL, getAdminDb, getFirebaseAdminApp, verifyAdminIdToken, verifyStudentOrAdminIdToken } from './server/firebaseAdmin';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getStudentWorkFile, uploadStudentWork } from './server/googleDriveUpload';
@@ -408,57 +400,6 @@ async function startServer() {
       });
     }
   });
-
-  app.post(withBasePath(APP_BASE_PATH, '/api/translate'), requireStudentOrAdmin, async (req, res) => {
-    try {
-      const payload = validateTranslatePayload(req.body);
-      const translatedText = await translateText(payload);
-      res.json({ translatedText });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Translation failed.';
-      const statusCode = /required|must be/i.test(message) ? 400 : 500;
-      res.status(statusCode).json({ error: message });
-    }
-  });
-
-  app.post(
-    withBasePath(APP_BASE_PATH, '/api/classroom-date-records/generate-memo-draft'),
-    requireAdmin,
-    async (req, res) => {
-      try {
-        const payload = validateGenerateMemoDraftPayload(req.body);
-        const result = await generateMemoDraft(payload);
-        res.json(result);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Memo draft generation failed.';
-        const statusCode =
-          error instanceof ApiError
-            ? error.statusCode
-            : /required|must be/i.test(message)
-              ? 400
-              : 500;
-        res.status(statusCode).json({ error: message });
-      }
-    }
-  );
-
-  app.post(withBasePath(APP_BASE_PATH, '/api/daily-reviews/generate'), requireAdmin, async (req, res) => {
-    try {
-      const payload = validateGenerateDailyReviewPayload(req.body);
-      const result = await generateDailyReview(payload);
-      res.json(result);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Daily review generation failed.';
-      const statusCode =
-        error instanceof ApiError
-          ? error.statusCode
-          : /required|must be/i.test(message)
-            ? 400
-            : 500;
-      res.status(statusCode).json({ error: message });
-    }
-  });
-
 
   if (!isProduction) {
     const vite = await createViteServer({

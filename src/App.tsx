@@ -114,20 +114,6 @@ type GoogleSheetsSyncErrorState = {
   requests: GoogleSheetsSyncRequest[];
 };
 
-type GeneratedMemoDraftResponse = {
-  memo: string;
-  classroomId: string;
-  date: string;
-  contentIds: string[];
-};
-
-type GeneratedDailyReviewResponse = {
-  summary: string;
-  date: string;
-  recordCount: number;
-  classroomCount: number;
-};
-
 type ContentReorderUpdate = {
   id: string;
   categoryId: string | null;
@@ -1226,36 +1212,6 @@ export default function App() {
     }
   };
 
-  const handleGenerateMemoDraft = async (
-    classroomId: string,
-    date: string,
-    existingMemo?: string
-  ): Promise<string> => {
-    const response = await postAdminRequest<GeneratedMemoDraftResponse>(
-      'api/classroom-date-records/generate-memo-draft',
-      {
-        classroomId,
-        date,
-        existingMemo,
-      }
-    );
-
-    return response.memo;
-  };
-
-  const handleGenerateDailyReview = async (date: string) => {
-    try {
-      const response = await postAdminRequest<GeneratedDailyReviewResponse>(
-        'api/daily-reviews/generate',
-        { date }
-      );
-      return response.summary;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '하루 전체 평 생성에 실패했습니다.';
-      throw new Error(message);
-    }
-  };
-
   const handleUpdateDailyReview = async (id: string, summary: string) => {
     await updateDoc(doc(db, DAILY_REVIEWS_COLLECTION, id), {
       summary,
@@ -2030,7 +1986,6 @@ export default function App() {
               classroomDateRecords={classroomDateRecords}
               onAddMemo={handleAddMemo}
               onDeleteMemo={handleDeleteMemo}
-              onGenerateDailyReview={handleGenerateDailyReview}
               onUpdateDailyReview={handleUpdateDailyReview}
             />
           )}
@@ -2055,7 +2010,6 @@ export default function App() {
               onDeleteDateRecord={handleDeleteClassroomDateRecord}
               onUpdatePublishedLesson={handleUpdatePublishedLesson}
               onEndLesson={handleEndLesson}
-              onGenerateMemoDraft={handleGenerateMemoDraft}
               onUpdateClassroom={handleUpdateClassroom}
               onDeleteClassroom={handleDeleteClassroom}
               onListCalendarClasses={handleListCalendarClasses}

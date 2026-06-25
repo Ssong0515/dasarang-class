@@ -17,7 +17,6 @@
     "delete-legacy-lessons": "node scripts/deleteLegacyLessons.mjs"
   },
   "dependencies": {
-    "@google/genai": "^1.29.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.1.14",

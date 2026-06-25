@@ -114,10 +114,6 @@ interface ClassroomDashboardProps {
   ) => Promise<void>;
   /** 수업 종료: 학생 화면을 잠그고 '오늘 수업 끝!' 안내를 모든 학생 화면에 띄운다. */
   onEndLesson?: (classroomId: string, classroomName: string, date: string) => Promise<void>;
-  onGenerateMemoDraft: (
-    date: string,
-    existingMemo?: string
-  ) => Promise<string>;
   onUpdateClassroom?: (classroomId: string, data: Partial<Classroom>) => void;
   onDeleteClassroom?: (classroomId: string) => void;
   onListCalendarClasses?: () => Promise<CalendarClassSummary[]>;
@@ -276,7 +272,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   onDeleteDateRecord,
   onUpdatePublishedLesson,
   onEndLesson,
-  onGenerateMemoDraft,
   onUpdateClassroom,
   onDeleteClassroom,
   onListCalendarClasses,
@@ -311,7 +306,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
 
   const [generationMessage, setGenerationMessage] = useState<string | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
-  const [isGeneratingMemoDraft, setIsGeneratingMemoDraft] = useState(false);
   const [viewMonth, setViewMonth] = useState(new Date());
   const [settingsDraft, setSettingsDraft] = useState({
     name: classroom.name,
@@ -1076,38 +1070,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       ...base,
       memo: localMemo,
     });
-  };
-
-  const handleGenerateMemoDraftClick = async () => {
-    if (isGeneratingMemoDraft) {
-      return;
-    }
-
-    setGenerationMessage(null);
-    setGenerationError(null);
-    setIsGeneratingMemoDraft(true);
-    let nextGenerationMessage: string | null = null;
-    let nextGenerationError: string | null = null;
-
-    try {
-      const generatedMemo = await onGenerateMemoDraft(classroom.id, selectedDate, localMemo.trim());
-      setLocalMemo(generatedMemo);
-      nextGenerationMessage = '수업 메모가 생성되었습니다. 저장 버튼으로 확정하세요.';
-    } catch (error) {
-      setGenerationError(
-        error instanceof Error ? error.message : '수업 메모 생성에 실패했습니다.'
-      );
-      nextGenerationError =
-        error instanceof Error ? error.message : '수업 메모 생성에 실패했습니다.';
-    } finally {
-      if (nextGenerationMessage) {
-        setGenerationMessage(nextGenerationMessage);
-      }
-      if (nextGenerationError) {
-        setGenerationError(nextGenerationError);
-      }
-      setIsGeneratingMemoDraft(false);
-    }
   };
 
   const updateAttendance = (studentId: string, status: 'Present' | 'Absent' | 'Late') => {
@@ -2548,13 +2510,10 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                     type="button"
                     onClick={handleSaveMemo}
                     disabled={!isMemoDirty}
-                    className="inline-flex items-center gap-2 rounded-xl bg-[#8B5E3C] px-4 py-2 text-[0px] font-bold text-white transition-all hover:bg-[#724D31] disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex items-center gap-2 rounded-xl bg-[#8B5E3C] px-4 py-2 text-xs font-bold text-white transition-all hover:bg-[#724D31] disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    <span className="inline-flex items-center gap-2 text-xs leading-none">
-                      <Save size={14} />
-                      저장
-                    </span>
-                    {isGeneratingMemoDraft ? '메모 초안 생성 중...' : '메모 초안 생성'}
+                    <Save size={14} />
+                    저장
                   </button>
                 </div>
               </div>
@@ -2568,16 +2527,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 placeholder="특이사항이나 운영 메모를 기록하세요."
                 className="custom-scrollbar min-h-[140px] w-full resize-none rounded-2xl border border-[#F3F2EE] bg-[#FBFBFA] p-4 text-sm outline-none transition-all focus:border-[#8B5E3C]"
               />
-              <div className="mt-4 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => void handleGenerateMemoDraftClick()}
-                  disabled={isGeneratingMemoDraft}
-                  className="rounded-xl border border-[#E5E3DD] px-4 py-2 text-xs font-bold text-[#4A3728] transition-all hover:bg-[#F3F2EE] disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isGeneratingMemoDraft ? '메모 초안 생성 중...' : '메모 초안 생성'}
-                </button>
-              </div>
 
               {generationMessage && (
                 <p className="mt-3 text-xs font-medium text-[#2D7A4D]">{generationMessage}</p>

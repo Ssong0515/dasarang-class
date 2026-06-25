@@ -8,7 +8,6 @@ import {
   type LucideIcon,
   Pencil,
   Plus,
-  RefreshCw,
   StickyNote,
   Trash2,
   Users,
@@ -25,7 +24,6 @@ interface MemoSectionProps {
   classroomDateRecords?: ClassroomDateRecord[];
   onAddMemo: (content: string) => void;
   onDeleteMemo: (id: string) => void;
-  onGenerateDailyReview?: (date: string) => Promise<void>;
   onUpdateDailyReview?: (id: string, summary: string) => Promise<void>;
 }
 
@@ -46,9 +44,7 @@ const TEXT = {
   noStudentMemo: '학생별로 작성된 메모가 없습니다.',
   recordedContentCountSuffix: '개 수업 콘텐츠',
   noRecordedContent: '진행 콘텐츠 미선택',
-  generateDailyReview: '하루 전체 평 생성',
-  regenerateDailyReview: '다시 생성',
-  generating: '생성 중...',
+  noDailyReview: '아직 하루 전체 평이 없습니다',
   editReview: '수정',
   saveReview: '저장',
   cancelEdit: '취소',
@@ -62,16 +58,13 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
   classroomDateRecords = [],
   onAddMemo,
   onDeleteMemo,
-  onGenerateDailyReview,
   onUpdateDailyReview,
 }) => {
   const [newMemo, setNewMemo] = useState('');
   const [activeTab, setActiveTab] = useState<Tab>('date-records');
-  const [generatingDate, setGeneratingDate] = useState<string | null>(null);
   const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
   const [savingReviewId, setSavingReviewId] = useState<string | null>(null);
-  const [generateError, setGenerateError] = useState<string | null>(null);
 
   const classroomNamesById = useMemo(
     () => new Map(classrooms.map((c) => [c.id, c.name])),
@@ -123,22 +116,6 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
     if (activeTab !== 'general' || !newMemo.trim()) return;
     onAddMemo(newMemo);
     setNewMemo('');
-  };
-
-  const handleGenerateClick = async (date: string) => {
-    if (!onGenerateDailyReview || generatingDate) return;
-    setGeneratingDate(date);
-    setGenerateError(null);
-    try {
-      await onGenerateDailyReview(date);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '하루 전체 평 생성에 실패했습니다.';
-      setGenerateError(message);
-      // 5초 후 자동으로 에러 메시지 숨김
-      setTimeout(() => setGenerateError(null), 5000);
-    } finally {
-      setGeneratingDate(null);
-    }
   };
 
   const handleEditStart = (review: DailyReview) => {
@@ -241,28 +218,6 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
           ))}
         </div>
 
-        {/* 생성 에러 토스트 */}
-        <AnimatePresence>
-          {generateError && (
-            <motion.div
-              key="generate-error"
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              className="mb-4 flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
-            >
-              <X size={15} className="shrink-0 text-red-500" />
-              <span className="flex-1">{generateError}</span>
-              <button
-                onClick={() => setGenerateError(null)}
-                className="rounded-lg p-1 hover:bg-red-100"
-              >
-                <X size={13} />
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
         <section className="space-y-6">
           <AnimatePresence mode="wait">
 
@@ -277,7 +232,6 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
               >
                 {dateGroups.map(({ date, records }) => {
                   const existingReview = dailyReviewsByDate.get(date);
-                  const isGenerating = generatingDate === date;
                   const isEditing = editingReviewId === existingReview?.id;
                   const isSaving = savingReviewId === existingReview?.id;
 
@@ -335,32 +289,16 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
                                   </span>
                                 </div>
 
-                                {/* 편집/재생성 버튼 */}
-                                {!isEditing && (
+                                {/* 편집 버튼 */}
+                                {!isEditing && onUpdateDailyReview && (
                                   <div className="flex items-center gap-1">
-                                    {onUpdateDailyReview && (
-                                      <button
-                                        onClick={() => handleEditStart(existingReview)}
-                                        className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold text-[#2D7A4D] transition-colors hover:bg-[#C8E6D4]"
-                                      >
-                                        <Pencil size={11} />
-                                        {TEXT.editReview}
-                                      </button>
-                                    )}
-                                    {onGenerateDailyReview && (
-                                      <button
-                                        onClick={() => handleGenerateClick(date)}
-                                        disabled={!!generatingDate}
-                                        className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold text-[#2D7A4D] transition-colors hover:bg-[#C8E6D4] disabled:opacity-50"
-                                      >
-                                        {isGenerating ? (
-                                          <Loader2 size={11} className="animate-spin" />
-                                        ) : (
-                                          <RefreshCw size={11} />
-                                        )}
-                                        {isGenerating ? TEXT.generating : TEXT.regenerateDailyReview}
-                                      </button>
-                                    )}
+                                    <button
+                                      onClick={() => handleEditStart(existingReview)}
+                                      className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold text-[#2D7A4D] transition-colors hover:bg-[#C8E6D4]"
+                                    >
+                                      <Pencil size={11} />
+                                      {TEXT.editReview}
+                                    </button>
                                   </div>
                                 )}
                               </div>
@@ -408,27 +346,11 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
                               )}
                             </div>
                           ) : (
-                            /* 아직 하루 전체 평 없음 → 생성 버튼 */
-                            onGenerateDailyReview && (
-                              <div className="flex items-center justify-between rounded-2xl border border-dashed border-[#C8E6D4] bg-[#F6FBF7] px-4 py-3">
-                                <div className="flex items-center gap-2 text-[12px] text-[#6BAF85]">
-                                  <ClipboardList size={14} />
-                                  <span>아직 하루 전체 평이 없습니다</span>
-                                </div>
-                                <button
-                                  onClick={() => handleGenerateClick(date)}
-                                  disabled={!!generatingDate}
-                                  className="flex items-center gap-1.5 rounded-xl bg-[#2D7A4D] px-4 py-2 text-[12px] font-bold text-white transition-colors hover:bg-[#245F3C] disabled:opacity-50"
-                                >
-                                  {isGenerating ? (
-                                    <Loader2 size={13} className="animate-spin" />
-                                  ) : (
-                                    <ClipboardList size={13} />
-                                  )}
-                                  {isGenerating ? TEXT.generating : TEXT.generateDailyReview}
-                                </button>
-                              </div>
-                            )
+                            /* 아직 하루 전체 평 없음 (Cowork에서 작성 후 커넥터로 등록) */
+                            <div className="flex items-center gap-2 rounded-2xl border border-dashed border-[#C8E6D4] bg-[#F6FBF7] px-4 py-3 text-[12px] text-[#6BAF85]">
+                              <ClipboardList size={14} />
+                              <span>{TEXT.noDailyReview}</span>
+                            </div>
                           )}
                         </div>
                       </div>
