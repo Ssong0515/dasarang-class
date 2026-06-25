@@ -507,6 +507,83 @@ export const StudentPage: React.FC<StudentPageProps> = ({
     // 저장 대상 반은 effectiveClassroomIdRef(ref)로 항상 최신값을 읽으므로 deps에 넣지 않는다.
   }, [getAuthToken]);
 
+  // 실습(iframe) 번역 브리지: 실습 HTML의 🌐 번역 버튼이 보낸 한국어 문구들을 Gemini(/api/translate)로 번역해 돌려준다.
+  // iframe 내부는 크롬 번역이 안 되므로(샌드박스 iframe), 앱이 대신 번역해 준다. 답신은 보낸 iframe(event.source)에만.
+  useEffect(() => {
+    const handlePracticeTranslate = async (event: MessageEvent) => {
+      const data = event.data as
+        | { type?: string; requestId?: number; texts?: unknown; targetLanguage?: unknown }
+        | null;
+      if (!data) return;
+      // 실습 iframe의 핑에 응답 → 실습 쪽이 번역 버튼을 띄운다(이 핸들러가 있는 화면에서만 번역 지원).
+      if (data.type === 'practice-translate-ping') {
+        try {
+          (event.source as Window | null)?.postMessage({ type: 'practice-translate-pong' }, '*');
+        } catch {
+          /* iframe이 사라진 경우 등 무시 */
+        }
+        return;
+      }
+      if (data.type !== 'practice-translate') return;
+      const source = event.source as Window | null;
+      const requestId = data.requestId;
+      const reply = (map: Record<string, string>) => {
+        try {
+          source?.postMessage({ type: 'practice-translate-result', requestId, map }, '*');
+        } catch {
+          /* iframe이 사라진 경우 등 무시 */
+        }
+      };
+
+      const targetLanguage = typeof data.targetLanguage === 'string' ? data.targetLanguage.trim() : '';
+      const texts = Array.isArray(data.texts)
+        ? Array.from(
+            new Set(
+              data.texts
+                .filter((value): value is string => typeof value === 'string')
+                .map((value) => value.trim())
+                .filter(Boolean)
+            )
+          ).slice(0, 200)
+        : [];
+      if (!targetLanguage || texts.length === 0) return reply({});
+
+      let idToken: string | null = null;
+      try {
+        idToken = (await getAuthToken?.()) ?? null;
+      } catch {
+        idToken = null;
+      }
+
+      const controller = new AbortController();
+      const map: Record<string, string> = {};
+      let cursor = 0;
+      const worker = async () => {
+        while (cursor < texts.length) {
+          const original = texts[cursor++];
+          try {
+            const translated = await translateText(
+              original,
+              targetLanguage as TranslationLanguage,
+              controller.signal,
+              idToken
+            );
+            if (translated) map[original] = translated;
+          } catch {
+            /* 개별 문구 실패는 건너뛴다(부분 번역 허용) */
+          }
+        }
+      };
+      await Promise.all(
+        Array.from({ length: Math.min(6, texts.length) }, () => worker())
+      );
+      reply(map);
+    };
+
+    window.addEventListener('message', handlePracticeTranslate);
+    return () => window.removeEventListener('message', handlePracticeTranslate);
+  }, [getAuthToken]);
+
   // 종료 안내가 열려 있는 동안 몇 초마다 언어를 바꾼다(읽을 수 있는 속도). 닫히면 멈추고 한국어로 초기화.
   useEffect(() => {
     if (!isEndNoticeOpen) return;

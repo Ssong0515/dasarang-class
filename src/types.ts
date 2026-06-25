@@ -10,6 +10,8 @@ export interface Student {
   age?: string;
   contact?: string;
   memo?: string;
+  /** 학생의 모국어/사용 언어 (강사가 자유 입력, 예: "러시아어", "베트남어"). 슬라이드 병기 번역 언어를 반별로 정하는 데 쓴다(반에서 가장 많은 2개). */
+  language?: string;
   inactiveAt?: string;
   deletedAt?: string;
 }

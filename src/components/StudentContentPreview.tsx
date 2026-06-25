@@ -187,6 +187,220 @@ const iframeHeightScriptTag = `
   <\/script>
 `;
 
+// 실습 iframe 안에 떠 있는 🌐 번역 버튼 + 브리지. 크롬 페이지 번역은 샌드박스 iframe 내부를 번역하지 않으므로
+// (크로뮴 41090662, wontfix), 실습 HTML이 화면의 한국어 텍스트를 부모(StudentPage)에 보내 Gemini로 번역받아 채운다.
+// 부모 메시지 규약: 실습→부모 { type:'practice-translate', requestId, texts:string[], targetLanguage }, 부모→실습 { type:'practice-translate-result', requestId, map }.
+const iframeTranslateScriptTag = `
+  <script>
+  (function () {
+    if (window.self === window.top) return;            // 앱 밖(단독 실행)에서는 부모가 없어 번역 불가 → 버튼 숨김
+    if (window.__dsrTrInit) return; window.__dsrTrInit = true;
+
+    var LANGS = [
+      { ko: '러시아어', api: 'Russian' },
+      { ko: '영어', api: 'English' },
+      { ko: '중국어', api: 'Chinese (Simplified)' },
+      { ko: '베트남어', api: 'Vietnamese' },
+      { ko: '우즈베크어', api: 'Uzbek' },
+      { ko: '몽골어', api: 'Mongolian' },
+      { ko: '네팔어', api: 'Nepali' },
+      { ko: '필리핀어', api: 'Filipino' },
+      { ko: '태국어', api: 'Thai' },
+      { ko: '인도네시아어', api: 'Indonesian' },
+      { ko: '캄보디아어', api: 'Khmer' },
+      { ko: '미얀마어', api: 'Burmese' }
+    ];
+    var KO = /[\\uAC00-\\uD7A3]/;       // 한글이 든 텍스트만 번역
+    var cache = {};                     // api언어 -> { 원문: 번역 }
+    var originals = [];                  // 번역으로 바뀐 텍스트 노드 모음(원문 복원용)
+    var state = { lang: null, showOriginal: false, busy: false };
+    var pending = {};                    // requestId -> api언어
+    var reqId = 0;
+    var root = null, menuOpen = false;
+
+    function koLabelFor(api) {
+      for (var i = 0; i < LANGS.length; i++) if (LANGS[i].api === api) return LANGS[i].ko;
+      return api;
+    }
+    function noPending() { for (var k in pending) if (pending.hasOwnProperty(k)) return false; return true; }
+    function notifyHeight() { try { window.dispatchEvent(new Event('resize')); } catch (e) {} }
+
+    function isSkippable(node) {
+      var p = node.parentNode;
+      while (p && p.nodeType === 1) {
+        var tag = p.tagName;
+        if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'TEXTAREA' || tag === 'INPUT' || tag === 'NOSCRIPT') return true;
+        if (p.id === 'dsr-tr' || p.getAttribute('data-dsr-skip') === '1') return true;
+        p = p.parentNode;
+      }
+      return false;
+    }
+    // 노드의 '원문 키'. 이미 번역된 노드는 저장해 둔 원문을 기준으로 본다(번역된 현재값을 다시 번역해 접두가 겹치는 것 방지).
+    function origKey(n) { var base = (n.__dsrOrig != null ? n.__dsrOrig : n.nodeValue) || ''; return base.trim(); }
+    function eachKoTextNode(fn) {
+      if (!document.body) return;
+      var w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
+      var n;
+      while ((n = w.nextNode())) {
+        if (!n.nodeValue) continue;
+        var key = origKey(n);
+        if (!key || !KO.test(key)) continue;
+        if (isSkippable(n)) continue;
+        fn(n, key);
+      }
+    }
+    function collectUntranslated(api) {
+      var dict = cache[api] || {};
+      var seen = {}, list = [];
+      eachKoTextNode(function (n, key) {
+        if (dict[key] == null && !seen[key]) { seen[key] = 1; list.push(key); }
+      });
+      return list;
+    }
+    function applyTranslations() {
+      if (!state.lang || state.showOriginal) return;
+      var dict = cache[state.lang] || {};
+      eachKoTextNode(function (n, key) {
+        var tr = dict[key];
+        if (tr == null || n.__dsrTr === tr) return;
+        if (n.__dsrOrig == null) { n.__dsrOrig = n.nodeValue; originals.push(n); }
+        n.nodeValue = n.__dsrOrig.replace(key, tr);   // 항상 원문에서 치환 → 접두 중복 없음
+        n.__dsrTr = tr;
+      });
+      notifyHeight();
+    }
+    function restoreOriginals() {
+      for (var i = 0; i < originals.length; i++) {
+        var n = originals[i];
+        if (n && n.__dsrOrig != null) { n.nodeValue = n.__dsrOrig; n.__dsrTr = null; }
+      }
+      notifyHeight();
+    }
+    function requestTranslate(api, list) {
+      setBusy(true);
+      var id = ++reqId; pending[id] = api;
+      window.parent.postMessage({ type: 'practice-translate', requestId: id, texts: list, targetLanguage: api }, '*');
+      setTimeout(function () { if (pending[id]) { delete pending[id]; if (noPending()) setBusy(false); } }, 20000);
+    }
+    function ensureTranslated() {
+      if (!state.lang || state.showOriginal) return;
+      var todo = collectUntranslated(state.lang);
+      if (todo.length) requestTranslate(state.lang, todo);
+      applyTranslations();
+    }
+    function selectLang(api) { state.lang = api; state.showOriginal = false; menuOpen = false; renderUI(); ensureTranslated(); }
+    function toggleOriginal() {
+      state.showOriginal = !state.showOriginal;
+      if (state.showOriginal) restoreOriginals(); else applyTranslations();
+      renderUI();
+    }
+    function turnOff() { restoreOriginals(); state.lang = null; state.showOriginal = false; menuOpen = false; renderUI(); }
+    function setBusy(b) { state.busy = b; renderUI(); }
+
+    window.addEventListener('message', function (e) {
+      var d = e.data;
+      if (!d) return;
+      if (d.type === 'practice-translate-pong') { init(); return; }   // 부모가 번역을 지원할 때만 버튼을 띄운다
+      if (d.type !== 'practice-translate-result') return;
+      var api = pending[d.requestId];
+      if (api == null) return;
+      delete pending[d.requestId];
+      var dict = cache[api] || (cache[api] = {});
+      var m = d.map || {};
+      for (var k in m) if (m.hasOwnProperty(k)) dict[k] = m[k];
+      if (noPending()) setBusy(false);
+      if (state.lang === api && !state.showOriginal) applyTranslations();
+    });
+
+    function ensureRoot() {
+      if (root) return;
+      var st = document.createElement('style');
+      st.textContent =
+        '#dsr-tr{position:fixed;top:10px;right:10px;z-index:2147483000;font-family:"Malgun Gothic","맑은 고딕",system-ui,sans-serif;text-align:right;}'
+        + '#dsr-tr *{box-sizing:border-box;}'
+        + '#dsr-tr .dsr-row{display:inline-flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap;}'
+        + '#dsr-tr .dsr-btn{display:inline-flex;align-items:center;gap:6px;border:none;border-radius:999px;background:#3b6fe0;color:#fff;font-size:15px;font-weight:800;padding:9px 14px;cursor:pointer;box-shadow:0 4px 12px rgba(40,55,90,.25);}'
+        + '#dsr-tr .dsr-btn.ghost{background:#fff;color:#3b6fe0;border:2px solid #cfd9f5;box-shadow:0 3px 8px rgba(40,55,90,.12);}'
+        + '#dsr-tr .dsr-chip{background:#eafaf0;color:#1a7f47;border:2px solid #56cf8c;border-radius:999px;padding:7px 12px;font-size:14px;font-weight:800;}'
+        + '#dsr-tr .dsr-menu{margin-top:6px;background:#fff;border:2px solid #e4e8f2;border-radius:14px;box-shadow:0 12px 30px rgba(40,55,90,.18);padding:6px;max-height:60vh;overflow:auto;display:none;min-width:160px;text-align:left;}'
+        + '#dsr-tr .dsr-menu.open{display:block;}'
+        + '#dsr-tr .dsr-menu button{display:block;width:100%;text-align:left;border:none;background:none;font-size:15px;font-weight:700;color:#2f3445;padding:9px 12px;border-radius:9px;cursor:pointer;}'
+        + '#dsr-tr .dsr-menu button:hover{background:#eef2fb;}'
+        + '@media print{#dsr-tr{display:none!important;}}';
+      document.head.appendChild(st);
+      root = document.createElement('div');
+      root.id = 'dsr-tr';
+      root.setAttribute('data-dsr-skip', '1');
+      document.body.appendChild(root);
+    }
+    function buildMenu(container) {
+      LANGS.forEach(function (l) {
+        var b = document.createElement('button');
+        b.textContent = l.ko;
+        b.onclick = function () { selectLang(l.api); };
+        container.appendChild(b);
+      });
+      if (menuOpen) container.classList.add('open');
+    }
+    function renderUI() {
+      ensureRoot();
+      root.innerHTML = '';
+      var row = document.createElement('div'); row.className = 'dsr-row';
+      var menu = document.createElement('div'); menu.className = 'dsr-menu';
+      if (!state.lang) {
+        var main = document.createElement('button');
+        main.className = 'dsr-btn';
+        main.textContent = state.busy ? '번역 중…' : '🌐 번역';
+        main.onclick = function () { menuOpen = !menuOpen; renderUI(); };
+        row.appendChild(main);
+      } else {
+        var chip = document.createElement('span');
+        chip.className = 'dsr-chip';
+        chip.textContent = state.busy ? '번역 중…' : ('🌐 ' + koLabelFor(state.lang));
+        row.appendChild(chip);
+        var toggle = document.createElement('button');
+        toggle.className = 'dsr-btn ghost';
+        toggle.textContent = state.showOriginal ? '번역 보기' : '원문 보기';
+        toggle.onclick = toggleOriginal;
+        row.appendChild(toggle);
+        var langBtn = document.createElement('button');
+        langBtn.className = 'dsr-btn ghost';
+        langBtn.textContent = '언어';
+        langBtn.onclick = function () { menuOpen = !menuOpen; renderUI(); };
+        row.appendChild(langBtn);
+        var off = document.createElement('button');
+        off.className = 'dsr-btn ghost';
+        off.textContent = '✕';
+        off.onclick = turnOff;
+        row.appendChild(off);
+      }
+      buildMenu(menu);
+      root.appendChild(row);
+      root.appendChild(menu);
+    }
+
+    var moTimer = null, inited = false;
+    function init() {
+      if (inited) return; inited = true;
+      renderUI();
+      try {
+        var mo = new MutationObserver(function () {
+          if (!state.lang || state.showOriginal) return;
+          clearTimeout(moTimer);
+          moTimer = setTimeout(ensureTranslated, 250);
+        });
+        mo.observe(document.body, { childList: true, subtree: true });
+      } catch (e) {}
+    }
+    // 부모(학생 페이지)가 번역 브리지를 지원하는지 핑/퐁으로 확인 → 지원할 때만 버튼 표시. (관리자 미리보기 등 미지원 화면에선 안 뜸)
+    function pingParent() { try { window.parent.postMessage({ type: 'practice-translate-ping' }, '*'); } catch (e) {} }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pingParent);
+    else pingParent();
+    setTimeout(pingParent, 600);   // 부모 리스너가 늦게 붙는 경우 대비
+  })();
+  <\/script>
+`;
+
 const injectIframeMarkup = (html: string, styleTag: string, scriptTag: string) => {
   let nextHtml = html;
 
@@ -214,7 +428,7 @@ export const buildResponsiveSrcDoc = (html: string) => {
   }
 
   if (/<html[\s>]/i.test(trimmedHtml) || /<body[\s>]/i.test(trimmedHtml) || /<!doctype/i.test(trimmedHtml)) {
-    return injectIframeMarkup(trimmedHtml, iframeResponsiveStyleTag, iframeHeightScriptTag);
+    return injectIframeMarkup(trimmedHtml, iframeResponsiveStyleTag, iframeHeightScriptTag + iframeTranslateScriptTag);
   }
 
   return `<!DOCTYPE html>
@@ -227,6 +441,7 @@ export const buildResponsiveSrcDoc = (html: string) => {
       <body>
         <div class="student-content-root">${trimmedHtml}</div>
         ${iframeHeightScriptTag}
+        ${iframeTranslateScriptTag}
       </body>
     </html>`;
 };

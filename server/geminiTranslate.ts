@@ -1,21 +1,28 @@
 import { GoogleGenAI } from '@google/genai';
 import { normalizeGeminiErrorMessage } from './geminiClient';
 
-const SUPPORTED_LANGUAGES = {
+// 학생 페이지 헤더 언어 선택(코드)과의 하위호환 매핑. 실습 번역 버튼은 임의 언어명(예: "Vietnamese", "러시아어")도 보낼 수 있다.
+const LANGUAGE_CODE_NAMES: Record<string, string> = {
   EN: 'English',
   RU: 'Russian',
   ZH: 'Chinese (Simplified)',
-} as const;
+};
 
 const MAX_TRANSLATION_TEXT_LENGTH = 12000;
+const MAX_TARGET_LANGUAGE_LENGTH = 60;
 const DEFAULT_TRANSLATION_MODEL = 'gemini-3-flash-preview';
 
-export type TranslationLanguage = keyof typeof SUPPORTED_LANGUAGES;
+/** 언어 코드(EN/RU/ZH) 또는 임의 언어명. 학생마다 사용 언어가 다양해 고정 목록으로 제한하지 않는다. */
+export type TranslationLanguage = string;
 
 export interface TranslatePayload {
   text: string;
   targetLanguage: TranslationLanguage;
 }
+
+// 코드면 영어 표기로, 아니면 받은 언어명을 그대로 Gemini에 넘긴다(Gemini가 다양한 언어명을 이해).
+const resolveLanguageName = (targetLanguage: string): string =>
+  LANGUAGE_CODE_NAMES[targetLanguage] ?? targetLanguage;
 
 const getApiKey = () => {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
@@ -26,7 +33,7 @@ const getApiKey = () => {
   return apiKey;
 };
 
-const buildPrompt = (text: string, targetLanguage: TranslationLanguage) => `Translate the following Korean text into ${SUPPORTED_LANGUAGES[targetLanguage]}.
+const buildPrompt = (text: string, targetLanguage: TranslationLanguage) => `Translate the following Korean text into ${resolveLanguageName(targetLanguage)}.
 
 IMPORTANT: This is for a Korean language learning app.
 - DO NOT translate specific Korean vocabulary words or examples written in Hangul.
@@ -45,7 +52,8 @@ export const validateTranslatePayload = (payload: unknown): TranslatePayload => 
   const text = typeof (payload as { text?: unknown }).text === 'string'
     ? (payload as { text: string }).text.trim()
     : '';
-  const targetLanguage = (payload as { targetLanguage?: unknown }).targetLanguage;
+  const targetLanguageRaw = (payload as { targetLanguage?: unknown }).targetLanguage;
+  const targetLanguage = typeof targetLanguageRaw === 'string' ? targetLanguageRaw.trim() : '';
 
   if (!text) {
     throw new Error('text is required.');
@@ -55,13 +63,17 @@ export const validateTranslatePayload = (payload: unknown): TranslatePayload => 
     throw new Error(`text must be ${MAX_TRANSLATION_TEXT_LENGTH} characters or fewer.`);
   }
 
-  if (!targetLanguage || typeof targetLanguage !== 'string' || !(targetLanguage in SUPPORTED_LANGUAGES)) {
-    throw new Error('targetLanguage must be one of EN, RU, or ZH.');
+  if (!targetLanguage) {
+    throw new Error('targetLanguage is required (a language code like EN/RU/ZH or a language name).');
+  }
+
+  if (targetLanguage.length > MAX_TARGET_LANGUAGE_LENGTH) {
+    throw new Error(`targetLanguage must be ${MAX_TARGET_LANGUAGE_LENGTH} characters or fewer.`);
   }
 
   return {
     text,
-    targetLanguage: targetLanguage as TranslationLanguage,
+    targetLanguage,
   };
 };
 

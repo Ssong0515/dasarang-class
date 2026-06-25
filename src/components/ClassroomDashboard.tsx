@@ -291,6 +291,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const [newStudentName, setNewStudentName] = useState('');
   const [newStudentAge, setNewStudentAge] = useState('');
   const [newStudentContact, setNewStudentContact] = useState('');
+  const [newStudentLanguage, setNewStudentLanguage] = useState('');
   const [newStudentMemo, setNewStudentMemo] = useState('');
   const [isStudentCreateFormOpen, setIsStudentCreateFormOpen] = useState(false);
   const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
@@ -1183,6 +1184,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       age: student.age?.trim() || undefined,
       contact: student.contact?.trim() || undefined,
       memo: student.memo?.trim() || undefined,
+      language: student.language?.trim() || undefined,
     });
   };
 
@@ -1229,6 +1231,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       updatedAt: new Date().toISOString(),
       age: newStudentAge,
       contact: newStudentContact,
+      language: newStudentLanguage,
       memo: newStudentMemo,
     });
 
@@ -1245,6 +1248,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     setNewStudentName('');
     setNewStudentAge('');
     setNewStudentContact('');
+    setNewStudentLanguage('');
     setNewStudentMemo('');
     setIsStudentCreateFormOpen(false);
   };
@@ -2693,9 +2697,14 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                   </span>
                 )}
               </div>
-              {(student.age || student.contact || inactiveDate) && (
+              {(student.age || student.contact || student.language || inactiveDate) && (
                 <span className="text-xs text-[#A89F94]">
-                  {[student.age, student.contact, inactiveDate ? `비활성 ${inactiveDate}` : null]
+                  {[
+                    student.age,
+                    student.contact,
+                    student.language,
+                    inactiveDate ? `비활성 ${inactiveDate}` : null,
+                  ]
                     .filter(Boolean)
                     .join(' · ')}
                 </span>
@@ -2756,6 +2765,16 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                       className="rounded-xl border border-[#E5E3DD] px-3 py-2 text-sm focus:border-[#8B5E3C] focus:outline-none"
                     />
                   </div>
+                  <input
+                    value={editingStudent.language || ''}
+                    onChange={(event) =>
+                      setEditingStudent({ ...editingStudent, language: event.target.value })
+                    }
+                    disabled={isSavingStudentAction}
+                    placeholder="사용 언어 (예: 러시아어)"
+                    title="반에서 가장 많은 2개 언어가 이론 슬라이드 병기 번역에 쓰입니다."
+                    className="w-full rounded-xl border border-[#E5E3DD] px-3 py-2 text-sm focus:border-[#8B5E3C] focus:outline-none"
+                  />
                   <textarea
                     value={editingStudent.memo || ''}
                     onChange={(event) =>
@@ -2797,6 +2816,12 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                       <span className="font-medium text-[#4A3728]">{student.contact}</span>
                     </div>
                   )}
+                  {student.language && (
+                    <div className="flex items-center gap-2 text-[#8B7E74]">
+                      <span className="w-16 text-[#A89F94]">사용 언어</span>
+                      <span className="font-medium text-[#4A3728]">{student.language}</span>
+                    </div>
+                  )}
                   {student.memo && (
                     <div className="flex items-start gap-2 text-[#8B7E74]">
                       <span className="w-16 text-[#A89F94]">메모</span>
@@ -2809,7 +2834,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                       <span className="font-medium text-[#4A3728]">{inactiveDate}</span>
                     </div>
                   )}
-                  {!student.age && !student.contact && !student.memo && !inactiveDate && (
+                  {!student.age && !student.contact && !student.language && !student.memo && !inactiveDate && (
                     <p className="italic text-[#A89F94]">추가 정보 없음</p>
                   )}
 
@@ -3031,6 +3056,15 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                       disabled={isSavingStudentAction}
                       placeholder="연락처"
                       className="rounded-2xl border border-[#E5E3DD] bg-white px-4 py-3 text-sm transition-all focus:border-[#8B5E3C] focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      value={newStudentLanguage}
+                      onChange={(event) => setNewStudentLanguage(event.target.value)}
+                      disabled={isSavingStudentAction}
+                      placeholder="사용 언어 (예: 러시아어)"
+                      title="학생의 모국어/사용 언어. 반에서 가장 많은 2개 언어가 이론 슬라이드 병기 번역에 쓰입니다."
+                      className="col-span-2 rounded-2xl border border-[#E5E3DD] bg-white px-4 py-3 text-sm transition-all focus:border-[#8B5E3C] focus:outline-none"
                     />
                     <div className="col-span-2">
                       <textarea

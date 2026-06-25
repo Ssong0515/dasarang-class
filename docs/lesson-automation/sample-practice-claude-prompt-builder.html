@@ -1,0 +1,445 @@
+<title>Claude에게 쉬운 한국어 부탁하기</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-user-select: none; user-select: none; }
+  body { font-family: "Malgun Gothic", "맑은 고딕", system-ui, sans-serif; color: #1f2330; }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 16px 16px 60px; }
+
+  .head { text-align: center; margin-bottom: 10px; }
+  .head h1 { font-size: 30px; letter-spacing: -1px; }
+  .head p { font-size: 17px; color: #5b6172; margin-top: 4px; }
+  .hud { display: inline-flex; gap: 14px; align-items: center; margin-top: 10px;
+    background: #fff7e6; border: 2px solid #ffe2a6; border-radius: 999px; padding: 6px 18px; }
+  .hud .sc { font-size: 20px; font-weight: 900; color: #d98a00; }
+  .hud .combo { font-size: 18px; font-weight: 900; color: #e8584f; min-width: 56px; text-align: left; }
+  .hud .combo.pop { animation: cpop .35s; }
+  @keyframes cpop { 0%{ transform: scale(.5); } 60%{ transform: scale(1.35); } 100%{ transform: scale(1); } }
+
+  .tracker { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap;
+    background: #f4f6fb; border-radius: 16px; padding: 10px; margin: 12px 0 16px; }
+  .chip-t { display: flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 700;
+    color: #9aa0b4; background: #fff; border: 2px solid #e4e8f2; border-radius: 999px; padding: 6px 12px; transition: .25s; }
+  .chip-t.now { border-color: #8a5cf6; color: #8a5cf6; box-shadow: 0 0 0 3px #f1ebff; }
+  .chip-t.done { color: #1a7f47; border-color: #56cf8c; background: #eafaf0; }
+
+  .card { background: #fff; border: 3px solid #e7ebf5; border-radius: 22px; padding: 22px 20px;
+    box-shadow: 0 10px 30px rgba(40,55,90,.06); min-height: 520px; display: flex; flex-direction: column; }
+  .step-no { font-size: 15px; font-weight: 800; color: #8a5cf6; margin-bottom: 2px; }
+  .title { font-size: 24px; font-weight: 800; line-height: 1.25; margin-bottom: 6px; }
+  .guide { font-size: 18px; color: #4a4f60; line-height: 1.45; margin-bottom: 12px; }
+  .guide b { color: #6b3fd0; }
+  .round-badge { font-size: 13px; font-weight: 800; color: #8a5cf6; background: #f1ebff; border-radius: 999px; padding: 4px 12px; }
+  .round-badge.boss { color: #fff; background: linear-gradient(90deg,#f0a32e,#e8584f); }
+  .roundbar { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 10px; }
+
+  .name-in { font-family: inherit; font-size: 22px; text-align: center; padding: 12px 16px; width: 280px; max-width: 100%;
+    border: 3px solid #cfd6e6; border-radius: 12px; -webkit-user-select: text; user-select: text; }
+
+  /* ===== 칩 그룹 ===== */
+  .group { margin-bottom: 14px; }
+  .group .g-label { font-size: 15px; font-weight: 800; color: #2f3445; margin-bottom: 7px; }
+  .opts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .opt { font-family: inherit; font-size: 17px; font-weight: 700; color: #2f3445;
+    background: #fff; border: 2px solid #d7def0; border-radius: 14px; padding: 10px 14px; cursor: pointer; transition: .12s; }
+  .opt .e { margin-right: 5px; }
+  .opt:hover { border-color: #8a5cf6; transform: translateY(-1px); }
+  .opt.sel { background: #f1ebff; border-color: #8a5cf6; color: #6b3fd0; box-shadow: 0 0 0 3px #efe7ff; }
+
+  /* ===== 완성 프롬프트 미리보기 ===== */
+  .preview-label { font-size: 14px; font-weight: 800; color: #8a5cf6; margin: 6px 0 6px; }
+  .preview { background: #f7f5ff; border: 2px dashed #c9bdf3; border-radius: 16px; padding: 16px 18px;
+    font-size: 19px; line-height: 1.6; color: #2a2540; font-weight: 600; min-height: 96px; white-space: pre-wrap; }
+  .preview .slot { color: #b8b0d0; }
+  .preview .fill { color: #6b3fd0; font-weight: 800; }
+
+  .steps4 { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin: 12px 0 4px; }
+  .steps4 span { font-size: 14px; font-weight: 800; color: #5b6172; background: #f4f6fb; border-radius: 999px; padding: 6px 12px; }
+
+  .feedback { text-align: center; font-size: 19px; font-weight: 800; color: #1a7f47; min-height: 26px; margin-top: 8px; }
+  .feedback.no { color: #d6452b; }   /* 안내=빨강, 칭찬=초록(기본) */
+
+  .btnrow { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }
+  .btn { font-family: inherit; font-size: 20px; font-weight: 800; color: #fff; background: #3b6fe0; border: none;
+    border-radius: 14px; padding: 14px 28px; cursor: pointer; box-shadow: 0 6px 0 #2a55b8; transition: .1s; }
+  .btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #2a55b8; }
+  .btn[disabled] { opacity: .45; cursor: not-allowed; box-shadow: 0 6px 0 #2a55b8; }
+  .btn.copy { background: #6b3fd0; box-shadow: 0 6px 0 #4f2ba0; }
+  .btn.copy:active { box-shadow: 0 2px 0 #4f2ba0; }
+  .btn.gray { background:#8b93a7; box-shadow:0 6px 0 #6c7589; }
+  .btn.gold { background: linear-gradient(90deg,#f0a32e,#e8884f); box-shadow:0 6px 0 #c06a1f; }
+
+  /* ===== 결과물 ===== */
+  #result { background:#fff; border:3px solid #e7ebf5; border-radius:18px; padding:18px; }
+  #result h2 { font-size: 23px; text-align:center; margin-bottom: 6px; }
+  #result .sub { text-align:center; color:#5b6172; font-size:15px; margin-bottom:12px; }
+  .pcard { background:#f7f5ff; border:2px solid #e0d8f7; border-radius:14px; padding:12px 14px; margin-bottom:10px; }
+  .pcard .pt { font-size:13px; font-weight:800; color:#8a5cf6; margin-bottom:4px; }
+  .pcard .pp { font-size:16px; line-height:1.5; color:#2a2540; white-space:pre-wrap; }
+  .scoreline { text-align:center; font-size:18px; font-weight:800; color:#d98a00; margin:10px 0; }
+  .badges { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:6px; }
+  .badge { font-size:14px; font-weight:800; color:#fff; background:#56cf8c; border-radius:999px; padding:7px 13px; }
+  .badge.combo { background:#e8584f; } .badge.copy { background:#6b3fd0; } .badge.master { background:linear-gradient(90deg,#f0a32e,#e8584f); }
+
+  #dlrow { display:none; gap:10px; justify-content:center; margin-top:8px; }
+
+  @media print { .btnrow, .tracker, .hud, #dlrow { display:none !important; } }
+</style>
+
+<div class="wrap">
+  <div class="head">
+    <h1>🤖 Claude에게 쉬운 한국어 부탁하기</h1>
+    <p>버튼을 눌러 부탁을 만들고, 복사해서 Claude에 붙여넣어요.</p>
+    <div class="hud"><span class="sc">⭐ <b id="score">0</b></span><span class="combo" id="combo">🔥 0</span></div>
+  </div>
+  <div class="tracker" id="tracker"></div>
+  <div class="card" id="card"></div>
+</div>
+
+<script>
+(function(){
+  var byId = function(id){ return document.getElementById(id); };
+  var studentName = '';
+  var score = 0, combo = 0, maxCombo = 0, copiedCount = 0;
+  var built = [];          // [{ title, prompt }]
+  var idx = 0;             // 현재 스테이지
+  var sel = {};            // 현재 스테이지의 그룹 선택값
+  var copiedThisStage = false;     // 이 스테이지에서 복사 성공했는지(복사왕 뱃지용)
+  var completedThisStage = false;  // 이 스테이지 프롬프트를 완성했는지(진행은 복사가 아니라 완성으로)
+
+  var RESULT_TITLE = 'Claude 부탁 카드';
+  var RESULT_BASENAME = 'claude_부탁카드';
+
+  // ── 스테이지(미션) 정의 ──────────────────────────────────────
+  // build(sel, name): 선택값으로 완성된 '한국어' 프롬프트를 만든다. 빠진 칸은 null을 돌려준다.
+  var STAGES = [
+    {
+      key: 'intro', title: '나를 소개해 달라고 부탁하기', emoji: '🙋',
+      groups: [
+        { key: 'tone', label: '어떻게 써 달라고 할까요?', opts: [
+          { e:'🟢', l:'쉬운 한국어로', v:'쉬운 한국어로' },
+          { e:'✂️', l:'짧고 쉽게', v:'짧고 쉽게' },
+          { e:'🙇', l:'높임말로', v:'높임말로' } ] },
+        { key: 'len', label: '몇 문장으로?', opts: [
+          { e:'3️⃣', l:'세 문장', v:'세 문장으로' },
+          { e:'5️⃣', l:'다섯 문장', v:'다섯 문장으로' } ] },
+        { key: 'like', label: '내가 좋아하는 것은?', opts: [
+          { e:'⚽', l:'축구', v:'축구' }, { e:'🎵', l:'음악', v:'음악' },
+          { e:'🍳', l:'요리', v:'요리' }, { e:'🎨', l:'그림', v:'그림' },
+          { e:'🎮', l:'게임', v:'게임' } ] }
+      ],
+      build: function(s, name){
+        if(!s.tone || !s.len || !s.like) return null;
+        return '안녕하세요. 제 자기소개를 ' + s.tone + ' ' + s.len + ' 써 주세요. 저는 ' + name + '이고, ' + s.like + '을(를) 좋아해요.';
+      }
+    },
+    {
+      key: 'easy', title: '어려운 글을 쉽게 바꿔 달라고 부탁하기', emoji: '🔁',
+      groups: [
+        { key: 'kind', label: '어떤 글이 어려워요?', opts: [
+          { e:'🏫', l:'가정통신문', v:'학교 가정통신문' }, { e:'🏥', l:'병원 안내문', v:'병원 안내문' },
+          { e:'💬', l:'문자 메시지', v:'문자 메시지' }, { e:'📰', l:'뉴스 기사', v:'뉴스 기사' } ] },
+        { key: 'tone', label: '어떻게 바꿔 달라고 할까요?', opts: [
+          { e:'🟢', l:'쉬운 한국어로', v:'쉬운 한국어로' },
+          { e:'🧒', l:'초등학생도 알게', v:'초등학생도 알 수 있게' } ] }
+      ],
+      build: function(s){
+        if(!s.kind || !s.tone) return null;
+        return '제가 받은 ' + s.kind + '이 너무 어려워요. 외국인도 이해할 수 있게 ' + s.tone + ' 다시 설명해 주세요. (그 내용을 제가 아래에 붙여넣을게요.)';
+      }
+    },
+    {
+      key: 'word', title: '모르는 말의 뜻을 물어보기', emoji: '📖',
+      groups: [
+        { key: 'what', label: '무엇의 뜻이 궁금해요?', opts: [
+          { e:'📖', l:'단어', v:'단어' }, { e:'🔤', l:'줄임말', v:'줄임말' }, { e:'🀄', l:'사자성어', v:'사자성어' } ] },
+        { key: 'extra', label: '같이 부탁할 것은?', opts: [
+          { e:'✍️', l:'예문도 들어줘', v:'예문도 하나 들어 주세요.' },
+          { e:'↔️', l:'비슷한 말도', v:'비슷한 말도 알려 주세요.' } ] }
+      ],
+      build: function(s){
+        if(!s.what || !s.extra) return null;
+        return '제가 모르는 ' + s.what + '의 뜻을 쉬운 한국어로 알려 주세요. ' + s.extra;
+      }
+    },
+    {
+      key: 'life', title: '한국 생활에서 뭐라고 말할지 물어보기', emoji: '🗣️',
+      groups: [
+        { key: 'place', label: '어디에서요?', opts: [
+          { e:'🏥', l:'병원', v:'병원' }, { e:'🏦', l:'은행', v:'은행' },
+          { e:'🏫', l:'학교', v:'학교' }, { e:'🏪', l:'가게', v:'가게' } ] },
+        { key: 'tone', label: '어떻게 알려 달라고 할까요?', opts: [
+          { e:'🟢', l:'쉽고 짧게', v:'쉬운 한국어로 짧게' },
+          { e:'🙇', l:'높임말로', v:'높임말로' } ] }
+      ],
+      build: function(s){
+        if(!s.place || !s.tone) return null;
+        return s.place + '에서 한국어로 뭐라고 말하면 좋을까요? ' + s.tone + ' 알려 주세요.';
+      }
+    },
+    {
+      key: 'boss', title: '내 마음대로 부탁 만들기 (종합)', emoji: '👑', boss: true,
+      groups: [
+        { key: 'goal', label: '무엇을 만들까요?', opts: [
+          { e:'🙋', l:'자기소개', v:'자기소개' }, { e:'📔', l:'일기', v:'일기' },
+          { e:'💌', l:'편지', v:'편지' }, { e:'🍽️', l:'메뉴 설명', v:'메뉴 설명' } ] },
+        { key: 'tone', label: '말투는?', opts: [
+          { e:'🟢', l:'쉬운 한국어로', v:'쉬운 한국어로' }, { e:'✂️', l:'짧게', v:'짧게' }, { e:'🙇', l:'높임말로', v:'높임말로' } ] },
+        { key: 'extra', label: '조건 하나 더!', opts: [
+          { e:'😊', l:'이모지 넣어줘', v:'이모지도 넣어 주세요.' },
+          { e:'3️⃣', l:'세 문장으로', v:'세 문장으로 해 주세요.' },
+          { e:'🧒', l:'어린이도 알게', v:'어린이도 알 수 있게 해 주세요.' } ] }
+      ],
+      build: function(s, name){
+        if(!s.goal || !s.tone || !s.extra) return null;
+        return '제 ' + s.goal + '을(를) ' + s.tone + ' 써 주세요. ' + s.extra + ' 저는 ' + name + '이에요.';
+      }
+    }
+  ];
+
+  // ── 트래커 ────────────────────────────────────────────────
+  function renderTracker(){
+    var t = byId('tracker'); t.innerHTML = '';
+    STAGES.forEach(function(st, i){
+      var c = document.createElement('div');
+      c.className = 'chip-t' + (i < idx ? ' done' : (i === idx ? ' now' : ''));
+      c.textContent = (i < idx ? '✅ ' : st.emoji + ' ') + (i + 1);
+      t.appendChild(c);
+    });
+  }
+  function setScore(){ byId('score').textContent = score; }
+  function bumpCombo(ok){
+    if(ok){ combo++; if(combo > maxCombo) maxCombo = combo; }
+    else combo = 0;
+    var el = byId('combo'); el.textContent = '🔥 ' + combo;
+    el.classList.remove('pop'); void el.offsetWidth; if(ok) el.classList.add('pop');
+  }
+
+  // ── 화면들 ────────────────────────────────────────────────
+  function start(){
+    idx = 0; score = 0; combo = 0; maxCombo = 0; copiedCount = 0; built = [];
+    setScore(); byId('combo').textContent = '🔥 0';
+    renderTracker(); renderIntro();
+  }
+
+  function renderIntro(){
+    byId('card').innerHTML =
+      '<div class="step-no">시작</div>' +
+      '<div class="title">이름을 적어 주세요 🙂</div>' +
+      '<div class="guide">오늘은 <b>Claude</b>에게 부탁하는 말을 만들어 볼 거예요.<br>타자 안 쳐도 돼요 — 버튼만 누르면 부탁이 완성돼요!</div>' +
+      '<div style="text-align:center;margin:18px 0;"><input class="name-in" id="nameIn" placeholder="이름 또는 별명" maxlength="20"></div>' +
+      '<div class="btnrow"><button class="btn" id="go" disabled>시작하기 ▶</button></div>';
+    var input = byId('nameIn'), go = byId('go');
+    input.addEventListener('input', function(){ go.disabled = !input.value.trim(); });
+    input.addEventListener('keydown', function(e){ if(e.key === 'Enter' && input.value.trim()){ begin(); } });
+    go.addEventListener('click', begin);
+    setTimeout(function(){ try { input.focus(); } catch(e){} }, 50);
+    function begin(){ studentName = input.value.trim().slice(0, 20); idx = 0; renderStage(); }
+  }
+
+  function renderStage(){
+    if(idx >= STAGES.length){ return renderResult(); }
+    sel = {}; copiedThisStage = false; completedThisStage = false;
+    renderTracker();
+    var st = STAGES[idx];
+
+    var html =
+      '<div class="roundbar"><span class="round-badge' + (st.boss ? ' boss' : '') + '">' +
+        (st.boss ? '👑 보스 ' : '미션 ') + (idx + 1) + ' / ' + STAGES.length + '</span></div>' +
+      '<div class="step-no">' + st.emoji + ' 부탁 만들기</div>' +
+      '<div class="title">' + st.title + '</div>' +
+      '<div class="guide">버튼을 눌러 빈칸을 채워요. 아래에 <b>부탁하는 말</b>이 만들어져요.</div>';
+
+    st.groups.forEach(function(g){
+      html += '<div class="group" data-g="' + g.key + '"><div class="g-label">' + g.label + '</div><div class="opts">';
+      g.opts.forEach(function(o, oi){
+        html += '<button class="opt" data-v="' + esc(o.v) + '" data-i="' + oi + '">' +
+          '<span class="e">' + o.e + '</span>' + o.l + '</button>';
+      });
+      html += '</div></div>';
+    });
+
+    html +=
+      '<div class="preview-label">📝 만들어진 부탁 (한국어)</div>' +
+      '<div class="preview" id="preview"></div>' +
+      '<div class="steps4"><span>① 📋 복사</span><span>② Claude 열기</span><span>③ 붙여넣기(Ctrl+V)</span><span>④ 보내기</span></div>' +
+      '<div class="feedback" id="fb">버튼을 눌러 부탁을 완성해 보세요.</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn copy" id="copy" disabled>📋 프롬프트 복사하기</button>' +
+        '<button class="btn" id="next" disabled>' + (idx === STAGES.length - 1 ? '결과 보기 🏆' : '다음 ▶') + '</button>' +
+      '</div>';
+
+    byId('card').innerHTML = html;
+
+    // 칩 선택
+    Array.prototype.forEach.call(byId('card').querySelectorAll('.group'), function(grp){
+      var key = grp.getAttribute('data-g');
+      Array.prototype.forEach.call(grp.querySelectorAll('.opt'), function(btn){
+        btn.addEventListener('click', function(){
+          Array.prototype.forEach.call(grp.querySelectorAll('.opt'), function(b){ b.classList.remove('sel'); });
+          btn.classList.add('sel');
+          sel[key] = btn.getAttribute('data-v');
+          updatePreview();
+        });
+      });
+    });
+
+    byId('copy').addEventListener('click', onCopy);
+    byId('next').addEventListener('click', function(){
+      if(byId('next').disabled) return;
+      idx++; renderStage();
+    });
+    updatePreview();
+  }
+
+  function updatePreview(){
+    var st = STAGES[idx];
+    var prompt = st.build(sel, studentName || '저');
+    var pv = byId('preview'), copy = byId('copy'), next = byId('next'), fb = byId('fb');
+    if(prompt){
+      pv.innerHTML = '<span class="fill">' + esc(prompt) + '</span>';
+      copy.disabled = false;
+      next.disabled = false;                 // 진행은 '완성'으로 — 복사 성공에 의존하지 않음(복사는 권장)
+      if(!completedThisStage){
+        completedThisStage = true;
+        built.push({ title: st.title, prompt: prompt });
+        score += 20; setScore(); bumpCombo(true);
+        fb.className = 'feedback'; fb.textContent = '부탁이 완성됐어요! 📋 복사해서 Claude에 붙여넣어 보세요.';
+      } else {
+        built[built.length - 1] = { title: st.title, prompt: prompt };   // 칩을 바꾸면 최신 내용으로
+      }
+    } else {
+      pv.innerHTML = '<span class="slot">아직 비어 있어요. 위 버튼을 눌러 빈칸을 채워 주세요…</span>';
+      copy.disabled = true;
+    }
+  }
+
+  function onCopy(){
+    var st = STAGES[idx];
+    var prompt = st.build(sel, studentName || '저');
+    if(!prompt) return;
+    copyText(prompt, function(ok){
+      var fb = byId('fb');
+      if(ok){
+        fb.className = 'feedback'; fb.textContent = '복사됐어요! 🎉 이제 Claude에 붙여넣기(Ctrl+V) 하세요.';
+        if(!copiedThisStage){ copiedThisStage = true; copiedCount++; }
+      } else {
+        fb.className = 'feedback no'; fb.textContent = '복사가 안 됐어요. 글상자를 길게 눌러 복사하거나, 그냥 다음으로 가도 돼요.';
+      }
+    });
+  }
+
+  function renderResult(){
+    idx = STAGES.length; renderTracker();
+    var all = STAGES.length;
+    var badges = [];
+    badges.push('<span class="badge">완주 🎓</span>');
+    if(maxCombo >= 3) badges.push('<span class="badge combo">콤보왕 🔥</span>');
+    if(copiedCount >= all) badges.push('<span class="badge copy">복사왕 📋</span>');
+    if(copiedCount >= all && maxCombo >= 4) badges.push('<span class="badge master">마스터 👑</span>');
+
+    var cards = built.map(function(b, i){
+      return '<div class="pcard"><div class="pt">' + (i + 1) + '. ' + esc(b.title) + '</div>' +
+        '<div class="pp">' + esc(b.prompt) + '</div></div>';
+    }).join('');
+
+    byId('card').innerHTML =
+      '<div id="result">' +
+        '<h2>🏆 ' + esc(studentName) + '님이 만든 Claude 부탁 카드</h2>' +
+        '<div class="sub">' + built.length + '개의 부탁을 만들었어요. 복사해서 Claude에 붙여넣어 보세요!</div>' +
+        cards +
+        '<div class="scoreline">⭐ 점수 ' + score + ' · 🔥 최고 콤보 ' + maxCombo + '</div>' +
+        '<div class="badges">' + badges.join('') + '</div>' +
+      '</div>' +
+      '<div class="feedback" id="savefb"></div>' +
+      '<div class="btnrow">' +
+        '<button class="btn gold" id="save">💾 내 작품 저장하기</button>' +
+        '<button class="btn gray" id="rt">다시 하기 🔄</button>' +
+      '</div>' +
+      '<div id="dlrow"><button class="btn" id="dl">📥 이미지로 내려받기</button></div>';
+
+    byId('save').addEventListener('click', doSave);
+    byId('rt').addEventListener('click', start);
+    byId('dl').addEventListener('click', function(){ if(_saveDataUrl) SAVE.download(_saveDataUrl, (studentName ? studentName + '_' : '') + RESULT_BASENAME + '.png'); });
+  }
+
+  // ── 복사 (외부 라이브러리 0) ──────────────────────────────
+  function copyText(text, cb){
+    var done = false, finish = function(ok){ if(done) return; done = true; cb(ok); };
+    try {
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(text).then(function(){ finish(true); }, function(){ finish(fallback()); });
+        return;
+      }
+    } catch(e){}
+    finish(fallback());
+    function fallback(){
+      try {
+        var ta = document.createElement('textarea'); ta.value = text;
+        ta.style.position = 'fixed'; ta.style.top = '0'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.focus(); ta.select();
+        var ok = document.execCommand('copy'); ta.remove(); return ok;
+      } catch(e){ return false; }
+    }
+  }
+
+  // ── 결과물 저장 헬퍼 (외부 라이브러리 0) ───────────────────
+  var _saveDataUrl = null, _savePending = false, _saveTimer = null;
+  var SAVE = {
+    capture: function(node, done){
+      try {
+        var rect = node.getBoundingClientRect();
+        var w = Math.max(1, Math.ceil(rect.width)), h = Math.max(1, Math.ceil(rect.height));
+        var scale = 2, css = '';
+        for (var i=0;i<document.styleSheets.length;i++){ try { var rules=document.styleSheets[i].cssRules; for(var j=0;j<rules.length;j++) css+=rules[j].cssText+'\n'; } catch(e){} }
+        var holder=document.createElement('div'); holder.appendChild(node.cloneNode(true));
+        var svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'" height="'+h+'">'+
+          '<foreignObject x="0" y="0" width="'+w+'" height="'+h+'">'+
+          '<div xmlns="http://www.w3.org/1999/xhtml" style="width:'+w+'px;background:#ffffff;">'+
+          '<style>'+css+'</style>'+holder.innerHTML+'</div></foreignObject></svg>';
+        var img=new Image();
+        img.onload=function(){
+          try {
+            var canvas=document.createElement('canvas'); canvas.width=w*scale; canvas.height=h*scale;
+            var ctx=canvas.getContext('2d'); ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+            ctx.setTransform(scale,0,0,scale,0,0); ctx.drawImage(img,0,0);
+            done(canvas.toDataURL('image/png'));
+          } catch(e){ done(null); }
+        };
+        img.onerror=function(){ done(null); };
+        img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
+      } catch(e){ done(null); }
+    },
+    download: function(dataUrl, name){
+      var a=document.createElement('a'); a.href=dataUrl; a.download=name; document.body.appendChild(a); a.click(); a.remove();
+    }
+  };
+
+  function doSave(){
+    var node=byId('result'), fb=byId('savefb'), sbtn=byId('save');
+    fb.style.color='#3b6fe0'; fb.textContent='저장 중… ⏳'; sbtn.disabled=true;
+    SAVE.capture(node, function(dataUrl){
+      if(!dataUrl){ fb.style.color='#d6452b'; fb.textContent='이미지를 만들지 못했어요. 다시 눌러 주세요.'; sbtn.disabled=false; return; }
+      _saveDataUrl=dataUrl;
+      if(window.parent && window.parent!==window){
+        _savePending=true;
+        window.parent.postMessage({ type:'student-work-save', mimeType:'image/png', dataUrl:dataUrl, fileName:RESULT_BASENAME+'.png', title:RESULT_TITLE, studentName:studentName }, '*');
+        _saveTimer=setTimeout(function(){ if(_savePending){ _savePending=false; fb.style.color='#d6452b'; fb.textContent='저장이 늦어요. 아래 버튼으로 내려받아요.'; byId('dlrow').style.display='flex'; sbtn.disabled=false; } }, 12000);
+      } else {
+        SAVE.download(dataUrl, (studentName?studentName+'_':'')+RESULT_BASENAME+'.png');
+        fb.style.color='#1a7f47'; fb.textContent='이미지를 내려받았어요! 📥'; sbtn.disabled=false;
+      }
+    });
+  }
+
+  window.addEventListener('message', function(e){
+    var d=e.data; if(!d || d.type!=='student-work-saved') return;
+    if(!_savePending) return; _savePending=false; if(_saveTimer) clearTimeout(_saveTimer);
+    var fb=byId('savefb'), sbtn=byId('save');
+    if(d.ok){ if(fb){ fb.style.color='#1a7f47'; fb.textContent='저장됐어요! 🎉 선생님이 확인 후 홈페이지에 올려요.'; } if(sbtn){ sbtn.textContent='✅ 저장 완료'; } }
+    else { if(fb){ fb.style.color='#d6452b'; fb.textContent='저장 실패: '+(d.error||'')+' 아래 버튼으로 내려받아요.'; } if(byId('dlrow')) byId('dlrow').style.display='flex'; if(sbtn) sbtn.disabled=false; }
+  });
+
+  function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  start();
+})();
+</script>

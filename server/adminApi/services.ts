@@ -593,12 +593,28 @@ export const getOverview = async () => {
     ]);
 
   const studentCounts = new Map<string, number>();
+  // 반별 사용 언어 집계: classroomId → (언어 → 학생 수). 슬라이드 병기 번역 언어(반에서 최다 2개) 산출용.
+  const languageCounts = new Map<string, Map<string, number>>();
   for (const doc of studentsSnap.docs) {
     const data = doc.data() as DocData;
     if (data.deletedAt) continue;
     const classroomId = String(data.classroomId || '');
     studentCounts.set(classroomId, (studentCounts.get(classroomId) || 0) + 1);
+
+    const language = typeof data.language === 'string' ? data.language.trim() : '';
+    if (language) {
+      const perClass = languageCounts.get(classroomId) ?? new Map<string, number>();
+      perClass.set(language, (perClass.get(language) || 0) + 1);
+      languageCounts.set(classroomId, perClass);
+    }
   }
+
+  // 반에서 가장 많이 쓰는 언어 최대 2개 (수 내림차순, 동수면 먼저 등장한 순). 슬라이드 병기 번역에 쓴다.
+  const getTopLanguages = (classroomId: string): string[] =>
+    Array.from(languageCounts.get(classroomId)?.entries() ?? [])
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 2)
+      .map(([language]) => language);
 
   const classrooms = classroomsSnap.docs
     .map((doc) => {
@@ -609,6 +625,8 @@ export const getOverview = async () => {
         order: (data.order as number) ?? 0,
         curriculumId: (data.curriculumId as string | null) ?? null,
         studentCount: studentCounts.get(doc.id) || 0,
+        /** 이 반 학생들이 가장 많이 쓰는 언어 최대 2개 — 이론 슬라이드 병기 번역 언어. 비어 있으면 병기 없이 쉬운 한국어+그림만. */
+        topLanguages: getTopLanguages(doc.id),
       };
     })
     .sort((a, b) => a.order - b.order);

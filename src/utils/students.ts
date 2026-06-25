@@ -62,6 +62,8 @@ export const normalizeStudentRecord = (
     contact:
       getOptionalTrimmedString(value?.contact) ?? getOptionalTrimmedString(fallback?.contact),
     memo: getOptionalTrimmedString(value?.memo) ?? getOptionalTrimmedString(fallback?.memo),
+    language:
+      getOptionalTrimmedString(value?.language) ?? getOptionalTrimmedString(fallback?.language),
     inactiveAt:
       getOptionalTrimmedString(value?.inactiveAt) ??
       getOptionalTrimmedString(fallback?.inactiveAt),
@@ -159,6 +161,7 @@ export const sanitizeStudentForStorage = (student: Student): Student => {
   const age = student.age?.trim();
   const contact = student.contact?.trim();
   const memo = student.memo?.trim();
+  const language = student.language?.trim();
   const inactiveAt = student.inactiveAt?.trim();
   const deletedAt = student.deletedAt?.trim();
 
@@ -172,6 +175,10 @@ export const sanitizeStudentForStorage = (student: Student): Student => {
 
   if (memo) {
     nextStudent.memo = memo;
+  }
+
+  if (language) {
+    nextStudent.language = language;
   }
 
   if (inactiveAt) {
