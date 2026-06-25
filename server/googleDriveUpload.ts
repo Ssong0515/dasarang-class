@@ -1,10 +1,12 @@
 import { Readable } from 'stream';
 import { google } from 'googleapis';
 
-// 모든 반의 학생 결과물을 저장할 단일 공유 Drive 폴더. 반별 Drive 연결은 더 이상 쓰지 않는다.
+// 모든 반의 학생 결과물을 저장할 단일 공유 드라이브(Shared Drive). 반별 Drive 연결은 더 이상 쓰지 않는다.
+// 서비스 계정은 일반 '내 드라이브'엔 못 쓰므로(용량 0) 반드시 공유 드라이브여야 하고,
+// 그 공유 드라이브에 서비스 계정이 멤버(콘텐츠 관리자)로 추가돼 있어야 한다.
 // 배포 환경에서 STUDENT_WORK_DRIVE_FOLDER_ID 환경변수로 덮어쓸 수 있다.
 const SHARED_STUDENT_WORK_FOLDER_ID =
-  process.env.STUDENT_WORK_DRIVE_FOLDER_ID || '1niXh3YgOn_UQrcWnIZcXfo_dUzyIRpmJ';
+  process.env.STUDENT_WORK_DRIVE_FOLDER_ID || '0AHL-LinZZ7XbUk9PVA';
 
 export function getDriveClient() {
   const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
