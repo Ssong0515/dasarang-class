@@ -129,6 +129,7 @@ export async function uploadStudentWork(params: {
       body: stream,
     },
     fields: 'id,name,webViewLink',
+    supportsAllDrives: true,
   });
 
   return {
