@@ -370,6 +370,9 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const contentDropdownRef = useRef<HTMLDivElement | null>(null);
   const contentDropdownButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  // 학생은 반을 직접 고르지 않으므로(전체 공개 정책 → activeClassroomId가 보통 null) 결과물 저장 대상 반을
+  // '오늘 공개된 수업'에서 역으로 찾는다(아래 effectiveClassroom). 비동기 핸들러/업로드가 최신 값을 읽도록 ref에 보관.
+  const effectiveClassroomIdRef = useRef<string | null>(null);
 
   const setUploadFileWithPreview = (file: File | null) => {
     setUploadFile(file);
@@ -394,7 +397,8 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   };
 
   const doUpload = async () => {
-    if (!uploadFile || !uploadStudentName.trim() || !activeClassroomId) return;
+    const classroomId = effectiveClassroomIdRef.current;
+    if (!uploadFile || !uploadStudentName.trim() || !classroomId) return;
     setUploadState('uploading');
     setUploadError('');
     try {
@@ -405,7 +409,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
 
       const formData = new FormData();
       formData.append('file', uploadFile);
-      formData.append('classroomId', activeClassroomId);
+      formData.append('classroomId', classroomId);
       formData.append('studentName', uploadStudentName.trim());
       if (uploadTitle.trim()) formData.append('title', uploadTitle.trim());
       formData.append('anonymous', uploadAnonymous ? 'true' : 'false');
@@ -452,7 +456,8 @@ export const StudentPage: React.FC<StudentPageProps> = ({
         }
       };
       try {
-        if (!activeClassroomId) return reply(false, { error: '반 정보를 찾을 수 없어요.' });
+        const classroomId = effectiveClassroomIdRef.current;
+        if (!classroomId) return reply(false, { error: '반 정보를 찾을 수 없어요.' });
         const studentName = (data.studentName || '').trim();
         if (!studentName) return reply(false, { error: '이름이 필요해요.' });
         const idToken = await getAuthToken?.();
@@ -474,7 +479,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
 
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('classroomId', activeClassroomId);
+        formData.append('classroomId', classroomId);
         formData.append('studentName', studentName);
         if (data.title) formData.append('title', String(data.title));
         formData.append('anonymous', data.anonymous ? 'true' : 'false');
@@ -499,7 +504,8 @@ export const StudentPage: React.FC<StudentPageProps> = ({
 
     window.addEventListener('message', handleStudentWorkSave);
     return () => window.removeEventListener('message', handleStudentWorkSave);
-  }, [activeClassroomId, getAuthToken]);
+    // 저장 대상 반은 effectiveClassroomIdRef(ref)로 항상 최신값을 읽으므로 deps에 넣지 않는다.
+  }, [getAuthToken]);
 
   // 종료 안내가 열려 있는 동안 몇 초마다 언어를 바꾼다(읽을 수 있는 속도). 닫히면 멈추고 한국어로 초기화.
   useEffect(() => {
@@ -557,6 +563,32 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   // 공개된 실습이 하나뿐이면 카테고리 선택 없이 바로 보여주고, 둘 이상일 때만 카테고리 UI를 쓴다.
   const hasMultipleVisible = visibleContents.length >= 2;
   const singleVisibleContent = visibleContents.length === 1 ? visibleContents[0] : null;
+
+  // 결과물 저장 대상 반 결정 — 학생은 반을 직접 고르지 않으므로(전체 공개 정책) '오늘 공개된 수업'에서 역으로 찾는다.
+  // 우선순위: (1) 강사가 직접 고른 반(미리보기), (2) 지금 보고 있는 실습을 공개한 반,
+  //          (3) 가장 최근에 공개한 반. Drive 폴더가 연결된 반을 우선하되, 후보가 있으면 폴더 없는 반이라도 잡아
+  //          서버가 "Drive 폴더 미연결"이라는 구체적 에러를 돌려주도록 한다.
+  const viewedContentId = singleVisibleContent?.id ?? selectedContent?.id ?? null;
+  const todaysPublishedLessons = publishedLessons.filter(
+    (lesson) => lesson.date === gatingDateString && lesson.publishedContentIds.length > 0
+  );
+  const saveClassroomCandidateIds = [
+    ...todaysPublishedLessons
+      .filter((lesson) => viewedContentId && lesson.publishedContentIds.includes(viewedContentId))
+      .map((lesson) => lesson.classroomId),
+    ...[...todaysPublishedLessons]
+      .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
+      .map((lesson) => lesson.classroomId),
+  ];
+  const effectiveClassroom =
+    (activeClassroom?.driveFolderId ? activeClassroom : undefined) ??
+    saveClassroomCandidateIds
+      .map((id) => classrooms.find((classroom) => classroom.id === id))
+      .find((classroom) => classroom?.driveFolderId) ??
+    classrooms.find((classroom) => classroom.id === saveClassroomCandidateIds[0]) ??
+    activeClassroom ??
+    null;
+  effectiveClassroomIdRef.current = effectiveClassroom?.id ?? null;
 
   const contentsByCategory = categories
     .map((category) => ({
@@ -907,7 +939,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
                 </div>
               )}
 
-              {activeClassroom?.driveFolderId && (
+              {effectiveClassroom?.driveFolderId && (
                 <button
                   onClick={() => { resetUploadModal(); setIsUploadModalOpen(true); }}
                   className="flex items-center gap-2 rounded-xl bg-[#FFF5E9] px-3 py-2 text-sm font-bold text-[#8B5E3C] transition-all hover:bg-[#FFE8CC]"
