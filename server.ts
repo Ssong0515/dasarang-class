@@ -187,7 +187,6 @@ async function startServer() {
           return;
         }
         const result = await uploadStudentWork({
-          classroomId,
           studentName: studentName.trim(),
           fileBuffer: req.file.buffer,
           originalName: req.file.originalname,

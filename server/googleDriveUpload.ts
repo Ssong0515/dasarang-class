@@ -1,8 +1,10 @@
 import { Readable } from 'stream';
 import { google } from 'googleapis';
-import { getAdminDb } from './firebaseAdmin';
 
-const CLASSROOMS_COLLECTION = 'classrooms';
+// 모든 반의 학생 결과물을 저장할 단일 공유 Drive 폴더. 반별 Drive 연결은 더 이상 쓰지 않는다.
+// 배포 환경에서 STUDENT_WORK_DRIVE_FOLDER_ID 환경변수로 덮어쓸 수 있다.
+const SHARED_STUDENT_WORK_FOLDER_ID =
+  process.env.STUDENT_WORK_DRIVE_FOLDER_ID || '1niXh3YgOn_UQrcWnIZcXfo_dUzyIRpmJ';
 
 export function getDriveClient() {
   const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
@@ -95,27 +97,18 @@ export async function getStudentWorkFile(fileId: string): Promise<{
 }
 
 export async function uploadStudentWork(params: {
-  classroomId: string;
   studentName: string;
   fileBuffer: Buffer;
   originalName: string;
   mimeType: string;
 }): Promise<UploadResult> {
-  const { classroomId, studentName, fileBuffer, originalName, mimeType } = params;
-
-  // Firestore에서 classroom의 driveFolderId 조회
-  const db = getAdminDb();
-  const classroomDoc = await db.collection(CLASSROOMS_COLLECTION).doc(classroomId).get();
-  if (!classroomDoc.exists) throw new Error('Classroom not found.');
-
-  const driveFolderId = classroomDoc.data()?.driveFolderId as string | undefined;
-  if (!driveFolderId) throw new Error('이 클래스에 Google Drive 폴더가 연결되어 있지 않습니다.');
+  const { studentName, fileBuffer, originalName, mimeType } = params;
 
   const drive = getDriveClient();
 
-  // 날짜 서브폴더 생성 (YYYY-MM-DD)
+  // 모든 반의 결과물을 공유 폴더에 저장한다(반별 Drive 연결 없음). 날짜 서브폴더(YYYY-MM-DD)로만 정리.
   const dateStr = new Date().toISOString().slice(0, 10);
-  const dateFolderId = await getOrCreateFolder(drive, driveFolderId, dateStr);
+  const dateFolderId = await getOrCreateFolder(drive, SHARED_STUDENT_WORK_FOLDER_ID, dateStr);
 
   // 파일명: 학생이름_원본파일명
   const ext = originalName.includes('.') ? originalName.slice(originalName.lastIndexOf('.')) : '';

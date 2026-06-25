@@ -569,24 +569,26 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   //          (3) 가장 최근에 공개한 반. Drive 폴더가 연결된 반을 우선하되, 후보가 있으면 폴더 없는 반이라도 잡아
   //          서버가 "Drive 폴더 미연결"이라는 구체적 에러를 돌려주도록 한다.
   const viewedContentId = singleVisibleContent?.id ?? selectedContent?.id ?? null;
-  const todaysPublishedLessons = publishedLessons.filter(
-    (lesson) => lesson.date === gatingDateString && lesson.publishedContentIds.length > 0
+  const todaysPublishedLessons = [...publishedLessons]
+    .filter((lesson) => lesson.date === gatingDateString && lesson.publishedContentIds.length > 0)
+    .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+  // 저장 폴더는 모든 반이 공유 폴더로 동일하지만, 게시물(결과물 갤러리)의 반 구분은 중요하다.
+  // 그래서 한 묶음(tier)에서 가장 최근 공개한 반을 고르되, '지금 보고 있는 실습을 공개한 반'을 항상 우선해
+  // 결과물이 엉뚱한 반 갤러리로 들어가지 않게 한다(크로스 라우팅 방지).
+  const pickClassroomFromLessons = (lessons: PublishedLesson[]): Classroom | undefined => {
+    for (const lesson of lessons) {
+      const found = classrooms.find((classroom) => classroom.id === lesson.classroomId);
+      if (found) return found;
+    }
+    return undefined;
+  };
+  const contentMatchedLessons = todaysPublishedLessons.filter(
+    (lesson) => viewedContentId && lesson.publishedContentIds.includes(viewedContentId)
   );
-  const saveClassroomCandidateIds = [
-    ...todaysPublishedLessons
-      .filter((lesson) => viewedContentId && lesson.publishedContentIds.includes(viewedContentId))
-      .map((lesson) => lesson.classroomId),
-    ...[...todaysPublishedLessons]
-      .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
-      .map((lesson) => lesson.classroomId),
-  ];
   const effectiveClassroom =
-    (activeClassroom?.driveFolderId ? activeClassroom : undefined) ??
-    saveClassroomCandidateIds
-      .map((id) => classrooms.find((classroom) => classroom.id === id))
-      .find((classroom) => classroom?.driveFolderId) ??
-    classrooms.find((classroom) => classroom.id === saveClassroomCandidateIds[0]) ??
     activeClassroom ??
+    pickClassroomFromLessons(contentMatchedLessons) ??
+    pickClassroomFromLessons(todaysPublishedLessons) ??
     null;
   effectiveClassroomIdRef.current = effectiveClassroom?.id ?? null;
 
@@ -939,7 +941,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
                 </div>
               )}
 
-              {effectiveClassroom?.driveFolderId && (
+              {effectiveClassroom && (
                 <button
                   onClick={() => { resetUploadModal(); setIsUploadModalOpen(true); }}
                   className="flex items-center gap-2 rounded-xl bg-[#FFF5E9] px-3 py-2 text-sm font-bold text-[#8B5E3C] transition-all hover:bg-[#FFE8CC]"
