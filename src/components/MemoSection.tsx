@@ -164,10 +164,10 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
   ];
 
   return (
-    <main className="flex-1 overflow-y-auto bg-[#FBFBFA] p-8">
+    <main className="flex-1 overflow-y-auto bg-[#FBFBFA] p-6">
       <div className="mx-auto max-w-4xl">
-        <header className="mb-10">
-          <h2 className="mb-2 font-serif text-3xl font-bold text-[#4A3728]">{TEXT.title}</h2>
+        <header className="mb-6">
+          <h2 className="mb-2 font-serif text-2xl font-bold text-[#4A3728]">{TEXT.title}</h2>
           <p className="text-[#8B7E74]">{TEXT.subtitle}</p>
         </header>
 
@@ -194,7 +194,7 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
           </section>
         )}
 
-        <div className="mb-8 flex gap-4 border-b border-[#E5E3DD]">
+        <div className="mb-6 flex gap-4 border-b border-[#E5E3DD]">
           {tabs.map((tab) => (
             <button
               key={tab.id}

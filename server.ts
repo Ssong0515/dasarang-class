@@ -262,7 +262,8 @@ async function startServer() {
       res.setHeader('Access-Control-Allow-Origin', origin);
     }
     res.setHeader('Vary', 'Origin');
-    res.setHeader('Cache-Control', 'public, max-age=300');
+    // 승인 후 공개 페이지에 빨리 반영되도록 캐시를 짧게 둔다(앱 자체 쇼케이스는 추가로 캐시 무력화).
+    res.setHeader('Cache-Control', 'public, max-age=60');
     try {
       res.json({ items: await listPublicStudentPosts() });
     } catch (error) {

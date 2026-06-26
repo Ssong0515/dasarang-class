@@ -1360,6 +1360,9 @@ export default function App() {
         ownerUid: user.uid,
         order: newOrder,
         color: pickUnusedClassroomColor(usedColors),
+        // 기본 강사비 시수당 4만원 × 회차당 2시수 = 회차당 8만원으로 시작 (설정에서 바꿀 수 있음)
+        feePerHour: 40000,
+        hoursPerSession: 2,
         createdAt: new Date().toISOString(),
       };
       await setDoc(classroomRef, classroomData);
@@ -1388,6 +1391,9 @@ export default function App() {
         color: calendarClass.color || CLASSROOM_COLOR_OPTIONS[0].value,
         calendarClassId: calendarClass.id,
         ...(organization ? { organization } : {}),
+        // 기본 강사비 시수당 4만원 × 회차당 2시수 = 회차당 8만원으로 시작 (설정에서 바꿀 수 있음)
+        feePerHour: 40000,
+        hoursPerSession: 2,
         createdAt: new Date().toISOString(),
       };
       await setDoc(classroomRef, classroomData);
@@ -1791,11 +1797,8 @@ export default function App() {
           activeClassroomId={activeClassroomId || undefined}
           activeTab={activeTab}
           isStudentView={viewMode === 'student'}
-          pendingShowcaseCount={studentPosts.filter((post) => post.status === 'pending').length}
-          onTabChange={handleTabChange}
           onManageClassroom={handleManageClassroom}
           onLogout={handleLogout}
-          onSwitchToStudent={handleSwitchToStudent}
           onCreateClassroom={() => setIsCreateModalOpen(true)}
           onReorderClassrooms={async (newOrder) => {
             try {
@@ -1830,10 +1833,19 @@ export default function App() {
             />
           ) : (
             <>
-              <Header user={user} activeTab={activeTab} />
+              <Header
+                user={user}
+                activeTab={activeTab}
+                pendingShowcaseCount={studentPosts.filter((post) => post.status === 'pending').length}
+                onTabChange={handleTabChange}
+                onSwitchToStudent={handleSwitchToStudent}
+                onGoHome={() => handleTabChange('home')}
+              />
           {activeTab === 'home' && (
             <Dashboard
               classrooms={classroomsWithStudents}
+              classroomDateRecords={classroomDateRecords}
+              contents={contents}
               onManageClassroom={handleManageClassroom}
               onGoToLibrary={() => handleTabChange('content-library')}
               onGoToMemo={() => handleTabChange('memo')}

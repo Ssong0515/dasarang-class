@@ -8,15 +8,16 @@ import {
   ImageIcon,
   FileText,
   CheckCircle2,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { StudentPost, StudentPostStatus } from '../types';
+import { resolveAppPath } from '../utils/appPaths';
 
 interface StudentShowcaseManagerProps {
   posts: StudentPost[];
   onReview: (id: string, action: 'approve' | 'hide') => Promise<void>;
 }
-
-const SHOWCASE_URL = 'https://damuna.org/showcase.html';
 
 const STATUS_TABS: { key: StudentPostStatus; label: string }[] = [
   { key: 'pending', label: '승인 대기' },
@@ -43,6 +44,22 @@ export const StudentShowcaseManager: React.FC<StudentShowcaseManagerProps> = ({
   const [activeStatus, setActiveStatus] = useState<StudentPostStatus>('pending');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  // 이 앱이 직접 서빙하는 공개 작품 페이지(같은 출처). 승인하면 여기에 바로 반영된다.
+  const showcaseHref = resolveAppPath('showcase.html');
+  const showcaseUrl =
+    typeof window !== 'undefined' ? `${window.location.origin}${showcaseHref}` : showcaseHref;
+
+  const handleCopyUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(showcaseUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      window.prompt('아래 주소를 복사하세요', showcaseUrl);
+    }
+  };
 
   const counts = useMemo(
     () => ({
@@ -85,18 +102,28 @@ export const StudentShowcaseManager: React.FC<StudentShowcaseManagerProps> = ({
             </div>
             <h1 className="text-2xl font-bold text-[#4A3728]">학생 작품 공유 관리</h1>
             <p className="mt-1 text-sm text-[#8B7E74]">
-              학생이 올린 작품을 승인하면 damuna.org 학생 작품 페이지에 공개됩니다.
+              학생이 올린 작품을 <span className="font-bold text-[#8B5E3C]">홈페이지에 공유</span>로 승인하면 학생 작품 홈페이지에 바로 공개됩니다.
             </p>
           </div>
-          <a
-            href={SHOWCASE_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 rounded-xl border border-[#E5E3DD] bg-white px-4 py-2 text-sm font-bold text-[#8B5E3C] transition-all hover:border-[#EBD9C1] hover:bg-[#FFF5E9]"
-          >
-            <ExternalLink size={15} />
-            홈페이지에서 보기
-          </a>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleCopyUrl}
+              className="flex items-center gap-2 rounded-xl border border-[#E5E3DD] bg-white px-4 py-2 text-sm font-bold text-[#8B7E74] transition-all hover:border-[#EBD9C1] hover:bg-[#FFF5E9]"
+            >
+              {copied ? <Check size={15} className="text-green-600" /> : <Copy size={15} />}
+              {copied ? '복사됨' : '주소 복사'}
+            </button>
+            <a
+              href={showcaseHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 rounded-xl border border-[#E5E3DD] bg-white px-4 py-2 text-sm font-bold text-[#8B5E3C] transition-all hover:border-[#EBD9C1] hover:bg-[#FFF5E9]"
+            >
+              <ExternalLink size={15} />
+              홈페이지에서 보기
+            </a>
+          </div>
         </div>
 
         <div className="mb-5 flex gap-2">

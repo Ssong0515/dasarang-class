@@ -200,13 +200,13 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
   };
 
   return (
-    <main className="flex-1 overflow-y-auto bg-[#FBFBFA] p-8">
+    <main className="flex-1 overflow-y-auto bg-[#FBFBFA] p-6">
       <div className="mx-auto max-w-6xl">
-        <div className="mb-8">
+        <div className="mb-6">
           <span className="rounded-full bg-[#FFF5E9] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#8B5E3C]">
             커리큘럼 관리
           </span>
-          <h1 className="mt-2 text-4xl font-serif font-bold text-[#4A3728]">커리큘럼</h1>
+          <h1 className="mt-2 text-3xl font-serif font-bold text-[#4A3728]">커리큘럼</h1>
           <p className="mt-2 max-w-2xl text-sm text-[#8B7E74]">
             반과 무관한 순수 템플릿(주제·상세·순서)을 여기에서 관리합니다. 날짜와 진행 상태는 각 클래스에서 반별로 지정됩니다.
           </p>

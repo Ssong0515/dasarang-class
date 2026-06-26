@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { ClassroomDiagnosticsBanner } from './ClassroomDiagnosticsBanner';
-import { Classroom, ClassroomLoadDiagnostics } from '../types';
+import { Classroom, ClassroomDateRecord, ClassroomLoadDiagnostics, LessonContent } from '../types';
 import {
   getClassroomCardColors,
   getClassroomIconComponent,
@@ -44,13 +44,19 @@ const getTodayDateStr = (): string => {
  * 각 반 달력처럼 월별 그리드를 보여주되, 모든 반을 한 판에 모아 날짜마다 색점(반)을 띄워
  * 전체 수업 일정을 한눈에 보게 한다. 강사비(시수 단가)를 설정한 반이 있으면 적립액을 보조로 곁들인다.
  */
+type CalendarMode = 'class' | 'income';
+
 const MonthlyEarningsCalendar: React.FC<{
   classrooms: Classroom[];
-}> = ({ classrooms }) => {
+  dateRecords: ClassroomDateRecord[];
+  contents: LessonContent[];
+  onManageClassroom: (classroom: Classroom) => void;
+}> = ({ classrooms, dateRecords, contents, onManageClassroom }) => {
   const [view, setView] = useState(() => {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() };
   });
+  const [mode, setMode] = useState<CalendarMode>('class');
 
   const earnings = useMemo(
     () => buildMonthEarnings(classrooms, view.year, view.month),
@@ -58,14 +64,54 @@ const MonthlyEarningsCalendar: React.FC<{
   );
   const cells = useMemo(() => getMonthDateCells(view.year, view.month), [view]);
 
+  const classroomById = useMemo(
+    () => new Map(classrooms.map((classroom) => [classroom.id, classroom])),
+    [classrooms]
+  );
+  const contentsById = useMemo(
+    () => new Map(contents.map((content) => [content.id, content])),
+    [contents]
+  );
+  // 회차(클래스+날짜)별 운영 기록 인덱스. key=`${classroomId}_${date}`.
+  const recordByKey = useMemo(() => {
+    const map = new Map<string, ClassroomDateRecord>();
+    for (const record of dateRecords) {
+      map.set(`${record.classroomId}_${record.date}`, record);
+    }
+    return map;
+  }, [dateRecords]);
+
+  // 이론 준비 = 그날 기록에 이론 슬라이드 URL이 1개 이상.
+  // 실습 준비 = 그날 기록한 콘텐츠 중 실습(html 있고 slideUrl 없음)이 1개 이상.
+  const getReadiness = (classroomId: string, dateStr: string) => {
+    const record = recordByKey.get(`${classroomId}_${dateStr}`);
+    if (!record) return { theoryReady: false, practiceReady: false };
+    const theoryReady =
+      (record.theorySlides?.some((slide) => slide.url && slide.url.trim()) ?? false) ||
+      Boolean(record.theorySlideUrl && record.theorySlideUrl.trim());
+    const practiceReady = (record.contentIds || []).some((id) => {
+      const content = contentsById.get(id);
+      return Boolean(
+        content && content.html && content.html.trim() && !(content.slideUrl && content.slideUrl.trim())
+      );
+    });
+    return { theoryReady, practiceReady };
+  };
+
   const todayStr = getTodayDateStr();
   const remainingCount = Math.max(earnings.scheduledCount - earnings.doneCount, 0);
+  const remainingEarnings = Math.max(earnings.totalExpected - earnings.totalEarned, 0);
   const progress =
     earnings.scheduledCount > 0
       ? Math.round((earnings.doneCount / earnings.scheduledCount) * 100)
       : 0;
   const activeClasses = earnings.perClass.filter((classEarning) => classEarning.scheduledCount > 0);
   const hasAnyFee = classrooms.some((classroom) => getPerSessionFee(classroom) > 0);
+
+  const handleEntryClick = (classroomId: string) => {
+    const classroom = classroomById.get(classroomId);
+    if (classroom) onManageClassroom(classroom);
+  };
 
   const goToMonth = (delta: number) =>
     setView((current) => {
@@ -89,38 +135,87 @@ const MonthlyEarningsCalendar: React.FC<{
             <Calendar size={22} />
           </div>
           <div>
-            <h2 className="text-2xl font-serif font-bold text-[#4A3728]">수업 달력</h2>
-            <p className="text-sm text-[#8B7E74]">모든 클래스의 수업을 한 달력에 모아 한눈에 봅니다.</p>
+            <h2 className="text-2xl font-serif font-bold text-[#4A3728]">
+              {mode === 'income' ? '수입 달력' : '수업 달력'}
+            </h2>
+            <p className="text-sm text-[#8B7E74]">
+              {mode === 'income'
+                ? '완료한 수업으로 번 강사비와 예정 수입을 날짜별로 봅니다.'
+                : '모든 클래스의 수업과 이론·실습 준비 상태를 한눈에 봅니다.'}
+            </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={goToday}
-            className="rounded-xl border border-[#E5E3DD] px-3 py-1.5 text-xs font-bold text-[#8B7E74] transition-all hover:bg-[#F3F2EE]"
-          >
-            오늘
-          </button>
-          <span className="min-w-[110px] text-center text-base font-bold text-[#4A3728]">
-            {view.year}년 {view.month + 1}월
-          </span>
-          <button
-            onClick={() => goToMonth(-1)}
-            aria-label="이전 달"
-            className="rounded-lg p-1.5 text-[#8B7E74] transition-all hover:bg-[#F3F2EE]"
-          >
-            <ChevronLeft size={18} />
-          </button>
-          <button
-            onClick={() => goToMonth(1)}
-            aria-label="다음 달"
-            className="rounded-lg p-1.5 text-[#8B7E74] transition-all hover:bg-[#F3F2EE]"
-          >
-            <ChevronRight size={18} />
-          </button>
+        <div className="flex flex-wrap items-center gap-3">
+          {/* 수업 ↔ 수입 달력 전환 */}
+          <div className="inline-flex rounded-xl border border-[#E5E3DD] bg-[#FBFBFA] p-0.5">
+            <button
+              type="button"
+              onClick={() => setMode('class')}
+              className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+                mode === 'class' ? 'bg-white text-[#8B5E3C] shadow-sm' : 'text-[#8B7E74] hover:text-[#4A3728]'
+              }`}
+            >
+              수업 달력
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('income')}
+              className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+                mode === 'income' ? 'bg-white text-[#8B5E3C] shadow-sm' : 'text-[#8B7E74] hover:text-[#4A3728]'
+              }`}
+            >
+              수입 달력
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={goToday}
+              className="rounded-xl border border-[#E5E3DD] px-3 py-1.5 text-xs font-bold text-[#8B7E74] transition-all hover:bg-[#F3F2EE]"
+            >
+              오늘
+            </button>
+            <span className="min-w-[110px] text-center text-base font-bold text-[#4A3728]">
+              {view.year}년 {view.month + 1}월
+            </span>
+            <button
+              onClick={() => goToMonth(-1)}
+              aria-label="이전 달"
+              className="rounded-lg p-1.5 text-[#8B7E74] transition-all hover:bg-[#F3F2EE]"
+            >
+              <ChevronLeft size={18} />
+            </button>
+            <button
+              onClick={() => goToMonth(1)}
+              aria-label="다음 달"
+              className="rounded-lg p-1.5 text-[#8B7E74] transition-all hover:bg-[#F3F2EE]"
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* 요약 카드 — 수업(일정) 중심, 강사비는 단가 설정 시 보조 */}
+      {/* 요약 카드 — 수입 달력: 번 돈 / 남은 예정 / 한 달 예정 */}
+      {mode === 'income' ? (
+        <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl border border-[#E0EFE4] bg-[#F4FAF6] p-4">
+            <p className="text-[11px] font-bold text-[#6B8E7A]">번 강사비 (완료한 수업)</p>
+            <p className="mt-1 text-2xl font-extrabold text-[#2D7A4D]">{formatWon(earnings.totalEarned)}</p>
+            <p className="mt-0.5 text-[11px] text-[#8FAE9C]">완료 {earnings.doneCount}회</p>
+          </div>
+          <div className="rounded-2xl border border-[#EBD9C1] bg-[#FFF9F1] p-4">
+            <p className="text-[11px] font-bold text-[#A2906F]">남은 예정 수입</p>
+            <p className="mt-1 text-2xl font-extrabold text-[#8B5E3C]">{formatWon(remainingEarnings)}</p>
+            <p className="mt-0.5 text-[11px] text-[#B6A488]">남은 수업 {remainingCount}회</p>
+          </div>
+          <div className="rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] p-4">
+            <p className="text-[11px] font-bold text-[#8B7E74]">이번 달 예정 합계</p>
+            <p className="mt-1 text-2xl font-extrabold text-[#4A3728]">{formatWon(earnings.totalExpected)}</p>
+            <p className="mt-0.5 text-[11px] text-[#A89F94]">예정 {earnings.scheduledCount}회 기준</p>
+          </div>
+        </div>
+      ) : (
+      /* 요약 카드 — 수업(일정) 중심, 강사비는 단가 설정 시 보조 */
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div className="rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] p-4">
           <p className="text-[11px] font-bold text-[#8B7E74]">이번 달 수업</p>
@@ -167,6 +262,7 @@ const MonthlyEarningsCalendar: React.FC<{
           </div>
         )}
       </div>
+      )}
 
       {/* 달력 */}
       <div className="mb-2 grid grid-cols-7 gap-1">
@@ -179,7 +275,7 @@ const MonthlyEarningsCalendar: React.FC<{
       <div className="grid grid-cols-7 gap-1">
         {cells.map((cell, index) => {
           if (!cell) {
-            return <div key={`empty-${index}`} className="min-h-[60px]" />;
+            return <div key={`empty-${index}`} className="min-h-[72px]" />;
           }
           const dayNum = Number(cell.slice(8, 10));
           const day = earnings.byDate.get(cell);
@@ -187,11 +283,11 @@ const MonthlyEarningsCalendar: React.FC<{
           return (
             <div
               key={cell}
-              className={`flex min-h-[60px] flex-col rounded-xl border p-1.5 transition-colors ${
+              className={`flex min-h-[72px] flex-col rounded-xl border p-1.5 transition-colors ${
                 isToday
                   ? 'border-[#2F5EA8] bg-[#EAF1FB]'
                   : day
-                    ? 'border-[#ECEAE4] bg-white hover:bg-[#FBFAF8]'
+                    ? 'border-[#ECEAE4] bg-white'
                     : 'border-transparent'
               }`}
             >
@@ -202,10 +298,72 @@ const MonthlyEarningsCalendar: React.FC<{
               >
                 {dayNum}
               </span>
-              {day && (
+
+              {/* 수업 달력: 클래스별 칩(이론·실습 준비 배지) — 클릭하면 해당 클래스로 이동 */}
+              {day && mode === 'class' && (
+                <div className="mt-1 flex flex-col gap-0.5">
+                  {day.entries.slice(0, 3).map((entry, entryIndex) => {
+                    const readiness = getReadiness(entry.classroomId, cell);
+                    const statusLabel =
+                      entry.status === 'done' ? '완료' : entry.status === 'skipped' ? '건너뜀' : '예정';
+                    return (
+                      <button
+                        key={entryIndex}
+                        type="button"
+                        onClick={() => handleEntryClick(entry.classroomId)}
+                        title={`${entry.classroomName} · ${statusLabel} / 이론 ${
+                          readiness.theoryReady ? '준비됨' : '준비안됨'
+                        } · 실습 ${readiness.practiceReady ? '준비됨' : '준비안됨'} (클릭하면 클래스로 이동)`}
+                        className={`flex items-center gap-1 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-[#F3F2EE] ${
+                          entry.status === 'skipped' ? 'opacity-50' : ''
+                        }`}
+                      >
+                        <span
+                          className="h-1.5 w-1.5 shrink-0 rounded-full"
+                          style={{
+                            backgroundColor: entry.color || '#A2906F',
+                            opacity: entry.status === 'planned' ? 0.6 : 1,
+                          }}
+                        />
+                        <span className="min-w-0 flex-1 truncate text-[10px] font-bold text-[#4A3728]">
+                          {entry.classroomName}
+                        </span>
+                        <span className="flex shrink-0 items-center gap-0.5">
+                          <span
+                            className={`rounded px-1 text-[8px] font-bold ${
+                              readiness.theoryReady
+                                ? 'bg-[#E0EFE4] text-[#2D7A4D]'
+                                : 'bg-[#F3F2EE] text-[#C2BAAE]'
+                            }`}
+                          >
+                            이
+                          </span>
+                          <span
+                            className={`rounded px-1 text-[8px] font-bold ${
+                              readiness.practiceReady
+                                ? 'bg-[#E0EFE4] text-[#2D7A4D]'
+                                : 'bg-[#F3F2EE] text-[#C2BAAE]'
+                            }`}
+                          >
+                            실
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                  {day.entries.length > 3 && (
+                    <span className="pl-1 text-[9px] font-bold text-[#A89F94]">
+                      +{day.entries.length - 3}개 더
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* 수입 달력: 색점 + 그날 강사비 */}
+              {day && mode === 'income' && (
                 <>
                   <div className="mt-1 flex flex-wrap gap-0.5">
-                    {day.entries.slice(0, 4).map((entry, entryIndex) => (
+                    {day.entries.slice(0, 5).map((entry, entryIndex) => (
                       <span
                         key={entryIndex}
                         title={`${entry.classroomName}${entry.fee > 0 ? ` · ${formatMan(entry.fee)}` : ''}`}
@@ -217,25 +375,18 @@ const MonthlyEarningsCalendar: React.FC<{
                         }}
                       />
                     ))}
-                    {day.entries.length > 4 && (
-                      <span className="text-[8px] font-bold text-[#A89F94]">
-                        +{day.entries.length - 4}
-                      </span>
-                    )}
                   </div>
-                  {hasAnyFee && (
-                    <div className="mt-auto pt-0.5">
-                      {day.earned > 0 ? (
-                        <span className="text-[10px] font-extrabold text-[#2D7A4D]">
-                          +{formatFeeShort(day.earned)}만
-                        </span>
-                      ) : day.expected > 0 ? (
-                        <span className="text-[10px] font-bold text-[#C2BAAE]">
-                          +{formatFeeShort(day.expected)}만
-                        </span>
-                      ) : null}
-                    </div>
-                  )}
+                  <div className="mt-auto pt-0.5">
+                    {day.earned > 0 ? (
+                      <span className="text-[11px] font-extrabold text-[#2D7A4D]">
+                        +{formatFeeShort(day.earned)}만
+                      </span>
+                    ) : day.expected > 0 ? (
+                      <span className="text-[11px] font-bold text-[#C2BAAE]">
+                        +{formatFeeShort(day.expected)}만
+                      </span>
+                    ) : null}
+                  </div>
                 </>
               )}
             </div>
@@ -299,6 +450,8 @@ const QuickNavCard: React.FC<{
 
 interface DashboardProps {
   classrooms?: Classroom[];
+  classroomDateRecords?: ClassroomDateRecord[];
+  contents?: LessonContent[];
   classroomLoadDiagnostics?: ClassroomLoadDiagnostics;
   onManageClassroom: (classroom: Classroom) => void;
   onGoToLibrary: () => void;
@@ -308,6 +461,8 @@ interface DashboardProps {
 
 export const Dashboard: React.FC<DashboardProps> = ({
   classrooms: allClassrooms = [],
+  classroomDateRecords = [],
+  contents = [],
   classroomLoadDiagnostics,
   onManageClassroom,
   onGoToLibrary,
@@ -428,7 +583,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
       </motion.section>
 
-      <MonthlyEarningsCalendar classrooms={classrooms} />
+      <MonthlyEarningsCalendar
+        classrooms={classrooms}
+        dateRecords={classroomDateRecords}
+        contents={contents}
+        onManageClassroom={onManageClassroom}
+      />
 
       <section className="mb-12">
         <ClassroomDiagnosticsBanner

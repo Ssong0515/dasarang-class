@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>다사랑 교실 · 학생 작품</title>
+    <link rel="icon" href="logo.svg" />
+    <style>
+      :root {
+        --brown: #8b5e3c;
+        --brown-dark: #4a3728;
+        --cream: #fff5e9;
+        --bg: #fbfbfa;
+        --line: #e5e3dd;
+        --muted: #8b7e74;
+        --soft: #a2906f;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--brown-dark);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo",
+          "Malgun Gothic", Roboto, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      .wrap { max-width: 1040px; margin: 0 auto; padding: 32px 20px 64px; }
+      header.page { text-align: center; margin-bottom: 36px; }
+      header.page img { width: 56px; height: 56px; border-radius: 16px; }
+      header.page h1 {
+        margin: 14px 0 6px;
+        font-size: 30px;
+        font-weight: 800;
+        letter-spacing: -0.01em;
+      }
+      header.page p { margin: 0; color: var(--muted); font-size: 15px; }
+      .toolbar {
+        display: flex; justify-content: center; align-items: center; gap: 10px;
+        margin-bottom: 28px; color: var(--soft); font-size: 13px;
+      }
+      .toolbar button {
+        border: 1px solid var(--line); background: #fff; color: var(--brown);
+        font-weight: 700; font-size: 13px; padding: 7px 14px; border-radius: 12px;
+        cursor: pointer; transition: background .15s, border-color .15s;
+      }
+      .toolbar button:hover { background: var(--cream); border-color: #ebd9c1; }
+      .grid {
+        display: grid; gap: 18px;
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      }
+      .card {
+        border: 1px solid var(--line); background: #fff; border-radius: 22px;
+        overflow: hidden; display: flex; flex-direction: column;
+        transition: box-shadow .18s, transform .18s;
+      }
+      .card:hover { box-shadow: 0 12px 30px rgba(139, 94, 60, 0.1); transform: translateY(-2px); }
+      .thumb {
+        aspect-ratio: 4 / 3; width: 100%; object-fit: cover; background: var(--cream);
+        display: block;
+      }
+      .thumb.placeholder {
+        display: flex; align-items: center; justify-content: center;
+        color: var(--soft); font-size: 32px;
+      }
+      .card .body { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+      .card h3 { margin: 0; font-size: 15px; font-weight: 800; line-height: 1.3; }
+      .byline { font-size: 12px; color: var(--soft); font-weight: 700; }
+      .desc {
+        font-size: 13px; color: var(--muted); line-height: 1.5; margin: 0;
+        display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+      }
+      .card a.view {
+        margin-top: auto; align-self: flex-start; font-size: 12px; font-weight: 700;
+        color: var(--brown); text-decoration: none; border: 1px solid var(--line);
+        padding: 6px 12px; border-radius: 10px; transition: background .15s;
+      }
+      .card a.view:hover { background: #f3f2ee; }
+      .state {
+        text-align: center; color: var(--muted); padding: 64px 20px; font-size: 15px;
+        border: 1px dashed var(--line); border-radius: 24px; background: #fff;
+      }
+      .spinner {
+        width: 32px; height: 32px; border: 3px solid var(--line); border-top-color: var(--brown);
+        border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto 14px;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      footer.page { text-align: center; color: var(--soft); font-size: 12px; margin-top: 40px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="page">
+        <img src="logo.svg" alt="다사랑 교실" />
+        <h1>학생 작품</h1>
+        <p>다사랑 교실 학생들이 만든 작품을 모았습니다.</p>
+      </header>
+
+      <div class="toolbar">
+        <span id="count"></span>
+        <button id="refresh" type="button">새로고침</button>
+      </div>
+
+      <div id="content">
+        <div class="state"><div class="spinner"></div>작품을 불러오는 중…</div>
+      </div>
+
+      <footer class="page">© 다사랑 교실</footer>
+    </div>
+
+    <script>
+      var content = document.getElementById('content');
+      var countEl = document.getElementById('count');
+
+      function escapeHtml(value) {
+        return String(value == null ? '' : value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function cardHtml(post) {
+        var title = escapeHtml(post.title || '무제');
+        var byline = [post.studentName, post.classroomName].filter(Boolean).map(escapeHtml).join(' · ');
+        var thumb = post.imageUrl
+          ? '<img class="thumb" loading="lazy" src="' + escapeHtml(post.imageUrl) + '" alt="' + title + '" referrerpolicy="no-referrer" onerror="this.outerHTML=&quot;<div class=\\&quot;thumb placeholder\\&quot;>🎨</div>&quot;" />'
+          : '<div class="thumb placeholder">🎨</div>';
+        var desc = post.description ? '<p class="desc">' + escapeHtml(post.description) + '</p>' : '';
+        var link = post.webViewLink
+          ? '<a class="view" href="' + escapeHtml(post.webViewLink) + '" target="_blank" rel="noopener noreferrer">작품 보기 ↗</a>'
+          : '';
+        return (
+          '<div class="card">' + thumb +
+          '<div class="body"><h3>' + title + '</h3>' +
+          (byline ? '<div class="byline">' + byline + '</div>' : '') +
+          desc + link + '</div></div>'
+        );
+      }
+
+      function render(items) {
+        if (!items || items.length === 0) {
+          countEl.textContent = '';
+          content.innerHTML = '<div class="state">아직 공개된 작품이 없습니다.</div>';
+          return;
+        }
+        countEl.textContent = '작품 ' + items.length + '개';
+        content.innerHTML = '<div class="grid">' + items.map(cardHtml).join('') + '</div>';
+      }
+
+      function load() {
+        content.innerHTML = '<div class="state"><div class="spinner"></div>작품을 불러오는 중…</div>';
+        // 상대 경로 + 캐시 무력화 — 같은 출처라 CORS 불필요, 승인 즉시 반영된다.
+        fetch('api/public/student-posts?t=' + Date.now(), { cache: 'no-store' })
+          .then(function (res) {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return res.json();
+          })
+          .then(function (data) {
+            render((data && data.items) || []);
+          })
+          .catch(function (err) {
+            content.innerHTML =
+              '<div class="state">작품을 불러오지 못했습니다. 잠시 후 새로고침 해주세요.<br><small>' +
+              escapeHtml(err && err.message) +
+              '</small></div>';
+          });
+      }
+
+      document.getElementById('refresh').addEventListener('click', load);
+      window.addEventListener('focus', load);
+      load();
+    </script>
+  </body>
+</html>

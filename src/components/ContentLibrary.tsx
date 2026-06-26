@@ -1018,11 +1018,11 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
   const notebookLmSyncSummary = notebookLmSyncResult?.summary;
 
   return (
-    <div ref={contentLibraryScrollRef} className="flex-1 overflow-y-auto bg-[#FBFBFA] p-8">
+    <div ref={contentLibraryScrollRef} className="flex-1 overflow-y-auto bg-[#FBFBFA] p-6">
       <div className="mx-auto max-w-6xl">
-        <header className="mb-12 flex items-center justify-between gap-4">
+        <header className="mb-8 flex items-center justify-between gap-4">
           <div>
-            <h1 className="mb-2 text-4xl font-bold text-[#4A3728]">수업 콘텐츠 라이브러리</h1>
+            <h1 className="mb-2 text-3xl font-bold text-[#4A3728]">수업 콘텐츠 라이브러리</h1>
             <p className="text-[#8B7E74]">카테고리 안팎에서 콘텐츠를 만들고 정리하세요.</p>
           </div>
           <div className="flex items-center gap-3">

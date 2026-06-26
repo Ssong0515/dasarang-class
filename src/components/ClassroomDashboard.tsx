@@ -245,18 +245,19 @@ const getRecordTimestamp = (record: Pick<ClassroomDateRecord, 'updatedAt' | 'cre
 const DashboardInfoTooltip: React.FC<{
   content: string;
   label?: string;
-}> = ({ content, label = '설명 보기' }) => (
+  icon?: React.ReactNode;
+}> = ({ content, label = '설명 보기', icon }) => (
   <div className="group/tooltip relative flex shrink-0 items-center">
     <button
       type="button"
       aria-label={label}
       className="flex h-6 w-6 items-center justify-center rounded-full border border-[#E5E3DD] bg-[#FBFBFA] text-[#8B7E74] transition-all hover:border-[#D8D2C8] hover:bg-white hover:text-[#4A3728] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EBD9C1]"
     >
-      <HelpCircle size={14} />
+      {icon ?? <HelpCircle size={14} />}
     </button>
     <div
       role="tooltip"
-      className="pointer-events-none absolute left-0 top-full z-30 mt-3 w-64 -translate-y-1 rounded-2xl bg-[#4A3728] px-4 py-3 text-xs leading-relaxed text-white opacity-0 shadow-xl transition-all duration-150 group-hover/tooltip:translate-y-0 group-hover/tooltip:opacity-100 group-focus-within/tooltip:translate-y-0 group-focus-within/tooltip:opacity-100"
+      className="pointer-events-none absolute left-0 top-full z-30 mt-3 w-72 max-w-[80vw] -translate-y-1 whitespace-pre-wrap rounded-2xl bg-[#4A3728] px-4 py-3 text-xs leading-relaxed text-white opacity-0 shadow-xl transition-all duration-150 group-hover/tooltip:translate-y-0 group-hover/tooltip:opacity-100 group-focus-within/tooltip:translate-y-0 group-focus-within/tooltip:opacity-100"
     >
       {content}
     </div>
@@ -541,7 +542,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       description: classroom.description || '',
       organization: classroom.organization || '',
       feePerHour: classroom.feePerHour != null ? String(classroom.feePerHour) : '',
-      hoursPerSession: classroom.hoursPerSession != null ? String(classroom.hoursPerSession) : '',
+      hoursPerSession: classroom.hoursPerSession != null ? String(classroom.hoursPerSession) : '2',
     });
   }, [
     classroom.color,
@@ -3182,6 +3183,10 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               <h3 className="flex items-center gap-2 text-lg font-bold text-[#4A3728]">
                 <CalendarClock className="text-[#8B5E3C]" size={18} />
                 참고 시간표 연결
+                <DashboardInfoTooltip
+                  content="calendar.damuna.org에 FM으로 짜둔 시간표를 고르면, 그 수업 날짜로 회차 일정을 자동 배정할 수 있습니다. (왼쪽 사이드바 '시간표'에서 바로 편집할 수 있어요.) 시간표를 수정했다면 '재동기화'로 최신 일정을 다시 불러오세요."
+                  label="참고 시간표 연결 도움말"
+                />
               </h3>
               {onListCalendarClasses && (
                 <button
@@ -3200,9 +3205,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 </button>
               )}
             </div>
-            <p className="mb-4 text-sm text-[#8B7E74]">
-              calendar.damuna.org에 FM으로 짜둔 시간표를 고르면, 그 수업 날짜로 회차 일정을 자동 배정할 수 있습니다. (왼쪽 사이드바 "시간표"에서 바로 편집할 수 있어요.) 시간표를 수정했다면 "재동기화"로 최신 일정을 다시 불러오세요.
-            </p>
             {calendarClassesError ? (
               <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
                 {calendarClassesError}
@@ -3257,10 +3259,11 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
             <h3 className="mb-2 flex items-center gap-2 text-lg font-bold text-[#4A3728]">
               <Link2 className="text-[#8B5E3C]" size={18} />
               커리큘럼 연결
+              <DashboardInfoTooltip
+                content="이 클래스에서 진행할 커리큘럼을 연결하세요. 회차별 주제와 진행 상태를 여기에서 관리합니다."
+                label="커리큘럼 연결 도움말"
+              />
             </h3>
-            <p className="mb-4 text-sm text-[#8B7E74]">
-              이 클래스에서 진행할 커리큘럼을 연결하세요. 회차별 주제와 진행 상태를 여기에서 관리합니다.
-            </p>
             <select
               value={classroom.curriculumId || ''}
               disabled={!onUpdateClassroom}
@@ -3283,10 +3286,13 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
         <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-6 shadow-sm sm:p-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-1">
-              <h3 className="text-lg font-bold text-[#4A3728]">시간표로 회차 날짜 자동 배정</h3>
-              <p className="text-sm text-[#8B7E74]">
-                참고 시간표의 실제 수업 날짜를 1회차부터 순서대로 채웁니다. 완료·건너뜀 회차는 제외됩니다.
-              </p>
+              <h3 className="flex items-center gap-2 text-lg font-bold text-[#4A3728]">
+                시간표로 회차 날짜 자동 배정
+                <DashboardInfoTooltip
+                  content="참고 시간표의 실제 수업 날짜를 1회차부터 순서대로 채웁니다. 완료·건너뜀 회차는 제외됩니다."
+                  label="자동 배정 도움말"
+                />
+              </h3>
             </div>
             <button
               onClick={handleAssignCurriculumDatesClick}
@@ -3567,13 +3573,13 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 type="number"
                 inputMode="numeric"
                 min={0}
-                step={1000}
+                step={10000}
                 value={settingsDraft.feePerHour}
                 onChange={(event) =>
                   setSettingsDraft({ ...settingsDraft, feePerHour: event.target.value })
                 }
                 className="w-full rounded-2xl border-2 border-[#E5E3DD] px-5 py-3.5 text-base font-bold text-[#4A3728] transition-all focus:border-[#8B5E3C] focus:outline-none"
-                placeholder="예: 40000"
+                placeholder="예: 40000 (만원 단위, 기본 4만원)"
               />
             </label>
             <label className="block">
@@ -3588,7 +3594,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                   setSettingsDraft({ ...settingsDraft, hoursPerSession: event.target.value })
                 }
                 className="w-full rounded-2xl border-2 border-[#E5E3DD] px-5 py-3.5 text-base font-bold text-[#4A3728] transition-all focus:border-[#8B5E3C] focus:outline-none"
-                placeholder="예: 2 (비우면 1로 계산)"
+                placeholder="예: 2 (기본 2시수)"
               />
             </label>
           </div>
@@ -3776,9 +3782,9 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   };
 
   return (
-    <main className="flex-1 overflow-y-auto bg-[#FBFBFA] p-8">
+    <main className="flex-1 overflow-y-auto bg-[#FBFBFA] p-6">
       <div className="mx-auto max-w-6xl">
-        <div className="mb-8">
+        <div className="mb-6">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-[#FFF5E9] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#8B5E3C]">
               클래스 관리
@@ -3790,27 +3796,19 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               </span>
             )}
           </div>
-          <h1 className="mb-3 text-5xl font-serif font-bold text-[#4A3728]">{classroom.name}</h1>
-          {classroom.description?.trim() && (
-            <p className="mb-4 max-w-2xl whitespace-pre-wrap rounded-2xl border border-[#F0EAE0] bg-[#FCF8F2] px-4 py-3 text-sm leading-relaxed text-[#6B5E51]">
-              {classroom.description}
-            </p>
-          )}
-          <p className="hidden max-w-md text-[#8B7E74]">
-            클래스별 콘텐츠 배정과 날짜별 운영 기록을 한 화면에서 관리합니다.
-          </p>
-          <p className="hidden mt-3 max-w-2xl text-sm text-[#8B7E74]">
-            콘텐츠는 학생 페이지 노출 기준이고, 날짜 기록은 '건너뜀'이 아닌 날에 그날 진행한 수업만 별도로 저장됩니다.
-          </p>
-          <p className="max-w-md text-[#8B7E74]">
-            날짜별 수업 기록과 실제 진행한 콘텐츠, 출석, 메모를 한 화면에서 관리합니다.
-          </p>
-          <p className="mt-3 max-w-2xl text-sm text-[#8B7E74]">
-            학생 페이지에는 강사가 '공개'한 실습만 실시간으로 열리고, 날짜 기록에서는 그날 실제 진행한 수업만 별도로 남길 수 있습니다.
-          </p>
+          <div className="flex items-center gap-2">
+            <h1 className="text-3xl font-serif font-bold text-[#4A3728]">{classroom.name}</h1>
+            {classroom.description?.trim() && (
+              <DashboardInfoTooltip
+                content={classroom.description}
+                label="클래스 특징 · 내용 보기"
+                icon={<AlertCircle size={15} />}
+              />
+            )}
+          </div>
         </div>
 
-        <div className="mb-8 flex gap-8 border-b border-[#E5E3DD]">
+        <div className="mb-6 flex gap-6 border-b border-[#E5E3DD]">
           {[
             { id: 'dashboard', label: '수업 대시보드', icon: ClipboardList },
             { id: 'results', label: '결과물', icon: Images },
