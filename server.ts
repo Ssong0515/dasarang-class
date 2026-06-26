@@ -12,7 +12,7 @@ import {
   validateNotebookLmSyncPayload,
 } from './server/notebookLmSync';
 import { createAdminApiRouter } from './server/adminApi/router';
-import { handleMcpPostRequest, handleMcpUnsupportedMethod } from './server/adminApi/mcp';
+import { handleMcpDeleteRequest, handleMcpGetRequest, handleMcpPostRequest } from './server/adminApi/mcp';
 import { syncRecordToCalendarSafe } from './server/adminApi/calendarSync';
 import {
   assignCurriculumDatesFromCalendar,
@@ -247,10 +247,10 @@ async function startServer() {
   // ChatGPT(커스텀 GPT Actions)용 관리 API — API 키 인증 (openapi.json만 공개)
   app.use(withBasePath(APP_BASE_PATH, '/api/gpt'), createAdminApiRouter());
 
-  // Claude용 MCP 서버 — Streamable HTTP (stateless), Bearer API 키 인증
+  // Claude/ChatGPT용 MCP 서버 — Streamable HTTP (stateful 세션), Bearer API 키 인증
   app.post(withBasePath(APP_BASE_PATH, '/mcp'), handleMcpPostRequest);
-  app.get(withBasePath(APP_BASE_PATH, '/mcp'), handleMcpUnsupportedMethod);
-  app.delete(withBasePath(APP_BASE_PATH, '/mcp'), handleMcpUnsupportedMethod);
+  app.get(withBasePath(APP_BASE_PATH, '/mcp'), handleMcpGetRequest);
+  app.delete(withBasePath(APP_BASE_PATH, '/mcp'), handleMcpDeleteRequest);
 
   // damuna.org 학생 작품 쇼케이스용 공개 피드 (승인된 게시물만)
   app.get(withBasePath(APP_BASE_PATH, '/api/public/student-posts'), async (req, res) => {

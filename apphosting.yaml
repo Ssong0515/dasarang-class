@@ -3,7 +3,9 @@ runConfig:
   cpu: 1
   memoryMiB: 512
   minInstances: 0
-  maxInstances: 2
+  # MCP가 유상태 세션(transport)을 인스턴스 메모리에 보관하므로 1개로 고정한다.
+  # 세션 어피니티가 없어 2개 이상이면 후속 요청이 다른 인스턴스로 가서 연결이 끊긴다.
+  maxInstances: 1
 
 buildCommand: npm run build
 

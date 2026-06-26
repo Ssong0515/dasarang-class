@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Users,
@@ -610,31 +610,49 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     setAssignError(null);
   }, [classroom.id]);
 
-  useEffect(() => {
-    if (activeTab !== 'curriculum' || !onListCalendarClasses) {
-      return;
+  // 참고 시간표(calendar.damuna.org) 목록을 다시 가져온다. 탭 진입 시 자동 호출된다.
+  const loadCalendarClasses = useCallback(async (): Promise<CalendarClassSummary[] | null> => {
+    if (!onListCalendarClasses) {
+      return null;
     }
-    let cancelled = false;
     setCalendarClassesLoading(true);
     setCalendarClassesError(null);
-    onListCalendarClasses()
-      .then((items) => {
-        if (!cancelled) setCalendarClasses(items);
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          setCalendarClassesError(
-            error instanceof Error ? error.message : '참고 시간표를 불러오지 못했습니다.'
-          );
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setCalendarClassesLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeTab, onListCalendarClasses]);
+    try {
+      const items = await onListCalendarClasses();
+      setCalendarClasses(items);
+      return items;
+    } catch (error) {
+      setCalendarClassesError(
+        error instanceof Error ? error.message : '참고 시간표를 불러오지 못했습니다.'
+      );
+      return null;
+    } finally {
+      setCalendarClassesLoading(false);
+    }
+  }, [onListCalendarClasses]);
+
+  // 재동기화: 시간표 최신 정보를 다시 불러오고, 연결된 시간표면 기관/단체도 클래스에 반영한다.
+  const handleResyncCalendar = useCallback(async () => {
+    const items = await loadCalendarClasses();
+    if (!items || !onUpdateClassroom || !classroom.calendarClassId) {
+      return;
+    }
+    const fresh = items.find((item) => item.id === classroom.calendarClassId);
+    if (!fresh) {
+      return;
+    }
+    const label = formatCalendarOrgs(fresh.orgs);
+    if (label && label !== classroom.organization) {
+      onUpdateClassroom(classroom.id, { organization: label });
+    }
+  }, [loadCalendarClasses, onUpdateClassroom, classroom.calendarClassId, classroom.id, classroom.organization]);
+
+  useEffect(() => {
+    if (activeTab !== 'curriculum') {
+      return;
+    }
+    void loadCalendarClasses();
+  }, [activeTab, loadCalendarClasses]);
 
   const linkedCurriculum = useMemo(
     () => (curriculums || []).find((curriculum) => curriculum.id === classroom.curriculumId) || null,
@@ -814,17 +832,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       }
     }
     onUpdateClassroom(classroom.id, patch);
-  };
-
-  // 연결된 시간표의 기관/단체를 클래스에 다시 가져온다(수동, 기존 값 덮어씀).
-  const handlePullOrganizationFromCalendar = () => {
-    if (!onUpdateClassroom || !linkedCalendarClass) {
-      return;
-    }
-    const label = formatCalendarOrgs(linkedCalendarClass.orgs);
-    if (label) {
-      onUpdateClassroom(classroom.id, { organization: label });
-    }
   };
 
   const handleAssignCurriculumDatesClick = async () => {
@@ -3168,12 +3175,30 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
         {/* 연결 설정 */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-6 shadow-sm sm:p-8">
-            <h3 className="mb-2 flex items-center gap-2 text-lg font-bold text-[#4A3728]">
-              <CalendarClock className="text-[#8B5E3C]" size={18} />
-              참고 시간표 연결
-            </h3>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h3 className="flex items-center gap-2 text-lg font-bold text-[#4A3728]">
+                <CalendarClock className="text-[#8B5E3C]" size={18} />
+                참고 시간표 연결
+              </h3>
+              {onListCalendarClasses && (
+                <button
+                  type="button"
+                  onClick={() => void handleResyncCalendar()}
+                  disabled={calendarClassesLoading}
+                  title="시간표에서 최신 정보(일정·기간·기관)를 다시 가져옵니다"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#EBD9C1] bg-white px-3 py-1.5 text-xs font-bold text-[#8B5E3C] transition-all hover:bg-[#FFF5E9] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {calendarClassesLoading ? (
+                    <Loader2 size={12} className="animate-spin" />
+                  ) : (
+                    <RefreshCw size={12} />
+                  )}
+                  {calendarClassesLoading ? '동기화 중...' : '재동기화'}
+                </button>
+              )}
+            </div>
             <p className="mb-4 text-sm text-[#8B7E74]">
-              calendar.damuna.org에 FM으로 짜둔 시간표를 고르면, 그 수업 날짜로 회차 일정을 자동 배정할 수 있습니다. (왼쪽 사이드바 "시간표"에서 바로 편집할 수 있어요.)
+              calendar.damuna.org에 FM으로 짜둔 시간표를 고르면, 그 수업 날짜로 회차 일정을 자동 배정할 수 있습니다. (왼쪽 사이드바 "시간표"에서 바로 편집할 수 있어요.) 시간표를 수정했다면 "재동기화"로 최신 일정을 다시 불러오세요.
             </p>
             {calendarClassesError ? (
               <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
@@ -3219,16 +3244,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                     <span className="rounded-full bg-white px-3 py-1 text-xs font-bold shadow-sm">
                       {formatCalendarOrgs(linkedCalendarClass.orgs)}
                     </span>
-                    {onUpdateClassroom && (
-                      <button
-                        type="button"
-                        onClick={handlePullOrganizationFromCalendar}
-                        className="ml-auto inline-flex items-center gap-1 rounded-full border border-[#EBD9C1] bg-white px-3 py-1 text-xs font-bold text-[#8B5E3C] transition-all hover:bg-[#FFF5E9]"
-                      >
-                        <RefreshCw size={12} />
-                        클래스에 가져오기
-                      </button>
-                    )}
                   </div>
                 )}
               </div>

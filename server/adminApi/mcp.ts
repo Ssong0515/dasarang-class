@@ -1,5 +1,7 @@
+import { randomUUID } from 'crypto';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import type express from 'express';
 import { z } from 'zod';
 import { extractBearerToken, isValidApiKey } from './auth';
@@ -253,12 +255,20 @@ const buildMcpServer = () => {
 };
 
 /**
- * Streamable HTTP (stateless) 핸들러.
- * App Hosting은 인스턴스 0-2개로 세션 어피니티가 없으므로 요청마다 새 transport를 만든다.
+ * Streamable HTTP (stateful) 세션 관리.
+ *
+ * ChatGPT 커넥터는 initialize 응답의 Mcp-Session-Id를 받아 이후 요청·SSE 스트림에
+ * 재사용하는 표준 세션 흐름을 기대한다. 무상태로 운영하면 첫 요청 뒤 연결이 끊긴 것으로
+ * 처리되므로, 세션ID를 발급하고 transport를 메모리에 유지한다.
+ *
+ * 주의: 세션 transport는 인스턴스 메모리에 보관되므로 어피니티가 없으면 후속 요청이
+ * 다른 인스턴스로 가서 깨진다. 따라서 apphosting.yaml에서 maxInstances를 1로 고정해야 한다.
  */
-export const handleMcpPostRequest: express.RequestHandler = async (req, res) => {
-  // 인증: Authorization 헤더(Bearer) 우선, 없으면 URL 쿼리 파라미터(?key= 또는 ?token=)
-  // 쿼리 방식은 Claude Desktop 커넥터 UI처럼 커스텀 헤더를 못 넣는 클라이언트를 위한 것.
+const transports: Record<string, StreamableHTTPServerTransport> = {};
+
+// 인증: Authorization 헤더(Bearer) 우선, 없으면 URL 쿼리 파라미터(?key= 또는 ?token=).
+// 쿼리 방식은 커스텀 헤더를 못 넣는 클라이언트를 위한 것. 통과하면 true, 실패면 401 응답 후 false.
+const authorizeMcp = (req: express.Request, res: express.Response): boolean => {
   const queryKey = (req.query.key || req.query.token);
   const token = extractBearerToken(req.headers.authorization)
     || (typeof queryKey === 'string' ? queryKey.trim() : '');
@@ -268,22 +278,50 @@ export const handleMcpPostRequest: express.RequestHandler = async (req, res) => 
       error: { code: -32001, message: 'Unauthorized: Bearer API 키가 필요합니다.' },
       id: null,
     });
+    return false;
+  }
+  return true;
+};
+
+export const handleMcpPostRequest: express.RequestHandler = async (req, res) => {
+  if (!authorizeMcp(req, res)) {
     return;
   }
 
-  const server = buildMcpServer();
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined,
-    enableJsonResponse: true,
-  });
-
-  res.on('close', () => {
-    transport.close();
-    server.close();
-  });
+  const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
   try {
-    await server.connect(transport);
+    let transport: StreamableHTTPServerTransport;
+    if (sessionId && transports[sessionId]) {
+      // 기존 세션 재사용
+      transport = transports[sessionId];
+    } else if (!sessionId && isInitializeRequest(req.body)) {
+      // 새 세션 시작: initialize 요청에만 transport를 생성한다.
+      transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => randomUUID(),
+        enableJsonResponse: true,
+        onsessioninitialized: (id) => {
+          transports[id] = transport;
+        },
+      });
+      // 세션 종료(클라이언트 DELETE 또는 스트림 종료) 시 메모리에서 정리한다.
+      transport.onclose = () => {
+        if (transport.sessionId) {
+          delete transports[transport.sessionId];
+        }
+      };
+      const server = buildMcpServer();
+      await server.connect(transport);
+    } else {
+      // 세션ID가 없고 initialize도 아닌 요청은 거부한다.
+      res.status(400).json({
+        jsonrpc: '2.0',
+        error: { code: -32000, message: 'Bad Request: 유효한 Mcp-Session-Id가 없거나 먼저 initialize가 필요합니다.' },
+        id: null,
+      });
+      return;
+    }
+
     await transport.handleRequest(req, res, req.body);
   } catch (error) {
     console.error('[mcp] 요청 처리 실패:', error);
@@ -297,10 +335,33 @@ export const handleMcpPostRequest: express.RequestHandler = async (req, res) => 
   }
 };
 
-export const handleMcpUnsupportedMethod: express.RequestHandler = (_req, res) => {
-  res.status(405).json({
-    jsonrpc: '2.0',
-    error: { code: -32000, message: 'Method not allowed. POST /mcp만 지원합니다 (stateless).' },
-    id: null,
-  });
+// GET /mcp (서버→클라 알림용 SSE 스트림), DELETE /mcp (세션 종료) 공통 처리.
+const handleMcpSessionRequest: express.RequestHandler = async (req, res) => {
+  if (!authorizeMcp(req, res)) {
+    return;
+  }
+  const sessionId = req.headers['mcp-session-id'] as string | undefined;
+  if (!sessionId || !transports[sessionId]) {
+    res.status(400).json({
+      jsonrpc: '2.0',
+      error: { code: -32000, message: 'Bad Request: 유효한 Mcp-Session-Id가 없습니다.' },
+      id: null,
+    });
+    return;
+  }
+  try {
+    await transports[sessionId].handleRequest(req, res);
+  } catch (error) {
+    console.error('[mcp] 세션 요청 처리 실패:', error);
+    if (!res.headersSent) {
+      res.status(500).json({
+        jsonrpc: '2.0',
+        error: { code: -32603, message: 'Internal server error' },
+        id: null,
+      });
+    }
+  }
 };
+
+export const handleMcpGetRequest = handleMcpSessionRequest;
+export const handleMcpDeleteRequest = handleMcpSessionRequest;
