@@ -10,7 +10,6 @@ import {
   Users,
   Library,
   GraduationCap,
-  Wallet,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -41,9 +40,9 @@ const getTodayDateStr = (): string => {
 };
 
 /**
- * 홈 대시보드의 전체 클래스 통합 강사비 달력.
- * 각 반 달력처럼 월별 그리드를 보여주되, 모든 반을 한 판에 모아 날짜마다 색점(반)과 적립액을 띄우고
- * 위에는 "이번 달 번 돈 / 예상 총" 요약을 보여준다.
+ * 홈 대시보드의 전체 클래스 통합 수업 달력.
+ * 각 반 달력처럼 월별 그리드를 보여주되, 모든 반을 한 판에 모아 날짜마다 색점(반)을 띄워
+ * 전체 수업 일정을 한눈에 보게 한다. 강사비(시수 단가)를 설정한 반이 있으면 적립액을 보조로 곁들인다.
  */
 const MonthlyEarningsCalendar: React.FC<{
   classrooms: Classroom[];
@@ -60,7 +59,11 @@ const MonthlyEarningsCalendar: React.FC<{
   const cells = useMemo(() => getMonthDateCells(view.year, view.month), [view]);
 
   const todayStr = getTodayDateStr();
-  const remaining = Math.max(earnings.totalExpected - earnings.totalEarned, 0);
+  const remainingCount = Math.max(earnings.scheduledCount - earnings.doneCount, 0);
+  const progress =
+    earnings.scheduledCount > 0
+      ? Math.round((earnings.doneCount / earnings.scheduledCount) * 100)
+      : 0;
   const activeClasses = earnings.perClass.filter((classEarning) => classEarning.scheduledCount > 0);
   const hasAnyFee = classrooms.some((classroom) => getPerSessionFee(classroom) > 0);
 
@@ -82,12 +85,12 @@ const MonthlyEarningsCalendar: React.FC<{
     >
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#EAF7EE] text-[#2D7A4D]">
-            <Wallet size={22} />
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#FFF5E9] text-[#8B5E3C]">
+            <Calendar size={22} />
           </div>
           <div>
-            <h2 className="text-2xl font-serif font-bold text-[#4A3728]">강사비 달력</h2>
-            <p className="text-sm text-[#8B7E74]">완료한 수업의 강사비를 전체 클래스에서 모아 봅니다.</p>
+            <h2 className="text-2xl font-serif font-bold text-[#4A3728]">수업 달력</h2>
+            <p className="text-sm text-[#8B7E74]">모든 클래스의 수업을 한 달력에 모아 한눈에 봅니다.</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -117,35 +120,52 @@ const MonthlyEarningsCalendar: React.FC<{
         </div>
       </div>
 
-      {/* 요약 카드 */}
+      {/* 요약 카드 — 수업(일정) 중심, 강사비는 단가 설정 시 보조 */}
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <div className="rounded-2xl border border-[#E0EFE4] bg-[#F4FAF6] p-4">
-          <p className="text-[11px] font-bold text-[#6B8E7A]">이번 달 번 돈</p>
-          <p className="mt-1 text-2xl font-extrabold text-[#2D7A4D]">{formatWon(earnings.totalEarned)}</p>
-          <p className="mt-0.5 text-[11px] text-[#8FAE9C]">완료 {earnings.doneCount}회</p>
-        </div>
-        <div className="rounded-2xl border border-[#EBD9C1] bg-[#FFF9F1] p-4">
-          <p className="text-[11px] font-bold text-[#A2906F]">이번 달 예상 총</p>
-          <p className="mt-1 text-2xl font-extrabold text-[#8B5E3C]">{formatWon(earnings.totalExpected)}</p>
-          <p className="mt-0.5 text-[11px] text-[#B6A488]">예정 {earnings.scheduledCount}회</p>
-        </div>
         <div className="rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] p-4">
-          <p className="text-[11px] font-bold text-[#8B7E74]">남은 예상</p>
-          <p className="mt-1 text-2xl font-extrabold text-[#4A3728]">{formatWon(remaining)}</p>
-          <p className="mt-0.5 text-[11px] text-[#A89F94]">아직 안 한 수업</p>
+          <p className="text-[11px] font-bold text-[#8B7E74]">이번 달 수업</p>
+          <p className="mt-1 text-2xl font-extrabold text-[#4A3728]">
+            {earnings.scheduledCount}
+            <span className="text-base">회</span>
+          </p>
+          <p className="mt-0.5 text-[11px] text-[#A89F94]">
+            완료 {earnings.doneCount} · 남음 {remainingCount}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-[#E0EFE4] bg-[#F4FAF6] p-4">
+          <p className="text-[11px] font-bold text-[#6B8E7A]">완료한 수업</p>
+          <p className="mt-1 text-2xl font-extrabold text-[#2D7A4D]">
+            {earnings.doneCount}
+            <span className="text-base">회</span>
+          </p>
+          <p className="mt-0.5 text-[11px] text-[#8FAE9C]">이번 달</p>
         </div>
         <div className="rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] p-4">
           <p className="text-[11px] font-bold text-[#8B7E74]">진행률</p>
           <p className="mt-1 text-2xl font-extrabold text-[#4A3728]">
-            {earnings.scheduledCount > 0
-              ? Math.round((earnings.doneCount / earnings.scheduledCount) * 100)
-              : 0}
+            {progress}
             <span className="text-base">%</span>
           </p>
           <p className="mt-0.5 text-[11px] text-[#A89F94]">
             {earnings.doneCount}/{earnings.scheduledCount}회 완료
           </p>
         </div>
+        {hasAnyFee ? (
+          <div className="rounded-2xl border border-[#EBD9C1] bg-[#FFF9F1] p-4">
+            <p className="text-[11px] font-bold text-[#A2906F]">이번 달 강사비</p>
+            <p className="mt-1 text-2xl font-extrabold text-[#8B5E3C]">{formatWon(earnings.totalEarned)}</p>
+            <p className="mt-0.5 text-[11px] text-[#B6A488]">예상 {formatWon(earnings.totalExpected)}</p>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] p-4">
+            <p className="text-[11px] font-bold text-[#8B7E74]">남은 수업</p>
+            <p className="mt-1 text-2xl font-extrabold text-[#4A3728]">
+              {remainingCount}
+              <span className="text-base">회</span>
+            </p>
+            <p className="mt-0.5 text-[11px] text-[#A89F94]">아직 안 한 수업</p>
+          </div>
+        )}
       </div>
 
       {/* 달력 */}
@@ -203,17 +223,19 @@ const MonthlyEarningsCalendar: React.FC<{
                       </span>
                     )}
                   </div>
-                  <div className="mt-auto pt-0.5">
-                    {day.earned > 0 ? (
-                      <span className="text-[10px] font-extrabold text-[#2D7A4D]">
-                        +{formatFeeShort(day.earned)}만
-                      </span>
-                    ) : day.expected > 0 ? (
-                      <span className="text-[10px] font-bold text-[#C2BAAE]">
-                        +{formatFeeShort(day.expected)}만
-                      </span>
-                    ) : null}
-                  </div>
+                  {hasAnyFee && (
+                    <div className="mt-auto pt-0.5">
+                      {day.earned > 0 ? (
+                        <span className="text-[10px] font-extrabold text-[#2D7A4D]">
+                          +{formatFeeShort(day.earned)}만
+                        </span>
+                      ) : day.expected > 0 ? (
+                        <span className="text-[10px] font-bold text-[#C2BAAE]">
+                          +{formatFeeShort(day.expected)}만
+                        </span>
+                      ) : null}
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -221,8 +243,8 @@ const MonthlyEarningsCalendar: React.FC<{
         })}
       </div>
 
-      {/* 클래스별 범례 */}
-      {hasAnyFee && activeClasses.length > 0 ? (
+      {/* 클래스별 범례 — 색점이 어느 반인지 안내 (강사비는 단가 설정 시 곁들임) */}
+      {activeClasses.length > 0 ? (
         <div className="mt-5 flex flex-wrap gap-2 border-t border-[#F3F2EE] pt-5">
           {activeClasses.map((classEarning) => (
             <span
@@ -234,19 +256,18 @@ const MonthlyEarningsCalendar: React.FC<{
                 style={{ backgroundColor: classEarning.color || '#A2906F' }}
               />
               <span className="font-bold text-[#4A3728]">{classEarning.classroomName}</span>
-              {classEarning.earned > 0 ? (
-                <span className="font-extrabold text-[#2D7A4D]">{formatMan(classEarning.earned)}</span>
-              ) : (
-                <span className="text-[#A89F94]">완료 {classEarning.doneCount}회</span>
+              <span className="text-[#A89F94]">
+                완료 {classEarning.doneCount}/{classEarning.scheduledCount}회
+              </span>
+              {hasAnyFee && classEarning.earned > 0 && (
+                <span className="font-extrabold text-[#8B5E3C]">{formatMan(classEarning.earned)}</span>
               )}
             </span>
           ))}
         </div>
       ) : (
         <p className="mt-5 border-t border-[#F3F2EE] pt-5 text-center text-sm text-[#A89F94]">
-          {!hasAnyFee
-            ? '클래스 설정에서 시수 단가를 입력하면, 수업을 완료할 때마다 강사비가 여기에 모입니다.'
-            : '이번 달에 잡힌 수업이 없어요. 커리큘럼·시간표로 수업일을 배정하면 여기에 표시됩니다.'}
+          이번 달에 잡힌 수업이 없어요. 커리큘럼·시간표로 수업일을 배정하면 여기에 모여서 한눈에 보입니다.
         </p>
       )}
     </motion.section>
