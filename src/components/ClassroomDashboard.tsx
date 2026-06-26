@@ -341,6 +341,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const [isAssigningDates, setIsAssigningDates] = useState(false);
   const [assignMessage, setAssignMessage] = useState<string | null>(null);
   const [assignError, setAssignError] = useState<string | null>(null);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   const isSavingStudentAction = studentAction !== null;
   const availableMoveClassrooms = classrooms.filter((candidate) => candidate.id !== classroom.id);
@@ -641,8 +642,10 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     if (!fresh) {
       return;
     }
+    // 기관/단체는 "비어 있을 때만" 캘린더 값으로 채운다. 사용자가 직접 입력한 값을
+    // 재동기화가 덮어쓰면, 저장한 기관명이 자꾸 사라지는 것처럼 보인다(연결 동작과 동일하게 보존).
     const label = formatCalendarOrgs(fresh.orgs);
-    if (label && label !== classroom.organization) {
+    if (label && !classroom.organization?.trim()) {
       onUpdateClassroom(classroom.id, { organization: label });
     }
   }, [loadCalendarClasses, onUpdateClassroom, classroom.calendarClassId, classroom.id, classroom.organization]);
@@ -3469,7 +3472,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
             <h2 className="text-2xl font-bold">클래스 설정</h2>
           </div>
           <button
-            onClick={() => {
+            onClick={async () => {
+              if (!onUpdateClassroom || isSavingSettings) return;
               // 빈칸이면 저장된 단가를 삭제(deleteField)하고, 값이 있으면 숫자로 저장한다.
               // 음수·숫자 아님이면 저장을 막고 안내한다(조용히 무시하지 않음).
               const readFee = (
@@ -3489,16 +3493,26 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 window.alert('강사비는 0 이상의 숫자만 입력할 수 있어요. (비우면 단가가 삭제됩니다)');
                 return;
               }
-              onUpdateClassroom?.(classroom.id, {
-                name: settingsDraft.name,
-                color: settingsDraft.color,
-                icon: settingsDraft.icon,
-                description: settingsDraft.description,
-                organization: settingsDraft.organization,
-                feePerHour: feePerHour.value,
-                hoursPerSession: hoursPerSession.value,
-              } as Partial<Classroom>);
-              window.alert('클래스 설정이 저장되었습니다.');
+              // 저장은 await로 끝까지 기다리고, 실패하면 진짜 에러를 알린다.
+              // (이전엔 await 없이 곧바로 "저장됨"을 띄워, 쓰기가 실패해도 성공처럼 보이고
+              //  새로고침하면 값이 사라졌다.)
+              setIsSavingSettings(true);
+              try {
+                await onUpdateClassroom(classroom.id, {
+                  name: settingsDraft.name,
+                  color: settingsDraft.color,
+                  icon: settingsDraft.icon,
+                  description: settingsDraft.description,
+                  organization: settingsDraft.organization,
+                  feePerHour: feePerHour.value,
+                  hoursPerSession: hoursPerSession.value,
+                } as Partial<Classroom>);
+                window.alert('클래스 설정이 저장되었습니다.');
+              } catch {
+                window.alert('저장에 실패했습니다. 권한·네트워크를 확인하고 다시 시도해주세요.');
+              } finally {
+                setIsSavingSettings(false);
+              }
             }}
             className="flex items-center gap-2 rounded-xl bg-[#8B5E3C] px-5 py-2.5 text-sm font-bold text-white transition-all hover:bg-[#724D31]"
           >

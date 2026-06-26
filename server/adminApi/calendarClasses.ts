@@ -248,6 +248,15 @@ export const assignCurriculumDatesFromCalendar = async (
     .slice()
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
+  // id가 없거나 중복이면 날짜가 모두 같은 sessionStates 키로 뭉쳐 한 날짜만 남는다. 조용히 망가지지 않게 막는다.
+  const ids = sessions.map((session) => session.id);
+  if (ids.some((id) => !id) || new Set(ids).size !== ids.length) {
+    throw new AdminApiError(
+      400,
+      '커리큘럼 회차에 고유 id가 없습니다. 커리큘럼을 한 번 저장(수정)해 회차 id를 부여한 뒤 다시 시도하세요.'
+    );
+  }
+
   // 이 반의 회차 날짜·상태는 전부 반별(sessionStates)에만 있다. 커리큘럼은 날짜·상태를 갖지 않음.
   const states = classroom.sessionStates || {};
   const resolveDate = (session: CurriculumSession) => states[session.id]?.date || '';

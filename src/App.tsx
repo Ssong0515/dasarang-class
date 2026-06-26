@@ -664,6 +664,11 @@ export default function App() {
           curriculumId: typeof data.curriculumId === 'string' ? data.curriculumId : undefined,
           description: typeof data.description === 'string' ? data.description : undefined,
           organization: typeof data.organization === 'string' ? data.organization : undefined,
+          // 강사비(단가·시수)도 함께 읽어와야 설정 화면에 저장된 값이 다시 뜬다.
+          // (빠뜨리면 DB엔 있어도 화면엔 undefined→빈칸이라 "저장 안 됨"처럼 보인다.)
+          feePerHour: typeof data.feePerHour === 'number' ? data.feePerHour : undefined,
+          hoursPerSession:
+            typeof data.hoursPerSession === 'number' ? data.hoursPerSession : undefined,
           calendarClassId: typeof data.calendarClassId === 'string' ? data.calendarClassId : undefined,
           sessionStates:
             data.sessionStates && typeof data.sessionStates === 'object'
@@ -1318,7 +1323,12 @@ export default function App() {
     // 커리큘럼은 순수 템플릿: 주제·상세·순서·기본 콘텐츠만 저장한다.
     // 날짜·상태(반별)는 절대 커리큘럼에 쓰지 않는다 — 옛 문서/드래프트에 남아 있어도 여기서 떨군다.
     const orderedSessions = sessions.map((session, index) => ({
-      id: session.id,
+      // id가 없으면 모든 회차가 sessionStates['undefined'] 한 칸으로 뭉쳐 자동 배정이 깨진다. 반드시 부여.
+      id:
+        session.id ||
+        (typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : `${Date.now()}-${index}`),
       order: index + 1,
       topic: session.topic,
       ...(session.details !== undefined ? { details: session.details } : {}),

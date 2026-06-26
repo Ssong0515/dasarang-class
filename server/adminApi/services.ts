@@ -28,6 +28,25 @@ type DocData = Record<string, unknown>;
 
 const docToObject = (id: string, data: DocData): DocData & { id: string } => ({ ...data, id });
 
+/**
+ * 커리큘럼 회차 배열을 정규화한다: 모든 회차에 안정적인 `id`와 1-based `order`를 보장.
+ *
+ * `sessions`를 통째로 넣어 만든 커리큘럼(create/update)은 회차에 id가 없을 수 있는데,
+ * 그러면 자동 배정이 날짜를 `sessionStates[session.id]`에 쓸 때 모든 회차가 같은
+ * `"undefined"` 키로 뭉쳐 한 날짜만 살아남는 버그가 생긴다. 쓰기 시점에 여기서 막는다.
+ */
+const normalizeCurriculumSessions = (value: unknown): unknown => {
+  if (!Array.isArray(value)) return value;
+  return value.map((session, index) => {
+    const s = (session && typeof session === 'object' ? session : {}) as Partial<CurriculumSession>;
+    return {
+      ...s,
+      id: s.id || crypto.randomUUID(),
+      order: index + 1,
+    };
+  });
+};
+
 const compareBySpec = (spec: { field: string; direction: 'asc' | 'desc' }) => {
   return (a: DocData, b: DocData) => {
     const left = a[spec.field];
@@ -134,6 +153,10 @@ export const createResource = async (
     ownerUid,
   };
 
+  if (resource === 'curriculums' && 'sessions' in docData) {
+    docData.sessions = normalizeCurriculumSessions(docData.sessions);
+  }
+
   if (resource === 'students') {
     docData.initials = (data.initials as string) || buildInitials(data.name as string);
     if (docData.order === undefined) {
@@ -179,6 +202,9 @@ export const updateResource = async (resource: ResourceName, id: string, patch: 
   }
 
   const updateData: DocData = { ...patch };
+  if (resource === 'curriculums' && 'sessions' in updateData) {
+    updateData.sessions = normalizeCurriculumSessions(updateData.sessions);
+  }
   if ('updatedAt' in (doc.data() as DocData) || resource === 'curriculums' || resource === 'students') {
     updateData.updatedAt = nowIso();
   }
