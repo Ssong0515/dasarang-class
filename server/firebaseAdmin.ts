@@ -109,7 +109,7 @@ export const getAdminDb = () =>
   getFirestore(getFirebaseAdminApp(), firebaseConfig.firestoreDatabaseId);
 
 /** calendar.damuna.org가 쓰는 같은 프로젝트의 (default) Firestore 데이터베이스 */
-export const getCalendarDb = () => getFirestore(getFirebaseAdminApp());
+export const getCalendarDb = () => getFirestore(getFirebaseAdminApp(), 'calendar');
 
 const isAdminToken = async (decodedToken: DecodedIdToken, email: string) => {
   if (getConfiguredAdminEmails().has(email)) {
