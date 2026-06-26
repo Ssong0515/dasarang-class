@@ -83,6 +83,7 @@ import {
   splitStudentsByStatus,
 } from '../utils/students';
 import { isAttendanceExcluded } from '../utils/attendance';
+import { deleteField } from '../firebase';
 import {
   buildMonthEarnings,
   formatFeeShort,
@@ -538,6 +539,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       icon: classroom.icon || DEFAULT_CLASSROOM_ICON,
       description: classroom.description || '',
       organization: classroom.organization || '',
+      feePerHour: classroom.feePerHour != null ? String(classroom.feePerHour) : '',
+      hoursPerSession: classroom.hoursPerSession != null ? String(classroom.hoursPerSession) : '',
     });
   }, [
     classroom.color,
@@ -545,6 +548,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     classroom.name,
     classroom.description,
     classroom.organization,
+    classroom.feePerHour,
+    classroom.hoursPerSession,
   ]);
 
   useEffect(() => {
@@ -2456,6 +2461,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 const hasMemo = memoDateSet.has(dateStr);
                 const plannedSessions = plannedSessionsByDate.get(dateStr);
                 const status = dateStatusByDate.get(dateStr);
+                // 그날 완료한 회차들의 강사비 합(같은 날 2회차여도 합산). 0이면 표시 안 함.
+                const dayEarned = monthEarnings.byDate.get(dateStr)?.earned ?? 0;
                 // 오늘은 선택·상태와 무관하게 항상 파란색(선택돼 있어도 파랑 유지).
                 const isDarkCell = isToday || isSelected;
                 const cellTone = isToday
@@ -2488,13 +2495,13 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                   >
                     <span className="leading-none">{date.getDate()}</span>
                     <span className="mt-0.5 flex h-2.5 items-center justify-center gap-0.5 leading-none">
-                      {perSessionFee > 0 && status === 'done' ? (
+                      {dayEarned > 0 ? (
                         <span
                           className={`text-[9px] font-extrabold ${
                             isDarkCell ? 'text-white' : 'text-[#2D7A4D]'
                           }`}
                         >
-                          +{formatFeeShort(perSessionFee)}
+                          +{formatFeeShort(dayEarned)}만
                         </span>
                       ) : isActive ? (
                         <span
@@ -3448,21 +3455,34 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
           </div>
           <button
             onClick={() => {
-              const parseFee = (raw: string): number | undefined => {
+              // 빈칸이면 저장된 단가를 삭제(deleteField)하고, 값이 있으면 숫자로 저장한다.
+              // 음수·숫자 아님이면 저장을 막고 안내한다(조용히 무시하지 않음).
+              const readFee = (
+                raw: string
+              ):
+                | { ok: true; value: number | ReturnType<typeof deleteField> }
+                | { ok: false } => {
                 const trimmed = raw.trim();
-                if (!trimmed) return undefined;
+                if (!trimmed) return { ok: true, value: deleteField() };
                 const value = Number(trimmed.replace(/[,\s]/g, ''));
-                return Number.isFinite(value) && value >= 0 ? value : undefined;
+                if (!Number.isFinite(value) || value < 0) return { ok: false };
+                return { ok: true, value };
               };
+              const feePerHour = readFee(settingsDraft.feePerHour);
+              const hoursPerSession = readFee(settingsDraft.hoursPerSession);
+              if (!feePerHour.ok || !hoursPerSession.ok) {
+                window.alert('강사비는 0 이상의 숫자만 입력할 수 있어요. (비우면 단가가 삭제됩니다)');
+                return;
+              }
               onUpdateClassroom?.(classroom.id, {
                 name: settingsDraft.name,
                 color: settingsDraft.color,
                 icon: settingsDraft.icon,
                 description: settingsDraft.description,
                 organization: settingsDraft.organization,
-                feePerHour: parseFee(settingsDraft.feePerHour),
-                hoursPerSession: parseFee(settingsDraft.hoursPerSession),
-              });
+                feePerHour: feePerHour.value,
+                hoursPerSession: hoursPerSession.value,
+              } as Partial<Classroom>);
               window.alert('클래스 설정이 저장되었습니다.');
             }}
             className="flex items-center gap-2 rounded-xl bg-[#8B5E3C] px-5 py-2.5 text-sm font-bold text-white transition-all hover:bg-[#724D31]"

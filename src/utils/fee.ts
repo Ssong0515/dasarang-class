@@ -25,9 +25,9 @@ export const getPerSessionFee = (
  */
 export const formatFeeShort = (won: number): string => {
   if (!won || won <= 0) return '';
-  const man = won / 10000;
-  if (Number.isInteger(man)) return `${man}`;
-  return `${(Math.round(man * 10) / 10).toFixed(1)}`;
+  // 0.1만(1,000원) 단위로 반올림해서 표기한다. 반올림 후 정수면 소수점을 떼서 "10.0" 같은 표기를 막는다.
+  const rounded = Math.round(won / 1000) / 10;
+  return Number.isInteger(rounded) ? `${rounded}` : `${rounded.toFixed(1)}`;
 };
 
 /** "320,000원"처럼 전체 금액을 원 단위로 표기. */
@@ -37,10 +37,12 @@ export const formatWon = (won: number): string =>
 /** "32만원"처럼 만원 단위로 표기(요약·라벨용). 만원 미만이면 원 단위로 폴백. */
 export const formatMan = (won: number): string => {
   if (!won || won <= 0) return '0원';
-  const man = won / 10000;
-  if (man < 1) return formatWon(won);
-  if (Number.isInteger(man)) return `${man.toLocaleString('ko-KR')}만원`;
-  return `${(Math.round(man * 10) / 10).toFixed(1)}만원`;
+  if (won < 10000) return formatWon(won);
+  // 0.1만(1,000원) 단위로 반올림. 반올림 후 정수면 소수점을 떼서 "10.0만원" 같은 표기를 막는다.
+  const rounded = Math.round(won / 1000) / 10;
+  return Number.isInteger(rounded)
+    ? `${rounded.toLocaleString('ko-KR')}만원`
+    : `${rounded.toFixed(1)}만원`;
 };
 
 /** 한 날짜에 잡힌 한 반의 회차 한 건. */

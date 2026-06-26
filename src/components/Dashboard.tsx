@@ -206,11 +206,11 @@ const MonthlyEarningsCalendar: React.FC<{
                   <div className="mt-auto pt-0.5">
                     {day.earned > 0 ? (
                       <span className="text-[10px] font-extrabold text-[#2D7A4D]">
-                        +{formatFeeShort(day.earned)}
+                        +{formatFeeShort(day.earned)}만
                       </span>
                     ) : day.expected > 0 ? (
                       <span className="text-[10px] font-bold text-[#C2BAAE]">
-                        +{formatFeeShort(day.expected)}
+                        +{formatFeeShort(day.expected)}만
                       </span>
                     ) : null}
                   </div>
@@ -222,7 +222,7 @@ const MonthlyEarningsCalendar: React.FC<{
       </div>
 
       {/* 클래스별 범례 */}
-      {activeClasses.length > 0 ? (
+      {hasAnyFee && activeClasses.length > 0 ? (
         <div className="mt-5 flex flex-wrap gap-2 border-t border-[#F3F2EE] pt-5">
           {activeClasses.map((classEarning) => (
             <span
@@ -237,16 +237,16 @@ const MonthlyEarningsCalendar: React.FC<{
               {classEarning.earned > 0 ? (
                 <span className="font-extrabold text-[#2D7A4D]">{formatMan(classEarning.earned)}</span>
               ) : (
-                <span className="text-[#A89F94]">완료 0회</span>
+                <span className="text-[#A89F94]">완료 {classEarning.doneCount}회</span>
               )}
             </span>
           ))}
         </div>
       ) : (
         <p className="mt-5 border-t border-[#F3F2EE] pt-5 text-center text-sm text-[#A89F94]">
-          {hasAnyFee
-            ? '이번 달에 잡힌 수업이 없어요. 커리큘럼·시간표로 수업일을 배정하면 여기에 표시됩니다.'
-            : '클래스 설정에서 시수 단가를 입력하면, 수업을 완료할 때마다 강사비가 여기에 모입니다.'}
+          {!hasAnyFee
+            ? '클래스 설정에서 시수 단가를 입력하면, 수업을 완료할 때마다 강사비가 여기에 모입니다.'
+            : '이번 달에 잡힌 수업이 없어요. 커리큘럼·시간표로 수업일을 배정하면 여기에 표시됩니다.'}
         </p>
       )}
     </motion.section>
