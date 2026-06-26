@@ -13,6 +13,7 @@ import {
   Users,
   X,
 } from 'lucide-react';
+import { InfoTooltip } from './InfoTooltip';
 import { AnimatePresence, motion } from 'motion/react';
 import { Classroom, ClassroomDateRecord, DailyReview, Memo } from '../types';
 import { normalizeClassroomDateRecordContentIds } from '../utils/classroomDateRecordContent';
@@ -167,8 +168,10 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
     <main className="flex-1 overflow-y-auto bg-[#FBFBFA] p-6">
       <div className="mx-auto max-w-4xl">
         <header className="mb-6">
-          <h2 className="mb-2 font-serif text-2xl font-bold text-[#4A3728]">{TEXT.title}</h2>
-          <p className="text-[#8B7E74]">{TEXT.subtitle}</p>
+          <h2 className="mb-2 flex items-center gap-2 font-serif text-2xl font-bold text-[#4A3728]">
+            {TEXT.title}
+            <InfoTooltip content={TEXT.subtitle} label="메모 설명 보기" />
+          </h2>
         </header>
 
         {isGeneralTab && (

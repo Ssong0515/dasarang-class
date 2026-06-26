@@ -1791,7 +1791,18 @@ export default function App() {
     }
 
     return (
-      <div className="flex h-screen bg-[#FBFBFA] font-sans text-[#4A3728]">
+      <div className="flex h-screen flex-col bg-[#FBFBFA] font-sans text-[#4A3728]">
+        {viewMode !== 'student' && (
+          <Header
+            user={user}
+            activeTab={activeTab}
+            pendingShowcaseCount={studentPosts.filter((post) => post.status === 'pending').length}
+            onTabChange={handleTabChange}
+            onSwitchToStudent={handleSwitchToStudent}
+            onGoHome={() => handleTabChange('home')}
+          />
+        )}
+        <div className="flex flex-1 overflow-hidden">
         <Sidebar
           classrooms={classroomsWithStudents}
           activeClassroomId={activeClassroomId || undefined}
@@ -1833,14 +1844,6 @@ export default function App() {
             />
           ) : (
             <>
-              <Header
-                user={user}
-                activeTab={activeTab}
-                pendingShowcaseCount={studentPosts.filter((post) => post.status === 'pending').length}
-                onTabChange={handleTabChange}
-                onSwitchToStudent={handleSwitchToStudent}
-                onGoHome={() => handleTabChange('home')}
-              />
           {activeTab === 'home' && (
             <Dashboard
               classrooms={classroomsWithStudents}
@@ -1935,6 +1938,7 @@ export default function App() {
           )}
             </>
           )}
+        </div>
         </div>
       </div>
     );

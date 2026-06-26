@@ -84,13 +84,7 @@ import {
 } from '../utils/students';
 import { isAttendanceExcluded } from '../utils/attendance';
 import { deleteField } from '../firebase';
-import {
-  buildMonthEarnings,
-  formatFeeShort,
-  formatMan,
-  formatWon,
-  getPerSessionFee,
-} from '../utils/fee';
+import { formatWon, getPerSessionFee } from '../utils/fee';
 import { openDriveSlidePicker } from '../utils/drivePicker';
 import { SlideEmbed } from './StudentContentPreview';
 import { SessionDetailModal } from './SessionDetailModal';
@@ -325,16 +319,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     description: classroom.description || '',
     organization: classroom.organization || '',
     feePerHour: classroom.feePerHour != null ? String(classroom.feePerHour) : '',
-    hoursPerSession: classroom.hoursPerSession != null ? String(classroom.hoursPerSession) : '',
+    hoursPerSession: classroom.hoursPerSession != null ? String(classroom.hoursPerSession) : '2',
   });
-  // 회차를 '완료'로 누른 순간 잠깐 떠오르는 강사비 적립 축하 토스트(띠링~).
-  const [feeToast, setFeeToast] = useState<{ id: number; amount: number } | null>(null);
-  const feeToastIdRef = useRef(0);
-  useEffect(() => {
-    if (!feeToast) return;
-    const timer = setTimeout(() => setFeeToast(null), 2200);
-    return () => clearTimeout(timer);
-  }, [feeToast]);
 
   const [calendarClasses, setCalendarClasses] = useState<CalendarClassSummary[]>([]);
   const [calendarClassesLoading, setCalendarClassesLoading] = useState(false);
@@ -482,12 +468,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   ).length;
   const calendarDays = getDaysInMonth(viewMonth);
   const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
-  // 회차당 강사비(원)와 보고 있는 달의 강사비 집계(이 반만). '완료'한 회차만 번 돈으로 잡힌다.
-  const perSessionFee = getPerSessionFee(classroom);
-  const monthEarnings = useMemo(
-    () => buildMonthEarnings([classroom], viewMonth.getFullYear(), viewMonth.getMonth()),
-    [classroom, viewMonth]
-  );
   const previewColorMeta = getClassroomColorMeta(settingsDraft.color);
   const previewIconColor = previewColorMeta.value;
   const previewIconBg = previewColorMeta.bg;
@@ -915,11 +895,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     };
     states[currentSessionId] = { ...states[currentSessionId], status: next };
     onUpdateClassroom(classroom.id, { sessionStates: states });
-    // 완료로 바꾼 순간, 강사비가 잡혀 있으면 "+N만원 적립!" 토스트를 띄운다(띠링~).
-    if (next === 'done' && perSessionFee > 0) {
-      feeToastIdRef.current += 1;
-      setFeeToast({ id: feeToastIdRef.current, amount: perSessionFee });
-    }
   };
 
   const toggleAssignmentCard = () => {
@@ -2187,7 +2162,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
 
             <button
               onClick={() => setIsContentPaletteCollapsed((collapsed) => !collapsed)}
-              className="flex w-full items-center justify-between gap-2 rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] px-5 py-3.5 text-left transition-all hover:bg-[#F3F2EE]"
+              className="flex w-full items-center justify-between gap-2 rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] px-4 py-2.5 text-left transition-all hover:bg-[#F3F2EE]"
             >
               <span className="flex items-center gap-2 text-sm font-bold text-[#4A3728]">
                 <ListChecks size={16} className="text-[#8B5E3C]" />
@@ -2472,8 +2447,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 const hasMemo = memoDateSet.has(dateStr);
                 const plannedSessions = plannedSessionsByDate.get(dateStr);
                 const status = dateStatusByDate.get(dateStr);
-                // 그날 완료한 회차들의 강사비 합(같은 날 2회차여도 합산). 0이면 표시 안 함.
-                const dayEarned = monthEarnings.byDate.get(dateStr)?.earned ?? 0;
                 // 오늘은 선택·상태와 무관하게 항상 파란색(선택돼 있어도 파랑 유지).
                 const isDarkCell = isToday || isSelected;
                 const cellTone = isToday
@@ -2506,15 +2479,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                   >
                     <span className="leading-none">{date.getDate()}</span>
                     <span className="mt-0.5 flex h-2.5 items-center justify-center gap-0.5 leading-none">
-                      {dayEarned > 0 ? (
-                        <span
-                          className={`text-[9px] font-extrabold ${
-                            isDarkCell ? 'text-white' : 'text-[#2D7A4D]'
-                          }`}
-                        >
-                          +{formatFeeShort(dayEarned)}만
-                        </span>
-                      ) : isActive ? (
+                      {isActive ? (
                         <span
                           className={`h-1.5 w-1.5 rounded-full ${
                             hasMemo
@@ -2532,72 +2497,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 );
               })}
             </div>
-            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[10px] font-medium text-[#A89F94]">
-              <span className="flex items-center gap-1">
-                <span className="h-3 w-3 rounded-md bg-[#EAF7EE] ring-1 ring-[#CDEAD6]" />
-                예정
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="h-3 w-3 rounded-md bg-[#EFEDE8] ring-1 ring-[#E0DBD2]" />
-                완료
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="text-xs font-bold text-[#B7AFA4] line-through">건너뜀</span>
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#8B5E3C]" />
-                기록·메모
-              </span>
-            </div>
-
-            {perSessionFee > 0 && (
-              <div className="mt-4 rounded-2xl border border-[#E0EFE4] bg-[#F4FAF6] p-4">
-                <div className="mb-2 flex items-center gap-2">
-                  <Wallet size={15} className="text-[#2D7A4D]" />
-                  <span className="text-xs font-bold text-[#2D7A4D]">
-                    {viewMonth.getMonth() + 1}월 강사비
-                  </span>
-                </div>
-                <div className="flex items-end justify-between">
-                  <div>
-                    <p className="text-[10px] font-semibold text-[#6B8E7A]">
-                      번 돈 (완료 {monthEarnings.doneCount}회)
-                    </p>
-                    <p className="text-xl font-extrabold text-[#2D7A4D]">
-                      {formatWon(monthEarnings.totalEarned)}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[10px] font-semibold text-[#A89F94]">예상 총</p>
-                    <p className="text-sm font-bold text-[#8B7E74]">
-                      {formatWon(monthEarnings.totalExpected)}
-                    </p>
-                  </div>
-                </div>
-                <p className="mt-2 text-[10px] text-[#A89F94]">
-                  회차당 {formatMan(perSessionFee)} · 완료할 때마다 적립돼요
-                </p>
-              </div>
-            )}
           </div>
-
-          <AnimatePresence>
-            {feeToast && (
-              <motion.div
-                key={feeToast.id}
-                initial={{ opacity: 0, y: 24, scale: 0.7 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -40, scale: 0.9 }}
-                transition={{ type: 'spring', stiffness: 320, damping: 18 }}
-                className="pointer-events-none fixed left-1/2 top-24 z-[60] -translate-x-1/2"
-              >
-                <div className="flex items-center gap-2 rounded-full bg-[#2D7A4D] px-6 py-3.5 text-base font-extrabold text-white shadow-2xl shadow-[#2D7A4D]/40">
-                  <span className="text-xl">💰</span>
-                  +{formatMan(feeToast.amount)} 적립!
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
 
           {isDateOpen ? (
             <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-6 text-left shadow-sm">
@@ -3468,14 +3368,14 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -10 }}
-        className="rounded-[40px] border border-[#E5E3DD] bg-white p-10 text-left shadow-sm"
+        className="rounded-[32px] border border-[#E5E3DD] bg-white p-6 text-left shadow-sm"
       >
-        <div className="mb-8 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F3F2EE] text-[#8B5E3C]">
-              <Settings size={20} />
+        <div className="mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#F3F2EE] text-[#8B5E3C]">
+              <Settings size={18} />
             </div>
-            <h2 className="text-2xl font-bold">클래스 설정</h2>
+            <h2 className="text-xl font-bold">클래스 설정</h2>
           </div>
           <button
             onClick={async () => {
@@ -3527,24 +3427,24 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
           </button>
         </div>
 
-        <div className="mb-10">
-          <div className="mb-4 flex items-center gap-2">
-            <Edit3 size={18} className="text-[#8B5E3C]" />
-            <h3 className="text-lg font-bold text-[#4A3728]">클래스 이름</h3>
+        <div className="mb-5">
+          <div className="mb-3 flex items-center gap-2">
+            <Edit3 size={16} className="text-[#8B5E3C]" />
+            <h3 className="text-sm font-bold text-[#4A3728]">클래스 이름</h3>
           </div>
           <input
             type="text"
             value={settingsDraft.name}
             onChange={(event) => setSettingsDraft({ ...settingsDraft, name: event.target.value })}
-            className="w-full rounded-2xl border-2 border-[#E5E3DD] px-5 py-3.5 text-lg font-bold text-[#4A3728] transition-all focus:border-[#8B5E3C] focus:outline-none"
+            className="w-full rounded-2xl border-2 border-[#E5E3DD] px-4 py-2.5 text-sm font-bold text-[#4A3728] transition-all focus:border-[#8B5E3C] focus:outline-none"
             placeholder="클래스 이름을 입력하세요."
           />
         </div>
 
-        <div className="mb-10">
-          <div className="mb-4 flex items-center gap-2">
-            <Link2 size={18} className="text-[#8B5E3C]" />
-            <h3 className="text-lg font-bold text-[#4A3728]">기관 · 단체</h3>
+        <div className="mb-5">
+          <div className="mb-3 flex items-center gap-2">
+            <Link2 size={16} className="text-[#8B5E3C]" />
+            <h3 className="text-sm font-bold text-[#4A3728]">기관 · 단체</h3>
           </div>
           <input
             type="text"
@@ -3552,20 +3452,20 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
             onChange={(event) =>
               setSettingsDraft({ ...settingsDraft, organization: event.target.value })
             }
-            className="w-full rounded-2xl border-2 border-[#E5E3DD] px-5 py-3.5 text-base font-medium text-[#4A3728] transition-all focus:border-[#8B5E3C] focus:outline-none"
+            className="w-full rounded-2xl border-2 border-[#E5E3DD] px-4 py-2.5 text-sm font-medium text-[#4A3728] transition-all focus:border-[#8B5E3C] focus:outline-none"
             placeholder='예: "구로구청 / 디지털배움터" (시간표 연결 시 자동으로 채워질 수 있어요)'
           />
         </div>
 
-        <div className="mb-10">
-          <div className="mb-2 flex items-center gap-2">
-            <Wallet size={18} className="text-[#8B5E3C]" />
-            <h3 className="text-lg font-bold text-[#4A3728]">강사비 (시수 단가)</h3>
+        <div className="mb-5">
+          <div className="mb-3 flex items-center gap-2">
+            <Wallet size={16} className="text-[#8B5E3C]" />
+            <h3 className="text-sm font-bold text-[#4A3728]">강사비 (시수 단가)</h3>
+            <DashboardInfoTooltip
+              content="시수(1교시)당 단가와 회차당 시수를 적어 두면, 수업을 '완료'로 표시할 때마다 회차당 강사비가 자동으로 적립·집계됩니다. (강사비 달력·홈 대시보드에 표시)"
+              label="강사비 설명 보기"
+            />
           </div>
-          <p className="mb-4 text-sm text-[#8B7E74]">
-            시수(1교시)당 단가와 회차당 시수를 적어 두면, 수업을 <span className="font-bold text-[#2D7A4D]">완료</span>로 표시할 때마다
-            회차당 강사비가 자동으로 적립·집계됩니다. (달력·홈 대시보드에 표시)
-          </p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <label className="block">
               <span className="mb-1.5 block text-xs font-bold text-[#8B7E74]">시수 단가 (원)</span>
@@ -3578,7 +3478,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 onChange={(event) =>
                   setSettingsDraft({ ...settingsDraft, feePerHour: event.target.value })
                 }
-                className="w-full rounded-2xl border-2 border-[#E5E3DD] px-5 py-3.5 text-base font-bold text-[#4A3728] transition-all focus:border-[#8B5E3C] focus:outline-none"
+                className="w-full rounded-2xl border-2 border-[#E5E3DD] px-4 py-2.5 text-sm font-bold text-[#4A3728] transition-all focus:border-[#8B5E3C] focus:outline-none"
                 placeholder="예: 40000 (만원 단위, 기본 4만원)"
               />
             </label>
@@ -3593,7 +3493,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 onChange={(event) =>
                   setSettingsDraft({ ...settingsDraft, hoursPerSession: event.target.value })
                 }
-                className="w-full rounded-2xl border-2 border-[#E5E3DD] px-5 py-3.5 text-base font-bold text-[#4A3728] transition-all focus:border-[#8B5E3C] focus:outline-none"
+                className="w-full rounded-2xl border-2 border-[#E5E3DD] px-4 py-2.5 text-sm font-bold text-[#4A3728] transition-all focus:border-[#8B5E3C] focus:outline-none"
                 placeholder="예: 2 (기본 2시수)"
               />
             </label>
@@ -3614,14 +3514,15 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
           </div>
         </div>
 
-        <div className="mb-10">
-          <div className="mb-2 flex items-center gap-2">
-            <FileText size={18} className="text-[#8B5E3C]" />
-            <h3 className="text-lg font-bold text-[#4A3728]">클래스 특징 · 내용</h3>
+        <div className="mb-5">
+          <div className="mb-3 flex items-center gap-2">
+            <FileText size={16} className="text-[#8B5E3C]" />
+            <h3 className="text-sm font-bold text-[#4A3728]">클래스 특징 · 내용</h3>
+            <DashboardInfoTooltip
+              content="반의 구성·수준·중점 등 운영 참고용 메모입니다."
+              label="클래스 특징 설명 보기"
+            />
           </div>
-          <p className="mb-4 text-sm text-[#8B7E74]">
-            반의 구성·수준·중점 등 운영 참고용 메모입니다.
-          </p>
           <textarea
             value={settingsDraft.description}
             onChange={(event) =>
@@ -3632,10 +3533,10 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
           />
         </div>
 
-        <div className="mb-10">
-          <div className="mb-4 flex items-center gap-2">
-            <Palette size={18} className="text-[#8B5E3C]" />
-            <h3 className="text-lg font-bold text-[#4A3728]">대표 컬러</h3>
+        <div className="mb-5">
+          <div className="mb-3 flex items-center gap-2">
+            <Palette size={16} className="text-[#8B5E3C]" />
+            <h3 className="text-sm font-bold text-[#4A3728]">대표 컬러</h3>
           </div>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             {CLASSROOM_COLOR_OPTIONS.map((color) => {
@@ -3644,7 +3545,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 <button
                   key={color.value}
                   onClick={() => setSettingsDraft({ ...settingsDraft, color: color.value })}
-                  className={`flex items-center gap-3 rounded-2xl border-2 p-4 transition-all ${
+                  className={`flex items-center gap-3 rounded-2xl border-2 p-3 transition-all ${
                     isSelected ? 'scale-[1.02] shadow-md' : 'border-transparent hover:border-[#E5E3DD]'
                   }`}
                   style={{
@@ -3662,9 +3563,9 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
         </div>
 
         <div>
-          <div className="mb-4 flex items-center gap-2">
-            <Star size={18} className="text-[#8B5E3C]" />
-            <h3 className="text-lg font-bold text-[#4A3728]">아이콘</h3>
+          <div className="mb-3 flex items-center gap-2">
+            <Star size={16} className="text-[#8B5E3C]" />
+            <h3 className="text-sm font-bold text-[#4A3728]">아이콘</h3>
           </div>
           <div className="grid grid-cols-3 gap-3 md:grid-cols-6">
             {CLASSROOM_ICON_OPTIONS.map((iconInfo) => {
@@ -3674,7 +3575,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 <button
                   key={iconInfo.icon}
                   onClick={() => setSettingsDraft({ ...settingsDraft, icon: iconInfo.icon })}
-                  className={`flex flex-col items-center gap-2 rounded-2xl border-2 p-4 transition-all ${
+                  className={`flex flex-col items-center gap-2 rounded-2xl border-2 p-3 transition-all ${
                     isSelected ? 'scale-[1.02] shadow-md' : 'border-transparent hover:border-[#E5E3DD]'
                   }`}
                   style={{
@@ -3726,22 +3627,25 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
           </div>
         </div>
 
-        <div className="mt-10 rounded-2xl border border-[#E5E3DD] bg-white p-6">
+        <div className="mt-6 rounded-2xl border border-[#E5E3DD] bg-white p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-1">
-              <h3 className="flex items-center gap-2 text-lg font-bold text-[#4A3728]">
+              <h3 className="flex items-center gap-2 text-sm font-bold text-[#4A3728]">
                 {classroom.hidden ? (
-                  <EyeOff size={18} className="text-[#8B7E74]" />
+                  <EyeOff size={16} className="text-[#8B7E74]" />
                 ) : (
-                  <Eye size={18} className="text-[#8B5E3C]" />
+                  <Eye size={16} className="text-[#8B5E3C]" />
                 )}
                 클래스 표시
+                <DashboardInfoTooltip
+                  content={
+                    classroom.hidden
+                      ? '현재 사이드바·홈 목록에서 숨겨져 있습니다. 데이터는 그대로 보존됩니다.'
+                      : '가리면 사이드바·홈 목록에서 숨겨집니다. (삭제 아님 — 언제든 다시 표시 가능)'
+                  }
+                  label="클래스 표시 설명 보기"
+                />
               </h3>
-              <p className="text-sm text-[#8B7E74]">
-                {classroom.hidden
-                  ? '현재 사이드바·홈 목록에서 숨겨져 있습니다. 데이터는 그대로 보존됩니다.'
-                  : '가리면 사이드바·홈 목록에서 숨겨집니다. (삭제 아님 — 언제든 다시 표시 가능)'}
-              </p>
             </div>
             <button
               onClick={() => onUpdateClassroom?.(classroom.id, { hidden: !classroom.hidden })}
@@ -3758,11 +3662,11 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
         </div>
 
         <div className="mt-6 rounded-2xl border border-red-100 bg-red-50 p-6">
-          <div className="mb-3 flex items-center gap-2">
-            <AlertCircle size={18} className="text-red-500" />
-            <h3 className="text-lg font-bold text-red-600">위험 영역</h3>
+          <div className="mb-2 flex items-center gap-2">
+            <AlertCircle size={16} className="text-red-500" />
+            <h3 className="text-sm font-bold text-red-600">위험 영역</h3>
           </div>
-          <p className="mb-4 text-sm text-red-400">
+          <p className="mb-3 text-xs text-red-400">
             클래스를 삭제하면 활성 날짜 기록과 학생 명단이 함께 삭제됩니다.
           </p>
           <button

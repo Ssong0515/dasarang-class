@@ -21,6 +21,7 @@ import {
   CheckCircle2,
   AlertTriangle,
 } from 'lucide-react';
+import { InfoTooltip } from './InfoTooltip';
 import { motion, AnimatePresence } from 'motion/react';
 import { LessonCategory, LessonContent, NotebookLmFolderSyncResult } from '../types';
 import { StudentContentCard, StudentContentPreviewFrame, SlideEmbed } from './StudentContentPreview';
@@ -1022,8 +1023,10 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
       <div className="mx-auto max-w-6xl">
         <header className="mb-8 flex items-center justify-between gap-4">
           <div>
-            <h1 className="mb-2 text-3xl font-bold text-[#4A3728]">수업 콘텐츠 라이브러리</h1>
-            <p className="text-[#8B7E74]">카테고리 안팎에서 콘텐츠를 만들고 정리하세요.</p>
+            <h1 className="mb-2 flex items-center gap-2 text-3xl font-bold text-[#4A3728]">
+              수업 콘텐츠 라이브러리
+              <InfoTooltip content="카테고리 안팎에서 콘텐츠를 만들고 정리하세요." label="콘텐츠 라이브러리 설명 보기" />
+            </h1>
           </div>
           <div className="flex items-center gap-3">
             <button

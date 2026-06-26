@@ -126,15 +126,33 @@
           ? '<img class="thumb" loading="lazy" src="' + escapeHtml(post.imageUrl) + '" alt="' + title + '" referrerpolicy="no-referrer" onerror="this.outerHTML=&quot;<div class=\\&quot;thumb placeholder\\&quot;>🎨</div>&quot;" />'
           : '<div class="thumb placeholder">🎨</div>';
         var desc = post.description ? '<p class="desc">' + escapeHtml(post.description) + '</p>' : '';
-        var link = post.webViewLink
-          ? '<a class="view" href="' + escapeHtml(post.webViewLink) + '" target="_blank" rel="noopener noreferrer">작품 보기 ↗</a>'
+        // 작품 파일을 같은 출처에서 올바른 인코딩으로 렌더(api/public/student-work/:fileId). 없으면 Drive 링크 폴백.
+        var viewUrl = post.fileId
+          ? 'api/public/student-work/' + encodeURIComponent(post.fileId)
+          : post.webViewLink || '';
+        var link = viewUrl
+          ? '<a class="view" href="' + escapeHtml(viewUrl) + '" target="_blank" rel="noopener noreferrer">작품 보기 ↗</a>'
           : '';
         return (
-          '<div class="card">' + thumb +
+          '<div class="card" id="post-' + escapeHtml(post.id) + '">' + thumb +
           '<div class="body"><h3>' + title + '</h3>' +
           (byline ? '<div class="byline">' + byline + '</div>' : '') +
           desc + link + '</div></div>'
         );
+      }
+
+      // #post-<id> 해시가 있으면 그 작품으로 스크롤하고 잠깐 강조한다.
+      function scrollToHash() {
+        if (!location.hash) return;
+        var target = document.getElementById(location.hash.slice(1));
+        if (!target) return;
+        setTimeout(function () {
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          target.style.boxShadow = '0 0 0 3px var(--brown)';
+          setTimeout(function () {
+            target.style.boxShadow = '';
+          }, 2400);
+        }, 120);
       }
 
       function render(items) {
@@ -145,6 +163,7 @@
         }
         countEl.textContent = '작품 ' + items.length + '개';
         content.innerHTML = '<div class="grid">' + items.map(cardHtml).join('') + '</div>';
+        scrollToHash();
       }
 
       function load() {

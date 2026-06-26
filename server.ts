@@ -18,7 +18,7 @@ import {
   assignCurriculumDatesFromCalendar,
   listCalendarClasses,
 } from './server/adminApi/calendarClasses';
-import { createPostFromUpload, listPublicStudentPosts, reviewStudentPost } from './server/adminApi/studentPosts';
+import { createPostFromUpload, isApprovedStudentWorkFile, listPublicStudentPosts, reviewStudentPost } from './server/adminApi/studentPosts';
 import multer from 'multer';
 
 dotenv.config();
@@ -268,6 +268,44 @@ async function startServer() {
       res.json({ items: await listPublicStudentPosts() });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : '게시물 조회에 실패했습니다.' });
+    }
+  });
+
+  // 승인된 학생 작품 파일을 같은 출처에서 '제대로' 렌더한다.
+  // Drive의 webViewLink는 HTML을 원문 텍스트(+잘못된 인코딩)로 보여줘 깨지므로,
+  // 서버가 올바른 Content-Type(text/html이면 charset=utf-8)으로 직접 스트리밍해 브라우저가 렌더하게 한다.
+  app.get(withBasePath(APP_BASE_PATH, '/api/public/student-work/:fileId'), async (req, res) => {
+    const { fileId } = req.params as { fileId?: string };
+    if (!fileId) {
+      res.status(400).json({ error: 'fileId가 필요합니다.' });
+      return;
+    }
+    try {
+      if (!(await isApprovedStudentWorkFile(fileId))) {
+        res.status(404).json({ error: '공개된 작품을 찾을 수 없습니다.' });
+        return;
+      }
+      const file = await getStudentWorkFile(fileId);
+      const isHtml = /text\/html/i.test(file.mimeType);
+      res.setHeader('Content-Type', isHtml ? 'text/html; charset=utf-8' : file.mimeType);
+      res.setHeader(
+        'Content-Disposition',
+        `inline; filename*=UTF-8''${encodeURIComponent(file.fileName)}`
+      );
+      res.setHeader('Cache-Control', 'public, max-age=300');
+      file.stream.on('error', (streamError) => {
+        console.error('[public/student-work] 스트림 오류:', streamError);
+        if (!res.headersSent) {
+          res.status(502).end();
+        } else {
+          res.end();
+        }
+      });
+      file.stream.pipe(res);
+    } catch (error) {
+      res
+        .status(500)
+        .json({ error: error instanceof Error ? error.message : '작품을 불러오지 못했습니다.' });
     }
   });
 

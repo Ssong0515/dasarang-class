@@ -114,6 +114,21 @@ export const listPublicStudentPosts = async () => {
     mimeType: post.mimeType || '',
     imageUrl: post.imageUrl || null,
     webViewLink: post.webViewLink || '',
+    // 같은 출처 렌더 라우트(/api/public/student-work/:fileId)에서 쓰는 Drive 파일 id.
+    fileId: post.driveFileId || '',
     approvedAt: post.approvedAt || '',
   }));
+};
+
+/**
+ * 이 Drive 파일이 '승인(공개)'된 게시물의 것인지 확인. 공개 작품 렌더 라우트의 보안 게이트.
+ * (driveFileId 단일 동등 쿼리만 써서 복합 인덱스가 필요 없게 하고, status는 메모리에서 검사한다.)
+ */
+export const isApprovedStudentWorkFile = async (fileId: string): Promise<boolean> => {
+  if (!fileId) return false;
+  const snap = await getAdminDb()
+    .collection(POSTS_COLLECTION)
+    .where('driveFileId', '==', fileId)
+    .get();
+  return snap.docs.some((doc) => (doc.data() as DocData).status === 'approved');
 };

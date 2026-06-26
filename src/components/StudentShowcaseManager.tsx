@@ -7,12 +7,12 @@ import {
   ExternalLink,
   ImageIcon,
   FileText,
-  CheckCircle2,
   Copy,
   Check,
 } from 'lucide-react';
 import { StudentPost, StudentPostStatus } from '../types';
 import { resolveAppPath } from '../utils/appPaths';
+import { InfoTooltip } from './InfoTooltip';
 
 interface StudentShowcaseManagerProps {
   posts: StudentPost[];
@@ -100,10 +100,13 @@ export const StudentShowcaseManager: React.FC<StudentShowcaseManagerProps> = ({
               <Globe size={14} />
               홈페이지 공유
             </div>
-            <h1 className="text-2xl font-bold text-[#4A3728]">학생 작품 공유 관리</h1>
-            <p className="mt-1 text-sm text-[#8B7E74]">
-              학생이 올린 작품을 <span className="font-bold text-[#8B5E3C]">홈페이지에 공유</span>로 승인하면 학생 작품 홈페이지에 바로 공개됩니다.
-            </p>
+            <h1 className="flex items-center gap-2 text-2xl font-bold text-[#4A3728]">
+              학생 작품 공유 관리
+              <InfoTooltip
+                content="학생이 올린 작품을 '홈페이지에 공유'로 승인하면 학생 작품 홈페이지에 바로 공개됩니다."
+                label="공유 관리 설명 보기"
+              />
+            </h1>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -211,9 +214,13 @@ export const StudentShowcaseManager: React.FC<StudentShowcaseManagerProps> = ({
                     </p>
 
                     <div className="mt-3 flex flex-wrap items-center gap-2">
-                      {post.webViewLink && (
+                      {(post.driveFileId || post.webViewLink) && (
                         <a
-                          href={post.webViewLink}
+                          href={
+                            post.status === 'approved' && post.driveFileId
+                              ? resolveAppPath(`api/public/student-work/${encodeURIComponent(post.driveFileId)}`)
+                              : post.webViewLink
+                          }
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center gap-1.5 rounded-xl border border-[#E5E3DD] px-3 py-1.5 text-xs font-bold text-[#8B7E74] transition-all hover:bg-[#F3F2EE]"
@@ -235,10 +242,15 @@ export const StudentShowcaseManager: React.FC<StudentShowcaseManagerProps> = ({
                       )}
 
                       {post.status === 'approved' && (
-                        <span className="flex items-center gap-1.5 text-xs font-bold text-green-600">
-                          <CheckCircle2 size={14} />
-                          공개 중
-                        </span>
+                        <a
+                          href={`${showcaseHref}#post-${post.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 rounded-xl bg-[#2D7A4D] px-3 py-1.5 text-xs font-bold text-white transition-all hover:bg-[#246A41]"
+                        >
+                          <ExternalLink size={13} />
+                          홈페이지로 이동
+                        </a>
                       )}
 
                       {post.status !== 'hidden' && (

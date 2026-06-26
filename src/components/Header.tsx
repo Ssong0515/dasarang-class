@@ -112,7 +112,6 @@ export const Header: React.FC<HeaderProps> = ({
         className="flex shrink-0 items-center gap-2.5"
       >
         <img src="/logo.svg" alt="다사랑 로고" className="h-9 w-9 rounded-xl" />
-        <span className="hidden font-serif text-lg font-bold text-[#141414] xl:inline">다사랑 교실</span>
       </button>
 
       {/* 상단 네비게이션 (사이드바에서 옮겨온 메뉴들) */}

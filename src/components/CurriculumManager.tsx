@@ -12,6 +12,7 @@ import {
   ListChecks,
   Library,
 } from 'lucide-react';
+import { InfoTooltip } from './InfoTooltip';
 import { Curriculum, CurriculumSession, LessonContent } from '../types';
 
 interface CurriculumManagerProps {
@@ -206,10 +207,13 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
           <span className="rounded-full bg-[#FFF5E9] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#8B5E3C]">
             커리큘럼 관리
           </span>
-          <h1 className="mt-2 text-3xl font-serif font-bold text-[#4A3728]">커리큘럼</h1>
-          <p className="mt-2 max-w-2xl text-sm text-[#8B7E74]">
-            반과 무관한 순수 템플릿(주제·상세·순서)을 여기에서 관리합니다. 날짜와 진행 상태는 각 클래스에서 반별로 지정됩니다.
-          </p>
+          <h1 className="mt-2 flex items-center gap-2 text-3xl font-serif font-bold text-[#4A3728]">
+            커리큘럼
+            <InfoTooltip
+              content="반과 무관한 순수 템플릿(주제·상세·순서)을 여기에서 관리합니다. 날짜와 진행 상태는 각 클래스에서 반별로 지정됩니다."
+              label="커리큘럼 설명 보기"
+            />
+          </h1>
         </div>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[300px_1fr]">

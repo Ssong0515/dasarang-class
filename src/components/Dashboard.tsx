@@ -26,11 +26,10 @@ import {
   formatFeeShort,
   formatMan,
   formatWon,
-  getMonthDateCells,
-  getPerSessionFee,
+  getMonthDateCellsMonToSat,
 } from '../utils/fee';
 
-const EARNINGS_WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+const EARNINGS_WEEKDAYS = ['월', '화', '수', '목', '금', '토'];
 
 const getTodayDateStr = (): string => {
   const now = new Date();
@@ -62,7 +61,7 @@ const MonthlyEarningsCalendar: React.FC<{
     () => buildMonthEarnings(classrooms, view.year, view.month),
     [classrooms, view]
   );
-  const cells = useMemo(() => getMonthDateCells(view.year, view.month), [view]);
+  const cells = useMemo(() => getMonthDateCellsMonToSat(view.year, view.month), [view]);
 
   const classroomById = useMemo(
     () => new Map(classrooms.map((classroom) => [classroom.id, classroom])),
@@ -106,7 +105,6 @@ const MonthlyEarningsCalendar: React.FC<{
       ? Math.round((earnings.doneCount / earnings.scheduledCount) * 100)
       : 0;
   const activeClasses = earnings.perClass.filter((classEarning) => classEarning.scheduledCount > 0);
-  const hasAnyFee = classrooms.some((classroom) => getPerSessionFee(classroom) > 0);
 
   const handleEntryClick = (classroomId: string) => {
     const classroom = classroomById.get(classroomId);
@@ -136,7 +134,7 @@ const MonthlyEarningsCalendar: React.FC<{
           </div>
           <div>
             <h2 className="text-2xl font-serif font-bold text-[#4A3728]">
-              {mode === 'income' ? '수입 달력' : '수업 달력'}
+              {mode === 'income' ? '강사비 달력' : '수업 달력'}
             </h2>
             <p className="text-sm text-[#8B7E74]">
               {mode === 'income'
@@ -146,7 +144,7 @@ const MonthlyEarningsCalendar: React.FC<{
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          {/* 수업 ↔ 수입 달력 전환 */}
+          {/* 수업 달력 ↔ 강사비 달력 전환 */}
           <div className="inline-flex rounded-xl border border-[#E5E3DD] bg-[#FBFBFA] p-0.5">
             <button
               type="button"
@@ -164,7 +162,7 @@ const MonthlyEarningsCalendar: React.FC<{
                 mode === 'income' ? 'bg-white text-[#8B5E3C] shadow-sm' : 'text-[#8B7E74] hover:text-[#4A3728]'
               }`}
             >
-              수입 달력
+              강사비
             </button>
           </div>
           <div className="flex items-center gap-2">
@@ -215,7 +213,7 @@ const MonthlyEarningsCalendar: React.FC<{
           </div>
         </div>
       ) : (
-      /* 요약 카드 — 수업(일정) 중심, 강사비는 단가 설정 시 보조 */
+      /* 요약 카드 — 수업(일정) 중심. 강사비는 '강사비' 탭에서만 표시 */
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div className="rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] p-4">
           <p className="text-[11px] font-bold text-[#8B7E74]">이번 달 수업</p>
@@ -245,34 +243,26 @@ const MonthlyEarningsCalendar: React.FC<{
             {earnings.doneCount}/{earnings.scheduledCount}회 완료
           </p>
         </div>
-        {hasAnyFee ? (
-          <div className="rounded-2xl border border-[#EBD9C1] bg-[#FFF9F1] p-4">
-            <p className="text-[11px] font-bold text-[#A2906F]">이번 달 강사비</p>
-            <p className="mt-1 text-2xl font-extrabold text-[#8B5E3C]">{formatWon(earnings.totalEarned)}</p>
-            <p className="mt-0.5 text-[11px] text-[#B6A488]">예상 {formatWon(earnings.totalExpected)}</p>
-          </div>
-        ) : (
-          <div className="rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] p-4">
-            <p className="text-[11px] font-bold text-[#8B7E74]">남은 수업</p>
-            <p className="mt-1 text-2xl font-extrabold text-[#4A3728]">
-              {remainingCount}
-              <span className="text-base">회</span>
-            </p>
-            <p className="mt-0.5 text-[11px] text-[#A89F94]">아직 안 한 수업</p>
-          </div>
-        )}
+        <div className="rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] p-4">
+          <p className="text-[11px] font-bold text-[#8B7E74]">남은 수업</p>
+          <p className="mt-1 text-2xl font-extrabold text-[#4A3728]">
+            {remainingCount}
+            <span className="text-base">회</span>
+          </p>
+          <p className="mt-0.5 text-[11px] text-[#A89F94]">아직 안 한 수업</p>
+        </div>
       </div>
       )}
 
       {/* 달력 */}
-      <div className="mb-2 grid grid-cols-7 gap-1">
+      <div className="mb-2 grid grid-cols-6 gap-1">
         {EARNINGS_WEEKDAYS.map((weekday) => (
           <div key={weekday} className="py-1 text-center text-[11px] font-bold text-[#A89F94]">
             {weekday}
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-1">
+      <div className="grid grid-cols-6 gap-1">
         {cells.map((cell, index) => {
           if (!cell) {
             return <div key={`empty-${index}`} className="min-h-[72px]" />;
@@ -410,7 +400,7 @@ const MonthlyEarningsCalendar: React.FC<{
               <span className="text-[#A89F94]">
                 완료 {classEarning.doneCount}/{classEarning.scheduledCount}회
               </span>
-              {hasAnyFee && classEarning.earned > 0 && (
+              {mode === 'income' && classEarning.earned > 0 && (
                 <span className="font-extrabold text-[#8B5E3C]">{formatMan(classEarning.earned)}</span>
               )}
             </span>
