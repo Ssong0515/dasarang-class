@@ -4,13 +4,6 @@ import { createServer as createNetServer } from 'net';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
-import {
-  getGoogleSheetsStatus,
-  syncClassroomToGoogleSheets,
-  syncStudentToGoogleSheets,
-  type ClassroomSyncPayload,
-  type StudentSyncPayload,
-} from './server/googleSheetsSync';
 import { ADMIN_EMAIL, getAdminDb, getFirebaseAdminApp, verifyAdminIdToken, verifyStudentOrAdminIdToken } from './server/firebaseAdmin';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getStudentWorkFile, uploadStudentWork } from './server/googleDriveUpload';
@@ -365,39 +358,6 @@ async function startServer() {
       const message = error instanceof Error ? error.message : 'NotebookLM folder sync failed.';
       const statusCode = /required|not a folder/i.test(message) ? 400 : 500;
       res.status(statusCode).json({ error: message });
-    }
-  });
-
-  app.get(withBasePath(APP_BASE_PATH, '/api/google-sheets/status'), requireAdmin, async (_req, res) => {
-    try {
-      const status = await getGoogleSheetsStatus();
-      res.json(status);
-    } catch (error) {
-      res.status(500).json({
-        error: error instanceof Error ? error.message : 'Failed to read Google Sheets status.',
-      });
-    }
-  });
-
-  app.post(withBasePath(APP_BASE_PATH, '/api/google-sheets/sync-classroom'), requireAdmin, async (req, res) => {
-    try {
-      const result = await syncClassroomToGoogleSheets(req.body as ClassroomSyncPayload);
-      res.json({ ok: true, result });
-    } catch (error) {
-      res.status(500).json({
-        error: error instanceof Error ? error.message : 'Failed to sync classroom to Google Sheets.',
-      });
-    }
-  });
-
-  app.post(withBasePath(APP_BASE_PATH, '/api/google-sheets/sync-student'), requireAdmin, async (req, res) => {
-    try {
-      const result = await syncStudentToGoogleSheets(req.body as StudentSyncPayload);
-      res.json({ ok: true, result });
-    } catch (error) {
-      res.status(500).json({
-        error: error instanceof Error ? error.message : 'Failed to sync student to Google Sheets.',
-      });
     }
   });
 

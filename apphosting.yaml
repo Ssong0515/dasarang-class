@@ -33,6 +33,3 @@ env:
 
   - variable: GOOGLE_SERVICE_ACCOUNT_JSON
     secret: GOOGLE_SERVICE_ACCOUNT_JSON
-
-  - variable: GOOGLE_SPREADSHEET_ID
-    value: 1rG25qrjqtCY4Un8CxM5sPKRcuYBuAkC2BhH91HY4Hwc

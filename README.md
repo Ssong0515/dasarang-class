@@ -1,6 +1,6 @@
 # dasarang-class
 
-학생/수업 관리 앱입니다. 데이터 원본은 Firebase Firestore에 저장되고, 학생 명단은 Google Sheets로 동기화됩니다. 실습 자료의 다국어 번역은 실습 HTML에 미리 심어 둔 번역 사전(`window.__DSR_TR__`)을 학생 화면의 🌐 버튼으로 치환하는 방식으로, 별도 번역 API 호출 없이 동작합니다.
+학생/수업 관리 앱입니다. 데이터 원본은 Firebase Firestore에 저장됩니다. 실습 자료의 다국어 번역은 실습 HTML에 미리 심어 둔 번역 사전(`window.__DSR_TR__`)을 학생 화면의 🌐 버튼으로 치환하는 방식으로, 별도 번역 API 호출 없이 동작합니다.
 
 ## Local Run
 
@@ -19,9 +19,6 @@ Local development runs the Vite client and Express server together from `server.
 
 This app is not a static-only site. Production requires the Node/Express server because these routes must stay live:
 - `/api/health`
-- `/api/google-sheets/status`
-- `/api/google-sheets/sync-folder`
-- `/api/google-sheets/sync-student`
 
 The application is deployed using Firebase App Hosting.
 - `apphosting.yaml` configures the server environment and build settings.

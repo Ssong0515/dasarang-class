@@ -102,18 +102,6 @@ const removeUndefinedFields = <T extends Record<string, any>>(obj: T): T => {
   return result;
 };
 
-type GoogleSheetsSyncRequest = {
-  classroomId: string;
-  mode?: 'upsert' | 'delete';
-  previousName?: string;
-  classroomName?: string;
-};
-
-type GoogleSheetsSyncErrorState = {
-  message: string;
-  requests: GoogleSheetsSyncRequest[];
-};
-
 type ContentReorderUpdate = {
   id: string;
   categoryId: string | null;
@@ -303,8 +291,6 @@ export default function App() {
   const initialPathAppliedRef = useRef(false);
   const urlSyncEnabledRef = useRef(false);
   const isPopstateRef = useRef(false);
-  const [googleSheetsSyncError, setGoogleSheetsSyncError] = useState<GoogleSheetsSyncErrorState | null>(null);
-  const [isRetryingGoogleSheetsSync, setIsRetryingGoogleSheetsSync] = useState(false);
 
   // Login State
   const [isSigningIn, setIsSigningIn] = useState(false);
@@ -438,39 +424,6 @@ export default function App() {
       ...options,
     });
 
-  const syncClassroomsWithGoogleSheets = async (
-    requests: GoogleSheetsSyncRequest[],
-    options?: { isRetry?: boolean }
-  ) => {
-    if (!user || requests.length === 0) return;
-
-    if (options?.isRetry) {
-      setIsRetryingGoogleSheetsSync(true);
-    }
-
-    try {
-      await Promise.all(
-        requests.map((request) =>
-          postAdminRequest<unknown>('api/google-sheets/sync-classroom', request)
-        )
-      );
-      setGoogleSheetsSyncError(null);
-    } catch (error) {
-      setGoogleSheetsSyncError({
-        message: error instanceof Error ? error.message : 'Google Sheets 동기화에 실패했습니다.',
-        requests,
-      });
-    } finally {
-      if (options?.isRetry) {
-        setIsRetryingGoogleSheetsSync(false);
-      }
-    }
-  };
-
-  const triggerGoogleSheetsSync = (requests: GoogleSheetsSyncRequest[]) => {
-    void syncClassroomsWithGoogleSheets(requests);
-  };
-
   const handleSyncNotebookLmFolder = (folderId: string, driveAccessToken: string) =>
     postAdminRequest<NotebookLmFolderSyncResult>('api/notebooklm/sync-folder', {
       folderId,
@@ -508,11 +461,6 @@ export default function App() {
     }
 
     await deleteDoc(doc(db, STUDENT_ACCESS_COLLECTION, email));
-  };
-
-  const handleRetryGoogleSheetsSync = async () => {
-    if (!googleSheetsSyncError) return;
-    await syncClassroomsWithGoogleSheets(googleSheetsSyncError.requests, { isRetry: true });
   };
 
   // Load admin emails from Firestore once on mount
@@ -733,23 +681,6 @@ export default function App() {
     });
     return () => unsubscribe();
   }, [isAdmin]);
-
-  useEffect(() => {
-    if (!user) {
-      setGoogleSheetsSyncError(null);
-      setIsRetryingGoogleSheetsSync(false);
-    }
-  }, [user]);
-
-  // Auto-hide Google Sheets sync error alert after 5 seconds
-  useEffect(() => {
-    if (googleSheetsSyncError) {
-      const timer = setTimeout(() => {
-        setGoogleSheetsSyncError(null);
-      }, 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [googleSheetsSyncError]);
 
   // Data Listeners
   useEffect(() => {
@@ -1310,8 +1241,6 @@ export default function App() {
       if (students.length > 0 || previousStudents.length > 0) {
         await batch.commit();
       }
-
-      triggerGoogleSheetsSync([{ classroomId, mode: 'upsert' }]);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `students/${classroomId}`);
     }
@@ -1359,10 +1288,6 @@ export default function App() {
         })
       );
       await setDoc(doc(db, 'students', studentId), movedStudent);
-      triggerGoogleSheetsSync([
-        { classroomId: sourceClassroomId, mode: 'upsert' },
-        { classroomId: targetClassroomId, mode: 'upsert' },
-      ]);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `students/${studentId}`);
     }
@@ -1371,13 +1296,7 @@ export default function App() {
   const handleUpdateClassroom = async (classroomId: string, data: Partial<Classroom>) => {
     if (!user) return;
     try {
-      const previousClassroom = classrooms.find((classroom) => classroom.id === classroomId);
       await setDoc(doc(db, CLASSROOMS_COLLECTION, classroomId), removeUndefinedFields(data), { merge: true });
-      triggerGoogleSheetsSync([{
-        classroomId,
-        mode: 'upsert',
-        previousName: previousClassroom?.name,
-      }]);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `${CLASSROOMS_COLLECTION}/${classroomId}`);
     }
@@ -1483,7 +1402,6 @@ export default function App() {
         createdAt: new Date().toISOString(),
       };
       await setDoc(classroomRef, classroomData);
-      triggerGoogleSheetsSync([{ classroomId: classroomRef.id, mode: 'upsert' }]);
       setIsCreateModalOpen(false);
       handleManageClassroom({ ...classroomData, id: classroomRef.id } as Classroom);
     } catch (error) {
@@ -1497,16 +1415,21 @@ export default function App() {
       const newOrder = classrooms.length;
       const classroomRef = doc(collection(db, CLASSROOMS_COLLECTION));
       // 캘린더가 강사명으로 산출한 색을 그대로 사용해 동기화. 없으면 팔레트 기본색.
+      // 기관/단체(orgs)도 함께 가져와 organization 필드에 채운다 ("구로구청 / 디지털배움터, ...").
+      const organization = (calendarClass.orgs || [])
+        .map((org) => [org.org, org.project].filter(Boolean).join(' / '))
+        .filter(Boolean)
+        .join(', ');
       const classroomData = {
         name: calendarClass.name || '새로운 클래스',
         ownerUid: user.uid,
         order: newOrder,
         color: calendarClass.color || CLASSROOM_COLOR_OPTIONS[0].value,
         calendarClassId: calendarClass.id,
+        ...(organization ? { organization } : {}),
         createdAt: new Date().toISOString(),
       };
       await setDoc(classroomRef, classroomData);
-      triggerGoogleSheetsSync([{ classroomId: classroomRef.id, mode: 'upsert' }]);
       setIsCreateModalOpen(false);
       handleManageClassroom({ ...classroomData, id: classroomRef.id } as Classroom);
     } catch (error) {
@@ -1517,7 +1440,6 @@ export default function App() {
   const handleDeleteClassroom = async (classroomId: string) => {
     if (!user) return;
     try {
-      const classroomToDelete = classrooms.find((classroom) => classroom.id === classroomId);
       const recordsToDeleteSnapshot = await getDocs(
         query(
           collection(db, CLASSROOM_DATE_RECORDS_COLLECTION),
@@ -1536,11 +1458,6 @@ export default function App() {
       await deleteDoc(doc(db, CLASSROOMS_COLLECTION, classroomId));
       setActiveClassroomId(null);
       setActiveTab('home');
-      triggerGoogleSheetsSync([{
-        classroomId,
-        mode: 'delete',
-        classroomName: classroomToDelete?.name,
-      }]);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `${CLASSROOMS_COLLECTION}/${classroomId}`);
     }
@@ -1953,21 +1870,6 @@ export default function App() {
           ) : (
             <>
               <Header user={user} activeTab={activeTab} />
-              {googleSheetsSyncError && (
-            <div className="mx-6 mt-4 flex items-center justify-between gap-4 rounded-[24px] border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900 shadow-sm">
-              <div>
-                <p className="font-bold">Google Sheets 동기화에 실패했습니다.</p>
-                <p className="text-amber-800/80">{googleSheetsSyncError.message}</p>
-              </div>
-              <button
-                onClick={() => void handleRetryGoogleSheetsSync()}
-                disabled={isRetryingGoogleSheetsSync}
-                className="shrink-0 rounded-xl bg-amber-500 px-4 py-2 font-bold text-white transition-all hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-amber-500"
-              >
-                {isRetryingGoogleSheetsSync ? '재시도 중...' : '다시 시도'}
-              </button>
-            </div>
-          )}
           {activeTab === 'home' && (
             <Dashboard
               classrooms={classroomsWithStudents}
