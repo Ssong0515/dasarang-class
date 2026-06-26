@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Users,
@@ -42,6 +42,8 @@ import {
   Copy,
   Check,
   Sparkles,
+  Wallet,
+  Coins,
 } from 'lucide-react';
 import {
   AssignCurriculumDatesResult,
@@ -81,6 +83,13 @@ import {
   splitStudentsByStatus,
 } from '../utils/students';
 import { isAttendanceExcluded } from '../utils/attendance';
+import {
+  buildMonthEarnings,
+  formatFeeShort,
+  formatMan,
+  formatWon,
+  getPerSessionFee,
+} from '../utils/fee';
 import { openDriveSlidePicker } from '../utils/drivePicker';
 import { SlideEmbed } from './StudentContentPreview';
 import { SessionDetailModal } from './SessionDetailModal';
@@ -313,7 +322,17 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     icon: classroom.icon || DEFAULT_CLASSROOM_ICON,
     description: classroom.description || '',
     organization: classroom.organization || '',
+    feePerHour: classroom.feePerHour != null ? String(classroom.feePerHour) : '',
+    hoursPerSession: classroom.hoursPerSession != null ? String(classroom.hoursPerSession) : '',
   });
+  // 회차를 '완료'로 누른 순간 잠깐 떠오르는 강사비 적립 축하 토스트(띠링~).
+  const [feeToast, setFeeToast] = useState<{ id: number; amount: number } | null>(null);
+  const feeToastIdRef = useRef(0);
+  useEffect(() => {
+    if (!feeToast) return;
+    const timer = setTimeout(() => setFeeToast(null), 2200);
+    return () => clearTimeout(timer);
+  }, [feeToast]);
 
   const [calendarClasses, setCalendarClasses] = useState<CalendarClassSummary[]>([]);
   const [calendarClassesLoading, setCalendarClassesLoading] = useState(false);
@@ -460,6 +479,12 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   ).length;
   const calendarDays = getDaysInMonth(viewMonth);
   const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
+  // 회차당 강사비(원)와 보고 있는 달의 강사비 집계(이 반만). '완료'한 회차만 번 돈으로 잡힌다.
+  const perSessionFee = getPerSessionFee(classroom);
+  const monthEarnings = useMemo(
+    () => buildMonthEarnings([classroom], viewMonth.getFullYear(), viewMonth.getMonth()),
+    [classroom, viewMonth]
+  );
   const previewColorMeta = getClassroomColorMeta(settingsDraft.color);
   const previewIconColor = previewColorMeta.value;
   const previewIconBg = previewColorMeta.bg;
@@ -874,6 +899,11 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     };
     states[currentSessionId] = { ...states[currentSessionId], status: next };
     onUpdateClassroom(classroom.id, { sessionStates: states });
+    // 완료로 바꾼 순간, 강사비가 잡혀 있으면 "+N만원 적립!" 토스트를 띄운다(띠링~).
+    if (next === 'done' && perSessionFee > 0) {
+      feeToastIdRef.current += 1;
+      setFeeToast({ id: feeToastIdRef.current, amount: perSessionFee });
+    }
   };
 
   const toggleAssignmentCard = () => {
@@ -2457,8 +2487,16 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                     className={`relative flex h-11 w-full flex-col items-center justify-center rounded-xl text-sm font-bold transition-all ${cellTone}`}
                   >
                     <span className="leading-none">{date.getDate()}</span>
-                    <span className="mt-1 flex h-1.5 items-center gap-0.5">
-                      {isActive && (
+                    <span className="mt-0.5 flex h-2.5 items-center justify-center gap-0.5 leading-none">
+                      {perSessionFee > 0 && status === 'done' ? (
+                        <span
+                          className={`text-[9px] font-extrabold ${
+                            isDarkCell ? 'text-white' : 'text-[#2D7A4D]'
+                          }`}
+                        >
+                          +{formatFeeShort(perSessionFee)}
+                        </span>
+                      ) : isActive ? (
                         <span
                           className={`h-1.5 w-1.5 rounded-full ${
                             hasMemo
@@ -2470,7 +2508,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                                 : 'bg-[#C4B6A4]'
                           }`}
                         />
-                      )}
+                      ) : null}
                     </span>
                   </button>
                 );
@@ -2493,7 +2531,55 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 기록·메모
               </span>
             </div>
+
+            {perSessionFee > 0 && (
+              <div className="mt-4 rounded-2xl border border-[#E0EFE4] bg-[#F4FAF6] p-4">
+                <div className="mb-2 flex items-center gap-2">
+                  <Wallet size={15} className="text-[#2D7A4D]" />
+                  <span className="text-xs font-bold text-[#2D7A4D]">
+                    {viewMonth.getMonth() + 1}월 강사비
+                  </span>
+                </div>
+                <div className="flex items-end justify-between">
+                  <div>
+                    <p className="text-[10px] font-semibold text-[#6B8E7A]">
+                      번 돈 (완료 {monthEarnings.doneCount}회)
+                    </p>
+                    <p className="text-xl font-extrabold text-[#2D7A4D]">
+                      {formatWon(monthEarnings.totalEarned)}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-semibold text-[#A89F94]">예상 총</p>
+                    <p className="text-sm font-bold text-[#8B7E74]">
+                      {formatWon(monthEarnings.totalExpected)}
+                    </p>
+                  </div>
+                </div>
+                <p className="mt-2 text-[10px] text-[#A89F94]">
+                  회차당 {formatMan(perSessionFee)} · 완료할 때마다 적립돼요
+                </p>
+              </div>
+            )}
           </div>
+
+          <AnimatePresence>
+            {feeToast && (
+              <motion.div
+                key={feeToast.id}
+                initial={{ opacity: 0, y: 24, scale: 0.7 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -40, scale: 0.9 }}
+                transition={{ type: 'spring', stiffness: 320, damping: 18 }}
+                className="pointer-events-none fixed left-1/2 top-24 z-[60] -translate-x-1/2"
+              >
+                <div className="flex items-center gap-2 rounded-full bg-[#2D7A4D] px-6 py-3.5 text-base font-extrabold text-white shadow-2xl shadow-[#2D7A4D]/40">
+                  <span className="text-xl">💰</span>
+                  +{formatMan(feeToast.amount)} 적립!
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {isDateOpen ? (
             <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-6 text-left shadow-sm">
@@ -3338,6 +3424,12 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
 
   const renderSettingsTab = () => {
     const PreviewIcon = getClassroomIconComponent(settingsDraft.icon);
+    const draftFeePerHour = Number(settingsDraft.feePerHour.replace(/[,\s]/g, '')) || 0;
+    const draftHoursPerSession = Number(settingsDraft.hoursPerSession.replace(/[,\s]/g, '')) || 0;
+    const draftPerSessionFee = getPerSessionFee({
+      feePerHour: draftFeePerHour || undefined,
+      hoursPerSession: draftHoursPerSession || undefined,
+    });
 
     return (
       <motion.div
@@ -3356,7 +3448,21 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
           </div>
           <button
             onClick={() => {
-              onUpdateClassroom?.(classroom.id, settingsDraft);
+              const parseFee = (raw: string): number | undefined => {
+                const trimmed = raw.trim();
+                if (!trimmed) return undefined;
+                const value = Number(trimmed.replace(/[,\s]/g, ''));
+                return Number.isFinite(value) && value >= 0 ? value : undefined;
+              };
+              onUpdateClassroom?.(classroom.id, {
+                name: settingsDraft.name,
+                color: settingsDraft.color,
+                icon: settingsDraft.icon,
+                description: settingsDraft.description,
+                organization: settingsDraft.organization,
+                feePerHour: parseFee(settingsDraft.feePerHour),
+                hoursPerSession: parseFee(settingsDraft.hoursPerSession),
+              });
               window.alert('클래스 설정이 저장되었습니다.');
             }}
             className="flex items-center gap-2 rounded-xl bg-[#8B5E3C] px-5 py-2.5 text-sm font-bold text-white transition-all hover:bg-[#724D31]"
@@ -3394,6 +3500,63 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
             className="w-full rounded-2xl border-2 border-[#E5E3DD] px-5 py-3.5 text-base font-medium text-[#4A3728] transition-all focus:border-[#8B5E3C] focus:outline-none"
             placeholder='예: "구로구청 / 디지털배움터" (시간표 연결 시 자동으로 채워질 수 있어요)'
           />
+        </div>
+
+        <div className="mb-10">
+          <div className="mb-2 flex items-center gap-2">
+            <Wallet size={18} className="text-[#8B5E3C]" />
+            <h3 className="text-lg font-bold text-[#4A3728]">강사비 (시수 단가)</h3>
+          </div>
+          <p className="mb-4 text-sm text-[#8B7E74]">
+            시수(1교시)당 단가와 회차당 시수를 적어 두면, 수업을 <span className="font-bold text-[#2D7A4D]">완료</span>로 표시할 때마다
+            회차당 강사비가 자동으로 적립·집계됩니다. (달력·홈 대시보드에 표시)
+          </p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-bold text-[#8B7E74]">시수 단가 (원)</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                step={1000}
+                value={settingsDraft.feePerHour}
+                onChange={(event) =>
+                  setSettingsDraft({ ...settingsDraft, feePerHour: event.target.value })
+                }
+                className="w-full rounded-2xl border-2 border-[#E5E3DD] px-5 py-3.5 text-base font-bold text-[#4A3728] transition-all focus:border-[#8B5E3C] focus:outline-none"
+                placeholder="예: 40000"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-bold text-[#8B7E74]">회차당 시수</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                step={1}
+                value={settingsDraft.hoursPerSession}
+                onChange={(event) =>
+                  setSettingsDraft({ ...settingsDraft, hoursPerSession: event.target.value })
+                }
+                className="w-full rounded-2xl border-2 border-[#E5E3DD] px-5 py-3.5 text-base font-bold text-[#4A3728] transition-all focus:border-[#8B5E3C] focus:outline-none"
+                placeholder="예: 2 (비우면 1로 계산)"
+              />
+            </label>
+          </div>
+          <div className="mt-4 flex items-center gap-2 rounded-2xl border border-[#E0EFE4] bg-[#F4FAF6] px-5 py-3">
+            <Coins size={18} className="shrink-0 text-[#2D7A4D]" />
+            {draftPerSessionFee > 0 ? (
+              <p className="text-sm text-[#4A3728]">
+                회차(1회 수업)당 강사비{' '}
+                <span className="font-extrabold text-[#2D7A4D]">{formatWon(draftPerSessionFee)}</span>
+                <span className="text-[#8B7E74]">
+                  {' '}({formatWon(draftFeePerHour)} × {draftHoursPerSession || 1}시수)
+                </span>
+              </p>
+            ) : (
+              <p className="text-sm text-[#8B7E74]">시수 단가를 입력하면 회차당 강사비가 계산됩니다.</p>
+            )}
+          </div>
         </div>
 
         <div className="mb-10">

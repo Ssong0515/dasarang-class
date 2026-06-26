@@ -174,6 +174,13 @@ export interface Classroom {
   sessionStates?: Record<string, ClassroomSessionState>;
   /** 사이드바·홈에서 숨길지 여부 (삭제하지 않고 가리기) */
   hidden?: boolean;
+  /**
+   * 시수(1교시)당 강사비 단가(원). 회차(수업일)를 '완료'로 표시하면
+   * `feePerHour × hoursPerSession`만큼 강사비가 적립된 것으로 집계한다.
+   */
+  feePerHour?: number;
+  /** 한 회차(수업일)당 시수. feePerHour와 곱해 회차당 강사비를 계산한다. 비우면 1로 본다. */
+  hoursPerSession?: number;
 }
 
 /** calendar.damuna.org `classes` 컬렉션의 참고 시간표 요약 (읽기 전용) */
