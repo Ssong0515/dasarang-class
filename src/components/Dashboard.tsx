@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   LayoutGrid,
   BookOpen,
@@ -10,15 +10,248 @@ import {
   Users,
   Library,
   GraduationCap,
+  Wallet,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { ClassroomDiagnosticsBanner } from './ClassroomDiagnosticsBanner';
-import { AccessLog, Classroom, ClassroomLoadDiagnostics } from '../types';
+import { Classroom, ClassroomLoadDiagnostics } from '../types';
 import {
   getClassroomCardColors,
   getClassroomIconComponent,
 } from '../utils/classroomAppearance';
 import { getStudentCounts } from '../utils/students';
+import {
+  buildMonthEarnings,
+  formatFeeShort,
+  formatMan,
+  formatWon,
+  getMonthDateCells,
+  getPerSessionFee,
+} from '../utils/fee';
+
+const EARNINGS_WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+
+const getTodayDateStr = (): string => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+    now.getDate()
+  ).padStart(2, '0')}`;
+};
+
+/**
+ * 홈 대시보드의 전체 클래스 통합 강사비 달력.
+ * 각 반 달력처럼 월별 그리드를 보여주되, 모든 반을 한 판에 모아 날짜마다 색점(반)과 적립액을 띄우고
+ * 위에는 "이번 달 번 돈 / 예상 총" 요약을 보여준다.
+ */
+const MonthlyEarningsCalendar: React.FC<{
+  classrooms: Classroom[];
+}> = ({ classrooms }) => {
+  const [view, setView] = useState(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() };
+  });
+
+  const earnings = useMemo(
+    () => buildMonthEarnings(classrooms, view.year, view.month),
+    [classrooms, view]
+  );
+  const cells = useMemo(() => getMonthDateCells(view.year, view.month), [view]);
+
+  const todayStr = getTodayDateStr();
+  const remaining = Math.max(earnings.totalExpected - earnings.totalEarned, 0);
+  const activeClasses = earnings.perClass.filter((classEarning) => classEarning.scheduledCount > 0);
+  const hasAnyFee = classrooms.some((classroom) => getPerSessionFee(classroom) > 0);
+
+  const goToMonth = (delta: number) =>
+    setView((current) => {
+      const next = new Date(current.year, current.month + delta, 1);
+      return { year: next.getFullYear(), month: next.getMonth() };
+    });
+  const goToday = () => {
+    const now = new Date();
+    setView({ year: now.getFullYear(), month: now.getMonth() });
+  };
+
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="mb-12 overflow-hidden rounded-[40px] border border-[#E5E3DD] bg-white p-8"
+    >
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#EAF7EE] text-[#2D7A4D]">
+            <Wallet size={22} />
+          </div>
+          <div>
+            <h2 className="text-2xl font-serif font-bold text-[#4A3728]">강사비 달력</h2>
+            <p className="text-sm text-[#8B7E74]">완료한 수업의 강사비를 전체 클래스에서 모아 봅니다.</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={goToday}
+            className="rounded-xl border border-[#E5E3DD] px-3 py-1.5 text-xs font-bold text-[#8B7E74] transition-all hover:bg-[#F3F2EE]"
+          >
+            오늘
+          </button>
+          <span className="min-w-[110px] text-center text-base font-bold text-[#4A3728]">
+            {view.year}년 {view.month + 1}월
+          </span>
+          <button
+            onClick={() => goToMonth(-1)}
+            aria-label="이전 달"
+            className="rounded-lg p-1.5 text-[#8B7E74] transition-all hover:bg-[#F3F2EE]"
+          >
+            <ChevronLeft size={18} />
+          </button>
+          <button
+            onClick={() => goToMonth(1)}
+            aria-label="다음 달"
+            className="rounded-lg p-1.5 text-[#8B7E74] transition-all hover:bg-[#F3F2EE]"
+          >
+            <ChevronRight size={18} />
+          </button>
+        </div>
+      </div>
+
+      {/* 요약 카드 */}
+      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="rounded-2xl border border-[#E0EFE4] bg-[#F4FAF6] p-4">
+          <p className="text-[11px] font-bold text-[#6B8E7A]">이번 달 번 돈</p>
+          <p className="mt-1 text-2xl font-extrabold text-[#2D7A4D]">{formatWon(earnings.totalEarned)}</p>
+          <p className="mt-0.5 text-[11px] text-[#8FAE9C]">완료 {earnings.doneCount}회</p>
+        </div>
+        <div className="rounded-2xl border border-[#EBD9C1] bg-[#FFF9F1] p-4">
+          <p className="text-[11px] font-bold text-[#A2906F]">이번 달 예상 총</p>
+          <p className="mt-1 text-2xl font-extrabold text-[#8B5E3C]">{formatWon(earnings.totalExpected)}</p>
+          <p className="mt-0.5 text-[11px] text-[#B6A488]">예정 {earnings.scheduledCount}회</p>
+        </div>
+        <div className="rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] p-4">
+          <p className="text-[11px] font-bold text-[#8B7E74]">남은 예상</p>
+          <p className="mt-1 text-2xl font-extrabold text-[#4A3728]">{formatWon(remaining)}</p>
+          <p className="mt-0.5 text-[11px] text-[#A89F94]">아직 안 한 수업</p>
+        </div>
+        <div className="rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] p-4">
+          <p className="text-[11px] font-bold text-[#8B7E74]">진행률</p>
+          <p className="mt-1 text-2xl font-extrabold text-[#4A3728]">
+            {earnings.scheduledCount > 0
+              ? Math.round((earnings.doneCount / earnings.scheduledCount) * 100)
+              : 0}
+            <span className="text-base">%</span>
+          </p>
+          <p className="mt-0.5 text-[11px] text-[#A89F94]">
+            {earnings.doneCount}/{earnings.scheduledCount}회 완료
+          </p>
+        </div>
+      </div>
+
+      {/* 달력 */}
+      <div className="mb-2 grid grid-cols-7 gap-1">
+        {EARNINGS_WEEKDAYS.map((weekday) => (
+          <div key={weekday} className="py-1 text-center text-[11px] font-bold text-[#A89F94]">
+            {weekday}
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {cells.map((cell, index) => {
+          if (!cell) {
+            return <div key={`empty-${index}`} className="min-h-[60px]" />;
+          }
+          const dayNum = Number(cell.slice(8, 10));
+          const day = earnings.byDate.get(cell);
+          const isToday = cell === todayStr;
+          return (
+            <div
+              key={cell}
+              className={`flex min-h-[60px] flex-col rounded-xl border p-1.5 transition-colors ${
+                isToday
+                  ? 'border-[#2F5EA8] bg-[#EAF1FB]'
+                  : day
+                    ? 'border-[#ECEAE4] bg-white hover:bg-[#FBFAF8]'
+                    : 'border-transparent'
+              }`}
+            >
+              <span
+                className={`text-[11px] font-bold leading-none ${
+                  isToday ? 'text-[#2F5EA8]' : 'text-[#8B7E74]'
+                }`}
+              >
+                {dayNum}
+              </span>
+              {day && (
+                <>
+                  <div className="mt-1 flex flex-wrap gap-0.5">
+                    {day.entries.slice(0, 4).map((entry, entryIndex) => (
+                      <span
+                        key={entryIndex}
+                        title={`${entry.classroomName}${entry.fee > 0 ? ` · ${formatMan(entry.fee)}` : ''}`}
+                        className="h-1.5 w-1.5 rounded-full"
+                        style={{
+                          backgroundColor:
+                            entry.status === 'skipped' ? '#D6D0C6' : entry.color || '#A2906F',
+                          opacity: entry.status === 'planned' ? 0.5 : 1,
+                        }}
+                      />
+                    ))}
+                    {day.entries.length > 4 && (
+                      <span className="text-[8px] font-bold text-[#A89F94]">
+                        +{day.entries.length - 4}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-auto pt-0.5">
+                    {day.earned > 0 ? (
+                      <span className="text-[10px] font-extrabold text-[#2D7A4D]">
+                        +{formatFeeShort(day.earned)}만
+                      </span>
+                    ) : day.expected > 0 ? (
+                      <span className="text-[10px] font-bold text-[#C2BAAE]">
+                        +{formatFeeShort(day.expected)}만
+                      </span>
+                    ) : null}
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* 클래스별 범례 */}
+      {hasAnyFee && activeClasses.length > 0 ? (
+        <div className="mt-5 flex flex-wrap gap-2 border-t border-[#F3F2EE] pt-5">
+          {activeClasses.map((classEarning) => (
+            <span
+              key={classEarning.classroomId}
+              className="flex items-center gap-2 rounded-full border border-[#E5E3DD] bg-[#FBFBFA] py-1.5 pl-2.5 pr-3 text-xs"
+            >
+              <span
+                className="h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: classEarning.color || '#A2906F' }}
+              />
+              <span className="font-bold text-[#4A3728]">{classEarning.classroomName}</span>
+              {classEarning.earned > 0 ? (
+                <span className="font-extrabold text-[#2D7A4D]">{formatMan(classEarning.earned)}</span>
+              ) : (
+                <span className="text-[#A89F94]">완료 {classEarning.doneCount}회</span>
+              )}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-5 border-t border-[#F3F2EE] pt-5 text-center text-sm text-[#A89F94]">
+          {!hasAnyFee
+            ? '클래스 설정에서 시수 단가를 입력하면, 수업을 완료할 때마다 강사비가 여기에 모입니다.'
+            : '이번 달에 잡힌 수업이 없어요. 커리큘럼·시간표로 수업일을 배정하면 여기에 표시됩니다.'}
+        </p>
+      )}
+    </motion.section>
+  );
+};
 
 const QuickNavCard: React.FC<{
   icon: React.ReactNode;
@@ -50,7 +283,6 @@ interface DashboardProps {
   onGoToLibrary: () => void;
   onGoToMemo: () => void;
   onSwitchToStudent: () => void;
-  accessLogs?: AccessLog[];
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -60,7 +292,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onGoToLibrary,
   onGoToMemo,
   onSwitchToStudent,
-  accessLogs = [],
 }) => {
   const isDev = import.meta.env.DEV;
   // 숨긴 클래스는 홈 목록에서 제외
@@ -175,6 +406,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </div>
       </motion.section>
+
+      <MonthlyEarningsCalendar classrooms={classrooms} />
 
       <section className="mb-12">
         <ClassroomDiagnosticsBanner
@@ -374,52 +607,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </motion.div>
       </div>
 
-      {/* Access Logs */}
-      {accessLogs.length > 0 && (
-        <motion.section
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.4 }}
-          className="mx-6 mb-8"
-        >
-          <h2 className="mb-4 text-lg font-bold text-[#4A3728]">방문 로그</h2>
-          <div className="overflow-hidden rounded-[24px] border border-[#E5E3DD] bg-white shadow-sm">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[#E5E3DD] bg-[#F3F2EE]">
-                  <th className="px-5 py-3 text-left font-semibold text-[#8B7E74]">이름</th>
-                  <th className="px-5 py-3 text-left font-semibold text-[#8B7E74]">이메일</th>
-                  <th className="px-5 py-3 text-left font-semibold text-[#8B7E74]">접속 시간</th>
-                </tr>
-              </thead>
-              <tbody>
-                {accessLogs.slice(0, 50).map((log, i) => (
-                  <tr
-                    key={log.id}
-                    className={i % 2 === 0 ? 'bg-white' : 'bg-[#FBFBFA]'}
-                  >
-                    <td className="px-5 py-3 font-medium text-[#4A3728]">
-                      {log.displayName || '(이름 없음)'}
-                    </td>
-                    <td className="px-5 py-3 text-[#8B7E74]">{log.email}</td>
-                    <td className="px-5 py-3 text-[#8B7E74]">
-                      {log.loginAt
-                        ? new Date(log.loginAt).toLocaleString('ko-KR', {
-                            year: 'numeric',
-                            month: '2-digit',
-                            day: '2-digit',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })
-                        : '-'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </motion.section>
-      )}
     </main>
   );
 };

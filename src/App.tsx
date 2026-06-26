@@ -9,7 +9,6 @@ import { StudentPage } from './components/StudentPage';
 import { StudentAccessManager } from './components/StudentAccessManager';
 import { StudentShowcaseManager } from './components/StudentShowcaseManager';
 import {
-  AccessLog,
   AssignCurriculumDatesResult,
   CalendarClassSummary,
   ClassroomDateRecord,
@@ -310,9 +309,6 @@ export default function App() {
     adminEmails !== null &&
     (!user || isAdmin || isStudentAccessCheckReady);
 
-  // Access Logs (admin-only)
-  const [accessLogs, setAccessLogs] = useState<AccessLog[]>([]);
-  const accessLoggedRef = useRef(false);
   const studentsById = useMemo(
     () => new Map(students.map((student) => [student.id, student])),
     [students]
@@ -483,9 +479,6 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
       setUser(nextUser);
       setIsAuthReady(true);
-      if (!nextUser) {
-        accessLoggedRef.current = false;
-      }
     });
     return () => unsubscribe();
   }, []);
@@ -610,25 +603,6 @@ export default function App() {
 
   // ─────────────────────────────────────────────────────────────────────────
 
-  // Log non-admin access
-  useEffect(() => {
-    if (
-      !user ||
-      adminEmails === null ||
-      isAdmin ||
-      !canAccessStudentPage ||
-      !isStudentAccessCheckReady ||
-      accessLoggedRef.current
-    ) return;
-    accessLoggedRef.current = true;
-    void addDoc(collection(db, 'access_logs'), {
-      email: user.email ?? '',
-      uid: user.uid,
-      displayName: user.displayName ?? '',
-      loginAt: new Date().toISOString(),
-    }).catch((error) => console.error('Failed to write access log', error));
-  }, [user, adminEmails, isAdmin, canAccessStudentPage, isStudentAccessCheckReady]);
-
   useEffect(() => {
     if (!isAdmin) {
       setStudentAccessEntries([]);
@@ -658,29 +632,6 @@ export default function App() {
     return () => unsubscribe();
   }, [isAdmin]);
 
-  // Load access logs (admin only)
-  useEffect(() => {
-    if (!isAdmin) {
-      setAccessLogs([]);
-      return;
-    }
-    const logsQuery = query(
-      collection(db, 'access_logs'),
-      orderBy('loginAt', 'desc')
-    );
-    const unsubscribe = onSnapshot(logsQuery, (snapshot) => {
-      setAccessLogs(
-        snapshot.docs.map((d) => ({
-          id: d.id,
-          email: d.data().email ?? '',
-          uid: d.data().uid ?? '',
-          displayName: d.data().displayName ?? '',
-          loginAt: d.data().loginAt ?? '',
-        }))
-      );
-    });
-    return () => unsubscribe();
-  }, [isAdmin]);
 
   // Data Listeners
   useEffect(() => {
@@ -1877,7 +1828,6 @@ export default function App() {
               onGoToLibrary={() => handleTabChange('content-library')}
               onGoToMemo={() => handleTabChange('memo')}
               onSwitchToStudent={handleSwitchToStudent}
-              accessLogs={accessLogs}
             />
           )}
           {activeTab === 'memo' && (
@@ -1893,7 +1843,6 @@ export default function App() {
           )}
           {activeTab === 'classroom-management' && activeClassroom && (
             <ClassroomDashboard
-              key={activeClassroom.id}
               classroom={activeClassroom}
               classrooms={classroomsWithStudents}
               studentsById={studentsById}
