@@ -600,6 +600,158 @@ export const createPracticeContent = async (input: CreatePracticeContentInput) =
 };
 
 // ---------------------------------------------------------------------------
+// 실습 자료 HTML 부분 수정 (find/replace 패치 — 전체 재업로드 없이)
+// ---------------------------------------------------------------------------
+
+export interface ContentHtmlEdit {
+  /** 현재 html에 그대로(공백·따옴표 포함) 있어야 하는 찾을 문자열 */
+  find: string;
+  /** 바꿀 문자열 */
+  replace: string;
+  /** 여러 번 나타나면 모두 교체할지. 기본 false(정확히 1번만 허용) */
+  replaceAll?: boolean;
+}
+
+/** html 안에서 needle이 나타나는 횟수(정규식 아닌 순수 문자열). */
+const countOccurrences = (haystack: string, needle: string): number => {
+  let count = 0;
+  let from = 0;
+  for (;;) {
+    const at = haystack.indexOf(needle, from);
+    if (at === -1) break;
+    count += 1;
+    from = at + needle.length;
+  }
+  return count;
+};
+
+/**
+ * contents 문서의 html을 전체 재업로드 없이 부분 수정한다.
+ * 채팅에서 30KB짜리 전체를 다시 보내 update_resource로 덮는 대신, 바뀌는 부분만 find/replace로 고친다.
+ * 모든 edit를 검증한 뒤 한꺼번에 커밋한다(하나라도 실패하면 아무것도 안 쓴다 = 원자적).
+ */
+export const editContentHtml = async (id: string, edits: ContentHtmlEdit[]) => {
+  if (!Array.isArray(edits) || edits.length === 0) {
+    throw new AdminApiError(400, 'edits 배열이 필요합니다.');
+  }
+
+  const ref = getAdminDb().collection('contents').doc(id);
+  const doc = await ref.get();
+  if (!doc.exists) {
+    throw new AdminApiError(404, `콘텐츠 '${id}'을(를) 찾을 수 없습니다.`);
+  }
+  const original = (doc.data() as DocData).html;
+  if (typeof original !== 'string') {
+    throw new AdminApiError(400, `콘텐츠 '${id}'에 수정할 html 필드가 없습니다.`);
+  }
+
+  let html = original;
+  const applied: Array<{ edit: number; occurrences: number; replaceAll: boolean }> = [];
+
+  edits.forEach((edit, index) => {
+    const n = index + 1;
+    if (typeof edit?.find !== 'string' || edit.find === '') {
+      throw new AdminApiError(400, `${n}번째 edit: find가 비어 있습니다.`);
+    }
+    if (typeof edit.replace !== 'string') {
+      throw new AdminApiError(400, `${n}번째 edit: replace는 문자열이어야 합니다.`);
+    }
+    if (edit.find === edit.replace) {
+      throw new AdminApiError(400, `${n}번째 edit: find와 replace가 같습니다.`);
+    }
+
+    const count = countOccurrences(html, edit.find);
+    if (count === 0) {
+      throw new AdminApiError(
+        400,
+        `${n}번째 edit: 찾는 문자열이 html에 없습니다. 현재 내용과 정확히(공백·따옴표 포함) 일치해야 합니다. find_in_content_html로 현재 내용을 먼저 확인하세요.`
+      );
+    }
+    if (count > 1 && !edit.replaceAll) {
+      throw new AdminApiError(
+        400,
+        `${n}번째 edit: 찾는 문자열이 ${count}번 나타납니다. 앞뒤 맥락을 더 포함해 유일하게 만들거나 replaceAll=true를 쓰세요.`
+      );
+    }
+
+    // 순수 문자열 치환. String.replace(string, repl)은 repl의 `$&`·`$1` 등을 특수 해석하므로
+    // ($ 가 든 HTML에서 깨짐) 단건은 인덱스 splice로 리터럴 치환한다. split/join은 $ 해석이 없어 안전.
+    if (edit.replaceAll) {
+      html = html.split(edit.find).join(edit.replace);
+    } else {
+      const at = html.indexOf(edit.find);
+      html = html.slice(0, at) + edit.replace + html.slice(at + edit.find.length);
+    }
+    applied.push({ edit: n, occurrences: count, replaceAll: Boolean(edit.replaceAll) });
+  });
+
+  if (html === original) {
+    throw new AdminApiError(400, '수정 후 내용이 그대로입니다(변경 없음).');
+  }
+  if (html.length > MAX_CONTENT_HTML_LENGTH) {
+    throw new AdminApiError(
+      400,
+      `수정 후 html이 너무 큽니다 (${html.length}자, 최대 ${MAX_CONTENT_HTML_LENGTH}자).`
+    );
+  }
+
+  await ref.set({ html, updatedAt: nowIso() }, { merge: true });
+
+  return {
+    id,
+    editsApplied: applied,
+    htmlLength: { before: original.length, after: html.length },
+    message:
+      '실습 HTML을 부분 수정했습니다. content id가 그대로라 날짜기록·회차 연결과 공개 상태(게이팅)는 유지됩니다.',
+  };
+};
+
+/**
+ * contents 문서의 html에서 query를 찾아, 전체를 받지 않고도 주변 맥락만 본다.
+ * editContentHtml의 find 문자열을 정확히 만들기 위한 "들여다보기"용.
+ */
+export const findInContentHtml = async (
+  id: string,
+  query: string,
+  options: { maxMatches?: number; context?: number } = {}
+) => {
+  if (typeof query !== 'string' || query === '') {
+    throw new AdminApiError(400, 'query가 비어 있습니다.');
+  }
+  const ref = getAdminDb().collection('contents').doc(id);
+  const doc = await ref.get();
+  if (!doc.exists) {
+    throw new AdminApiError(404, `콘텐츠 '${id}'을(를) 찾을 수 없습니다.`);
+  }
+  const html = (doc.data() as DocData).html;
+  if (typeof html !== 'string') {
+    throw new AdminApiError(400, `콘텐츠 '${id}'에 html 필드가 없습니다.`);
+  }
+
+  const maxMatches = Math.min(Math.max(options.maxMatches || 20, 1), 100);
+  const context = Math.min(Math.max(options.context ?? 100, 0), 1000);
+
+  const matches: Array<{ line: number; offset: number; snippet: string }> = [];
+  let from = 0;
+  let total = 0;
+  for (;;) {
+    const at = html.indexOf(query, from);
+    if (at === -1) break;
+    total += 1;
+    if (matches.length < maxMatches) {
+      const start = Math.max(0, at - context);
+      const end = Math.min(html.length, at + query.length + context);
+      const line = html.slice(0, at).split('\n').length; // 1-based
+      const snippet = `${start > 0 ? '…' : ''}${html.slice(start, end)}${end < html.length ? '…' : ''}`;
+      matches.push({ line, offset: at, snippet });
+    }
+    from = at + query.length;
+  }
+
+  return { id, query, totalMatches: total, returned: matches.length, htmlLength: html.length, matches };
+};
+
+// ---------------------------------------------------------------------------
 // 전체 현황 (채팅 그라운딩용)
 // ---------------------------------------------------------------------------
 

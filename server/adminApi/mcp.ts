@@ -17,12 +17,15 @@ import {
   createPracticeContent,
   createResource,
   deleteResource,
+  editContentHtml,
+  findInContentHtml,
   getOverview,
   getResource,
   listResource,
   mutateCurriculumSessions,
   updateResource,
   upsertLessonRecord,
+  type ContentHtmlEdit,
   type CurriculumSessionOp,
   type UpsertLessonRecordInput,
 } from './services';
@@ -185,6 +188,37 @@ const buildMcpServer = () => {
       categoryName: z.string().optional(),
     },
     async (input) => run(() => createPracticeContent(input))
+  );
+
+  server.tool(
+    'edit_content_html',
+    '실습 자료(contents) HTML을 전체 재업로드 없이 부분 수정한다. 작은 수정(글자·버튼·버그 한 군데)은 update_resource로 30KB 전체를 다시 보내지 말고 이 도구로 바뀌는 부분만 고칠 것 — 채팅 왕복이 줄고 오류가 거의 사라진다. find는 현재 html에 그대로(공백·따옴표 포함) 있어야 하고 기본은 정확히 1번 일치해야 한다(여러 번이면 앞뒤 맥락을 더 넣어 유일하게 만들거나 replaceAll=true). edits는 순서대로 적용되며 하나라도 실패하면 전체가 취소된다. content id는 그대로라 날짜기록·회차 연결과 공개 상태는 유지된다. 현재 내용을 모르면 find_in_content_html로 먼저 확인할 것.',
+    {
+      id: z.string().describe('contents 문서 id'),
+      edits: z
+        .array(
+          z.object({
+            find: z.string().describe('현재 html에 정확히 있는 문자열(공백·따옴표 포함)'),
+            replace: z.string().describe('바꿀 문자열'),
+            replaceAll: z.boolean().optional().describe('여러 번 나타나면 모두 교체 (기본 false=정확히 1번)'),
+          })
+        )
+        .min(1),
+    },
+    async ({ id, edits }) => run(() => editContentHtml(id, edits as ContentHtmlEdit[]))
+  );
+
+  server.tool(
+    'find_in_content_html',
+    '실습 자료(contents) HTML 안에서 문자열을 찾아 주변 맥락만 돌려준다(전체 html을 받지 않고 "들여다보기"용). edit_content_html에 넣을 find 문자열을 정확히 만들 때 사용. 일치 위치마다 줄번호·오프셋과 앞뒤 맥락 스니펫을 반환한다.',
+    {
+      id: z.string().describe('contents 문서 id'),
+      query: z.string().describe('찾을 문자열'),
+      maxMatches: z.number().optional().describe('반환할 최대 일치 개수 (기본 20, 최대 100)'),
+      context: z.number().optional().describe('일치 앞뒤로 보여줄 글자 수 (기본 100, 최대 1000)'),
+    },
+    async ({ id, query, maxMatches, context }) =>
+      run(() => findInContentHtml(id, query, { maxMatches, context }))
   );
 
   server.tool(
