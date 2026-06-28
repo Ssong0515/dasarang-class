@@ -26,10 +26,10 @@ import {
   formatFeeShort,
   formatMan,
   formatWon,
-  getMonthDateCellsMonToSat,
+  getMonthDateCells,
 } from '../utils/fee';
 
-const EARNINGS_WEEKDAYS = ['월', '화', '수', '목', '금', '토'];
+const EARNINGS_WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
 const getTodayDateStr = (): string => {
   const now = new Date();
@@ -61,7 +61,7 @@ const MonthlyEarningsCalendar: React.FC<{
     () => buildMonthEarnings(classrooms, view.year, view.month),
     [classrooms, view]
   );
-  const cells = useMemo(() => getMonthDateCellsMonToSat(view.year, view.month), [view]);
+  const cells = useMemo(() => getMonthDateCells(view.year, view.month), [view]);
 
   const classroomById = useMemo(
     () => new Map(classrooms.map((classroom) => [classroom.id, classroom])),
@@ -255,14 +255,14 @@ const MonthlyEarningsCalendar: React.FC<{
       )}
 
       {/* 달력 */}
-      <div className="mb-2 grid grid-cols-6 gap-1">
+      <div className="mb-2 grid grid-cols-7 gap-1">
         {EARNINGS_WEEKDAYS.map((weekday) => (
           <div key={weekday} className="py-1 text-center text-[11px] font-bold text-[#A89F94]">
             {weekday}
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-6 gap-1">
+      <div className="grid grid-cols-7 gap-1">
         {cells.map((cell, index) => {
           if (!cell) {
             return <div key={`empty-${index}`} className="min-h-[72px]" />;
@@ -273,7 +273,7 @@ const MonthlyEarningsCalendar: React.FC<{
           return (
             <div
               key={cell}
-              className={`flex min-h-[72px] flex-col rounded-xl border p-1.5 transition-colors ${
+              className={`flex min-h-[72px] min-w-0 flex-col overflow-hidden rounded-xl border p-1 transition-colors sm:p-1.5 ${
                 isToday
                   ? 'border-[#2F5EA8] bg-[#EAF1FB]'
                   : day
@@ -304,7 +304,7 @@ const MonthlyEarningsCalendar: React.FC<{
                         title={`${entry.classroomName} · ${statusLabel} / 이론 ${
                           readiness.theoryReady ? '준비됨' : '준비안됨'
                         } · 실습 ${readiness.practiceReady ? '준비됨' : '준비안됨'} (클릭하면 클래스로 이동)`}
-                        className={`flex items-center gap-1 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-[#F3F2EE] ${
+                        className={`flex w-full min-w-0 items-center gap-1 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-[#F3F2EE] ${
                           entry.status === 'skipped' ? 'opacity-50' : ''
                         }`}
                       >
@@ -318,7 +318,7 @@ const MonthlyEarningsCalendar: React.FC<{
                         <span className="min-w-0 flex-1 truncate text-[10px] font-bold text-[#4A3728]">
                           {entry.classroomName}
                         </span>
-                        <span className="flex shrink-0 items-center gap-0.5">
+                        <span className="hidden shrink-0 items-center gap-0.5 sm:flex">
                           <span
                             className={`rounded px-1 text-[8px] font-bold ${
                               readiness.theoryReady

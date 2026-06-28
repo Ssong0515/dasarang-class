@@ -186,28 +186,3 @@ export const getMonthDateCells = (year: number, month0: number): Array<string | 
   }
   return cells;
 };
-
-/**
- * 월~토 6열 달력 칸 목록(일요일 제외). 첫 칸 앞 빈칸은 null, 날짜 칸은 "YYYY-MM-DD".
- * 일요일에 잡힌 회차는 칸이 없어 표시되지 않는다(평일·토요일 수업 기준).
- */
-export const getMonthDateCellsMonToSat = (
-  year: number,
-  month0: number
-): Array<string | null> => {
-  const daysInMonth = new Date(year, month0 + 1, 0).getDate();
-  const cells: Array<string | null> = [];
-  // 월=0 … 금=4, 토=5, 일=6
-  const colOf = (day: number) => (new Date(year, month0, day).getDay() + 6) % 7;
-  let leadingDone = false;
-  for (let day = 1; day <= daysInMonth; day += 1) {
-    const col = colOf(day);
-    if (col === 6) continue; // 일요일 제외
-    if (!leadingDone) {
-      for (let i = 0; i < col; i += 1) cells.push(null);
-      leadingDone = true;
-    }
-    cells.push(`${monthPrefix(year, month0)}-${pad2(day)}`);
-  }
-  return cells;
-};
