@@ -1713,7 +1713,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 ? '활성'
                 : '비활성'
           }
-          desktopClassName="rounded-[32px] border border-[#E5E3DD] bg-white p-6 shadow-sm sm:p-8"
+          desktopClassName="rounded-[32px] border border-[#E5E3DD] bg-white p-6 shadow-sm sm:p-8 lg:max-w-xl"
           tileClassName="order-1 col-span-1"
         >
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -1735,17 +1735,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                     {linkedSessionForDate.order}회차 · {linkedSessionForDate.topic || '주제 미정'}
                   </span>
                 )}
-                <span className="text-sm text-[#8B7E74]">
-                  {currentSessionId
-                    ? isDateSkipped
-                      ? '건너뛴 날 — 기록 영역이 닫혀 있어요. (기록은 지워지지 않습니다)'
-                      : currentDateStatus === 'done'
-                        ? '완료 처리된 날 — 수업기록·메모·출석은 계속 열려 있어요.'
-                        : '예정된 수업일이라 기록 영역이 열려 있습니다. 입력하면 자동 저장됩니다.'
-                    : isCurrentDateActive
-                      ? '활성 날짜 — 수업기록·메모·출석이 열려 있습니다.'
-                      : '비활성 날짜 — 활성화하면 기록을 남길 수 있어요. (커리큘럼·시간표로 배정된 날은 자동으로 열립니다.)'}
-                </span>
               </div>
             </div>
             {currentSessionId ? (
@@ -2619,41 +2608,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 </div>
               </div>
             </div>
-          ) : (
-            <div className="order-5 col-span-2 rounded-[32px] border border-[#E5E3DD] bg-white p-6 shadow-sm">
-              <div className="mb-4 flex items-start gap-2 text-[#8B7E74]">
-                <AlertCircle size={18} className="mt-0.5 shrink-0" />
-                <div className="space-y-3">
-                  <h2 className="flex items-center gap-2 text-lg font-bold text-[#4A3728]">
-                    비활성 날짜
-                    <DashboardInfoTooltip
-                      content={waitingTooltipText}
-                      label="비활성 날짜 설명 보기"
-                    />
-                  </h2>
-                  <p className="text-sm text-[#8B7E74]">
-                    커리큘럼·시간표로 배정되지 않은 날짜입니다. 위 "활성화" 버튼을 누르면 수업기록·메모·출석 영역이 열립니다.
-                  </p>
-                  <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
-                    <span className="rounded-full bg-[#FFF5E9] px-3 py-1.5 text-[#8B5E3C]">
-                      {selectedDate}
-                    </span>
-                    <span className="rounded-full bg-[#F3F2EE] px-3 py-1.5 text-[#8B7E74]">
-                      비활성
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleActivateDate}
-                    className="inline-flex items-center gap-2 rounded-xl bg-[#8B5E3C] px-4 py-2 text-xs font-bold text-white transition-all hover:bg-[#724D31]"
-                  >
-                    <Power size={14} />
-                    활성화
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+          ) : null}
         </div>
       </motion.div>
     );
