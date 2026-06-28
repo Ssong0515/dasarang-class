@@ -1,0 +1,473 @@
+<title>파일은 어디에 저장될까? · 이론 슬라이드 (RU 병기)</title>
+<style>
+  :root{
+    --ground:#e9edf4; --bg:#ffffff; --bg2:#f7f9fc;
+    --ink:#23272f; --muted:#6b7280; --ru:#9aa3b2; --line:#e3e8f0;
+    --blue:#2f6bd8; --blue-soft:#eaf1fd; --blue-line:#bcd4f6;
+    --green:#1f8a4c; --green-soft:#e7f7ed; --green-line:#a8e0bf;
+    --orange:#c4691b; --orange-soft:#fff1e0; --orange-line:#f6cf9c;
+    --teal:#0f8a82; --teal-soft:#e3f5f3;
+    --purple:#6d4fe0; --purple-soft:#efeafb;
+    --red:#c4382f; --red-soft:#fdecea; --red-line:#f3c4bf;
+    --kf:"Malgun Gothic","맑은 고딕","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;
+    --shadow:0 14px 36px rgba(40,55,90,.12);
+    --shadow-sm:0 6px 18px rgba(40,55,90,.08);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:var(--kf); color:var(--ink); background:var(--ground); overflow:hidden; -webkit-font-smoothing:antialiased;}
+  button{font-family:inherit}
+
+  .deck{position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(130% 130% at 50% 0%, #eef2f8 0%, #e2e7f0 100%);}
+  .stage{position:absolute; top:50%; left:50%; width:1280px; height:720px;
+    transform:translate(-50%,-50%); transform-origin:center center;
+    background:var(--bg); border-radius:10px; overflow:hidden;
+    box-shadow:0 24px 70px rgba(30,45,80,.28); border:1px solid #dde3ec;}
+
+  .slide{position:absolute; inset:0; padding:48px 64px 76px; opacity:0; visibility:hidden;
+    transition:opacity .25s linear; display:flex; flex-direction:column;}
+  .slide.active{opacity:1; visibility:visible;}
+  .pageno{position:absolute; top:22px; right:26px; z-index:5; font-size:18px; font-weight:800; color:#9aa3b2; font-variant-numeric:tabular-nums;}
+
+  /* Russian gloss */
+  .ru{display:block; font-size:.5em; color:var(--ru); font-weight:600; line-height:1.25; margin-top:3px;}
+
+  .eyebrow{display:inline-flex; align-items:center; gap:9px; font-size:21px; font-weight:800;
+    color:var(--blue); background:var(--blue-soft); border:1.5px solid var(--blue-line);
+    padding:7px 16px; border-radius:999px; align-self:flex-start;}
+  .h2{font-size:44px; font-weight:800; color:var(--blue); line-height:1.16; letter-spacing:-1px; text-wrap:balance; margin-top:6px;}
+  .h2 .em{color:var(--ink);}
+  .h2 .ru{font-size:.46em; margin-top:5px;}
+
+  /* window chrome (가짜 탐색기) */
+  .win{width:100%; max-width:560px; background:#fff; border:2px solid #cfd8e6; border-radius:12px; overflow:hidden; box-shadow:var(--shadow);}
+  .win-top{display:flex; align-items:center; gap:10px; background:#eef2fb; padding:11px 14px; border-bottom:1px solid #dbe3f2;}
+  .win-name{font-size:17px; font-weight:800; color:#2f3445;}
+  .win-x{margin-left:auto; width:26px; height:22px; border-radius:6px; background:#e8584f; color:#fff; font-weight:900; font-size:13px; display:flex; align-items:center; justify-content:center;}
+  .win-addr{display:flex; align-items:center; gap:9px; flex-wrap:wrap; background:#fff; padding:11px 14px; border-bottom:1px solid #eef0f5; font-size:18px; font-weight:800; color:#2f3445;}
+  .win-addr .sep{color:var(--blue); font-weight:900;}
+  .win-addr .here{color:var(--blue);}
+  .win-body{padding:18px; display:flex; flex-wrap:wrap; gap:14px 20px; min-height:160px; align-content:flex-start;}
+  .fi{width:96px; text-align:center;}
+  .fi .e{font-size:46px; line-height:1;}
+  .fi small{display:block; font-size:14px; font-weight:800; color:#3a4256; margin-top:3px; word-break:keep-all;}
+
+  /* ---------- 1 COVER ---------- */
+  #s1{align-items:center; justify-content:center; text-align:center; background:var(--bg2);}
+  #s1 .chip{font-size:20px; font-weight:800; color:var(--blue); background:var(--blue-soft); border:1.5px solid var(--blue-line); padding:8px 20px; border-radius:999px;}
+  #s1 .ill{font-size:120px; margin-top:10px; line-height:1;}
+  #s1 .ttl{font-size:70px; font-weight:900; letter-spacing:-2px; margin-top:6px; color:var(--ink);}
+  #s1 .ttl .ru{font-size:.4em; margin-top:8px; font-weight:700;}
+
+  /* ---------- 2 GOALS ---------- */
+  .goals{display:flex; flex-direction:column; gap:18px; margin:auto 0;}
+  .goal{display:flex; align-items:center; gap:26px; background:var(--bg2); border:2px solid var(--line); border-radius:20px; padding:22px 30px; box-shadow:var(--shadow-sm);}
+  .goal .ge{font-size:58px; flex:none; width:74px; text-align:center;}
+  .goal .gt{font-size:30px; font-weight:800;}
+  .goal .gt .ru{font-size:.55em; font-weight:600;}
+
+  /* ---------- 3 WHY ---------- */
+  .scenes{display:grid; grid-template-columns:1fr 1fr; gap:26px; margin:auto 0;}
+  .scene{background:var(--bg2); border:2px solid var(--line); border-radius:22px; padding:28px 22px; text-align:center; box-shadow:var(--shadow-sm);}
+  .scene .se{font-size:82px; line-height:1;}
+  .scene .st{font-size:24px; font-weight:800; margin-top:12px; line-height:1.35;}
+  .scene .st .ru{font-size:.6em; font-weight:600;}
+  .oneline{font-size:30px; font-weight:800; color:var(--green); text-align:center; margin-top:16px; margin-bottom:auto;}
+  .oneline .ru{font-size:.55em; font-weight:600; color:var(--ru);}
+  .oneline.blue{color:var(--blue);}
+
+  /* ---------- 4 WORDS ---------- */
+  .words{display:grid; grid-template-columns:1fr 1fr; gap:18px 22px; margin:auto 0;}
+  .word{display:flex; align-items:center; gap:22px; background:var(--bg2); border:2px solid var(--line); border-radius:18px; padding:20px 24px; box-shadow:var(--shadow-sm);}
+  .word .we{font-size:54px; flex:none; width:66px; text-align:center;}
+  .word .wn{font-size:30px; font-weight:900;}
+  .word .wn .ru{font-size:.52em; font-weight:600;}
+
+  /* ---------- concept intro ---------- */
+  .intro{flex:1; min-height:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:22px; text-align:center;}
+  .intro .it{font-size:32px; font-weight:800; line-height:1.35;}
+  .intro .it b{color:var(--blue);}
+  .intro .it .ru{font-size:.55em; font-weight:600;}
+  .flow{display:flex; align-items:center; gap:28px; flex-wrap:wrap; justify-content:center;}
+  .fbox{display:flex; flex-direction:column; align-items:center; gap:8px; min-width:210px; background:var(--bg2); border:2px solid var(--line); border-radius:20px; padding:26px 22px; box-shadow:var(--shadow-sm);}
+  .fbox .fe{font-size:80px; line-height:1;}
+  .fbox .fl{font-size:24px; font-weight:900; color:var(--ink);}
+  .fbox .fl .ru{font-size:.55em; font-weight:600;}
+  .fbox.real{background:var(--green-soft); border-color:var(--green-line);} .fbox.real .fl{color:var(--green);}
+  .fbox.link{background:var(--purple-soft); border-color:#cdbef5;} .fbox.link .fl{color:var(--purple);}
+  .neq{font-size:58px; font-weight:900; color:var(--red);}
+  .vs{font-size:40px; font-weight:900; color:var(--muted);}
+
+  /* center single window slides */
+  .center{flex:1; min-height:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px;}
+  .cap{font-size:24px; font-weight:800; color:var(--blue); text-align:center;}
+  .cap .ru{font-size:.55em; font-weight:600; color:var(--ru);}
+
+  /* relation rows */
+  .rels{flex:1; min-height:0; display:flex; flex-direction:column; gap:20px; justify-content:center; max-width:880px; margin:0 auto; width:100%;}
+  .rel{display:flex; align-items:center; gap:18px; font-size:27px; font-weight:800; background:var(--bg2); border:2px solid var(--line); border-radius:18px; padding:22px 26px;}
+  .rel.ok{background:var(--green-soft); border-color:var(--green-line);}
+  .rel.no{background:var(--red-soft); border-color:var(--red-line);}
+  .rel .re{font-size:44px; flex:none;}
+  .rel .rl .ru{font-size:.5em; font-weight:600; color:var(--ru);}
+  .rel .rr{margin-left:auto; font-weight:900; text-align:right;}
+  .rel.ok .rr{color:var(--green);} .rel.no .rr{color:var(--red);}
+  .rel .rr .ru{font-size:.5em; font-weight:600; color:var(--ru);}
+
+  /* ---------- 9 extension cards ---------- */
+  .cats{display:grid; grid-template-columns:repeat(3,1fr); gap:24px; margin:auto 0;}
+  .cat{border-radius:22px; padding:30px 16px; text-align:center; box-shadow:var(--shadow-sm); display:flex; flex-direction:column; align-items:center; gap:8px; border:2px solid;}
+  .cat .ce{font-size:66px; line-height:1;}
+  .cat .cn{font-size:32px; font-weight:900;}
+  .cat .cc{font-size:22px; color:var(--muted); font-weight:800;}
+  .cat .cc .ru{font-size:.62em; font-weight:600;}
+  .cat.pic{background:var(--teal-soft); border-color:#a7ddd7;} .cat.pic .cn{color:var(--teal);}
+  .cat.pdf{background:var(--orange-soft); border-color:var(--orange-line);} .cat.pdf .cn{color:var(--orange);}
+  .cat.doc{background:var(--blue-soft); border-color:var(--blue-line);} .cat.doc .cn{color:var(--blue);}
+
+  /* ---------- 10 SUMMARY ---------- */
+  .sum{display:grid; grid-template-columns:1fr 1fr; gap:18px; margin:auto 0;}
+  .si{display:flex; align-items:center; gap:20px; background:var(--bg2); border:2px solid var(--line); border-radius:18px; padding:20px 24px; box-shadow:var(--shadow-sm);}
+  .si .se2{font-size:48px; flex:none; width:60px; text-align:center;}
+  .si .sh{font-size:26px; font-weight:900;}
+  .si .sh .ru{font-size:.5em; font-weight:600;}
+
+  /* ---------- 11 tour ---------- */
+  .tour{display:grid; grid-template-columns:0.85fr 1.15fr; gap:30px; flex:1; min-height:0; margin-top:14px; align-items:center;}
+  .tourlist{display:flex; flex-direction:column; gap:16px;}
+  .tli{display:flex; align-items:center; gap:14px; font-size:23px; font-weight:800;}
+  .tli .tk{flex:none; font-size:32px; width:42px; text-align:center;}
+  .tli .tt .ru{font-size:.52em; font-weight:600; color:var(--ru);}
+
+  /* ---------- 12 ORDER ---------- */
+  .order{display:flex; align-items:center; justify-content:center; gap:16px; flex-wrap:wrap; margin:auto 0;}
+  .ostep{background:var(--blue-soft); border:2px solid var(--blue-line); border-radius:18px; padding:26px 18px; text-align:center; width:240px;}
+  .ostep .on{width:42px; height:42px; margin:0 auto 12px; border-radius:50%; background:var(--blue); color:#fff; font-size:22px; font-weight:900; display:flex; align-items:center; justify-content:center;}
+  .ostep .oe{font-size:56px; line-height:1;}
+  .ostep .ot{font-size:24px; font-weight:900; margin-top:10px;}
+  .ostep .ot .ru{font-size:.5em; font-weight:600;}
+  .oarr{font-size:42px; color:var(--blue); font-weight:900;}
+
+  /* ---------- 13 CAUTION ---------- */
+  .cautions{display:flex; flex-direction:column; gap:18px; margin:auto 0;}
+  .caut{display:flex; align-items:center; gap:22px; background:var(--orange-soft); border:2px solid var(--orange-line); border-radius:20px; padding:22px 28px; box-shadow:var(--shadow-sm);}
+  .caut .che{font-size:50px; flex:none;}
+  .caut .ct{font-size:27px; font-weight:800; line-height:1.35;}
+  .caut .ct b{color:var(--orange);}
+  .caut .ct .ru{font-size:.55em; font-weight:600; color:var(--ru);}
+
+  /* ---------- 14 RESULT ---------- */
+  .result{display:grid; grid-template-columns:1fr 1fr; gap:34px; flex:1; min-height:0; margin-top:14px; align-items:center;}
+  .tree{background:var(--green-soft); border:2px solid var(--green-line); border-radius:22px; padding:28px 34px;}
+  .tree .root{font-size:30px; font-weight:900; color:var(--green); margin-bottom:8px;}
+  .tree .br{font-size:27px; font-weight:800; color:#2f3445; padding-left:16px; line-height:1.9;}
+  .rmsg{font-size:32px; font-weight:900; color:var(--green); line-height:1.35;}
+  .rmsg .ru{font-size:.5em; font-weight:600; color:var(--ru);}
+
+  /* ---------- 15 CHECK ---------- */
+  .checks{display:flex; flex-direction:column; gap:22px; margin:auto 0;}
+  .q{background:var(--bg2); border:2px solid var(--line); border-radius:20px; padding:22px 28px; box-shadow:var(--shadow-sm);}
+  .q .qq{font-size:26px; font-weight:900;}
+  .q .qq .ru{font-size:.5em; font-weight:600; color:var(--ru);}
+  .q .qrow{display:flex; align-items:center; gap:14px; margin-top:12px; flex-wrap:wrap;}
+  .opt{font-size:23px; font-weight:800; color:var(--muted); background:#fff; border:2px solid var(--line); border-radius:12px; padding:8px 18px;}
+  .opt.ok{color:var(--green); border-color:var(--green-line); background:var(--green-soft);}
+  .ans{font-size:21px; font-weight:900; color:var(--green); margin-left:6px;}
+
+  /* ---------- 16 CONNECT ---------- */
+  #s16{align-items:center; justify-content:center; text-align:center; background:var(--green-soft);}
+  #s16 .big{font-size:96px; line-height:1;}
+  #s16 .ct2{font-size:46px; font-weight:900; color:var(--green); margin-top:12px;}
+  #s16 .ct2 .ru{font-size:.46em; font-weight:700; color:var(--ru);}
+  #s16 .pill{margin-top:26px; font-size:26px; font-weight:900; color:#fff; background:var(--green); border-radius:14px; padding:14px 30px; box-shadow:0 6px 0 #156138;}
+  #s16 .pill .ru{font-size:.55em; font-weight:600; color:#dff1e6; display:inline; margin-left:6px;}
+
+  /* controls */
+  .ctrl{position:fixed; z-index:30; bottom:16px; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:13px; background:rgba(35,45,70,.82); border:1px solid rgba(255,255,255,.16); backdrop-filter:blur(8px); padding:8px 13px; border-radius:999px; color:#eef2fb; transition:opacity .35s ease;}
+  .ctrl.hidden{opacity:0; pointer-events:none;}
+  .ctrl button{display:flex; align-items:center; justify-content:center; width:40px; height:40px; border-radius:50%; border:none; background:rgba(255,255,255,.14); color:#fff; font-size:19px; cursor:pointer; transition:.15s;}
+  .ctrl button:hover{background:rgba(255,255,255,.28);}
+  .ctrl button:focus-visible{outline:3px solid #9ec1ff; outline-offset:2px;}
+  .counter{font-size:17px; font-weight:800; min-width:62px; text-align:center; font-variant-numeric:tabular-nums;}
+  .dots{display:flex; gap:7px;}
+  .dot{width:10px; height:10px; border-radius:50%; background:rgba(255,255,255,.3); border:none; cursor:pointer; padding:0; transition:.18s;}
+  .dot.on{background:#fff; transform:scale(1.25);}
+  .hint{position:fixed; top:16px; left:50%; transform:translateX(-50%); z-index:30; font-size:14px; font-weight:700; color:#73809a; background:rgba(255,255,255,.85); padding:7px 14px; border-radius:999px; border:1px solid #d8dfea;}
+
+  @media (prefers-reduced-motion: reduce){ .slide{transition:opacity .1s linear;} }
+</style>
+
+<div class="deck">
+  <div class="stage" id="stage">
+    <div class="pageno" id="pageno">1 / 16</div>
+
+    <!-- 1 -->
+    <section class="slide" id="s1">
+      <span class="chip">2회차 · 심화 · 디지털 기초</span>
+      <div class="ill">📂</div>
+      <h1 class="ttl">파일은 어디에 저장될까?<span class="ru">Где хранится файл?</span></h1>
+    </section>
+
+    <!-- 2 -->
+    <section class="slide" id="s2">
+      <span class="eyebrow">오늘의 목표 · Цели</span>
+      <h2 class="h2">오늘은 이런 걸 배워요<span class="ru">Сегодня вы узнаете</span></h2>
+      <div class="goals">
+        <div class="goal"><div class="ge">🔎</div><div class="gt">파일이 진짜 어디 있는지<span class="ru">Где файл на самом деле</span></div></div>
+        <div class="goal"><div class="ge">🔗</div><div class="gt">바로가기와 원본 구분<span class="ru">Ярлык и оригинал — разное</span></div></div>
+        <div class="goal"><div class="ge">🏷️</div><div class="gt">확장자로 파일 종류 알기<span class="ru">Тип файла по расширению</span></div></div>
+      </div>
+    </section>
+
+    <!-- 3 -->
+    <section class="slide" id="s3">
+      <span class="eyebrow">왜? · Зачем?</span>
+      <h2 class="h2">알면 파일을 안 잃어버려요<span class="ru">Так вы не потеряете файл</span></h2>
+      <div class="scenes">
+        <div class="scene"><div class="se">📥😵</div><div class="st">다운로드에 가득 → 못 찾음<span class="ru">Всё в «Загрузках» — не найти</span></div></div>
+        <div class="scene"><div class="se">🔗🗑️</div><div class="st">바로가기를 원본인 줄 알고 삭제<span class="ru">Удалили ярлык как оригинал</span></div></div>
+      </div>
+    </section>
+
+    <!-- 4 -->
+    <section class="slide" id="s4">
+      <span class="eyebrow">오늘의 단어 · Слова</span>
+      <h2 class="h2">먼저 이 단어!<span class="ru">Сначала эти слова</span></h2>
+      <div class="words">
+        <div class="word"><div class="we">🧭</div><div class="wn">경로<span class="ru">Путь — где хранится файл</span></div></div>
+        <div class="word"><div class="we">🔗</div><div class="wn">바로가기<span class="ru">Ярлык — ссылка на оригинал</span></div></div>
+        <div class="word"><div class="we">🏷️</div><div class="wn">확장자<span class="ru">Расширение — тип файла (.jpg)</span></div></div>
+        <div class="word"><div class="we">🗑️</div><div class="wn">휴지통<span class="ru">Корзина — удалённые файлы</span></div></div>
+      </div>
+    </section>
+
+    <!-- 5 -->
+    <section class="slide" id="s5">
+      <span class="eyebrow">개념 ① · Понятие ①</span>
+      <h2 class="h2">보이는 곳 ≠ 저장된 곳<span class="ru">Видно ≠ где хранится</span></h2>
+      <div class="intro">
+        <div class="flow">
+          <div class="fbox"><div class="fe">🖥️</div><div class="fl">화면에 보임<span class="ru">Видно на экране</span></div></div>
+          <div class="neq">≠</div>
+          <div class="fbox real"><div class="fe">📂</div><div class="fl">진짜 저장 위치<span class="ru">Где хранится</span></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6 -->
+    <section class="slide" id="s6">
+      <span class="eyebrow">개념 ① 자세히</span>
+      <h2 class="h2">파일에는 주소(경로)가 있어요<span class="ru">У файла есть адрес (путь)</span></h2>
+      <div class="center">
+        <div class="win">
+          <div class="win-top"><span class="win-name">📁 수업폴더</span><span class="win-x">✕</span></div>
+          <div class="win-addr"><span>💻 내 PC</span><span class="sep">›</span><span>📁 문서</span><span class="sep">›</span><span class="here">📁 수업폴더</span></div>
+          <div class="win-body"><div class="fi"><div class="e">📄</div><small>숙제.docx</small></div></div>
+        </div>
+        <div class="cap">위 → 아래로 찾아 들어가요<span class="ru">Идём сверху вниз по пути</span></div>
+      </div>
+    </section>
+
+    <!-- 7 -->
+    <section class="slide" id="s7">
+      <span class="eyebrow">개념 ② · Понятие ②</span>
+      <h2 class="h2">바로가기 ≠ 원본<span class="ru">Ярлык — это не оригинал</span></h2>
+      <div class="intro">
+        <div class="flow">
+          <div class="fbox real"><div class="fe">📄</div><div class="fl">원본<span class="ru">Оригинал</span></div></div>
+          <div class="vs">VS</div>
+          <div class="fbox link"><div class="fe">🔗</div><div class="fl">바로가기<span class="ru">Ярлык (путь к нему)</span></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 8 -->
+    <section class="slide" id="s8">
+      <span class="eyebrow">개념 ② 자세히</span>
+      <h2 class="h2">지우면 어떻게 될까?<span class="ru">Что будет, если удалить?</span></h2>
+      <div class="rels">
+        <div class="rel ok"><span class="re">🔗</span><span class="rl">바로가기 삭제<span class="ru">Удалить ярлык</span></span><span class="rr">원본 그대로 ✅<span class="ru">Оригинал цел</span></span></div>
+        <div class="rel no"><span class="re">📄</span><span class="rl">원본 삭제<span class="ru">Удалить оригинал</span></span><span class="rr">바로가기 깨짐 ❌<span class="ru">Ярлык не работает</span></span></div>
+      </div>
+    </section>
+
+    <!-- 9 -->
+    <section class="slide" id="s9">
+      <span class="eyebrow">개념 ③ · Понятие ③</span>
+      <h2 class="h2">끝 글자 = 파일 종류<span class="ru">Конец имени = тип файла</span></h2>
+      <div class="cats">
+        <div class="cat pic"><div class="ce">🖼️</div><div class="cn">.jpg</div><div class="cc">사진<span class="ru">Фото</span></div></div>
+        <div class="cat pdf"><div class="ce">📕</div><div class="cn">.pdf</div><div class="cc">문서·책<span class="ru">Документ</span></div></div>
+        <div class="cat doc"><div class="ce">📝</div><div class="cn">.docx</div><div class="cc">글 문서<span class="ru">Текст</span></div></div>
+      </div>
+    </section>
+
+    <!-- 10 -->
+    <section class="slide" id="s10">
+      <span class="eyebrow">한눈에 정리 · Кратко</span>
+      <h2 class="h2">오늘 배운 것<span class="ru">Что узнали</span></h2>
+      <div class="sum">
+        <div class="si"><div class="se2">🧭</div><div class="sh">경로<span class="ru">Путь · видно ≠ хранится</span></div></div>
+        <div class="si"><div class="se2">🔗</div><div class="sh">바로가기<span class="ru">Ярлык · путь к оригиналу</span></div></div>
+        <div class="si"><div class="se2">🏷️</div><div class="sh">확장자<span class="ru">Расширение · .jpg .pdf .docx</span></div></div>
+        <div class="si"><div class="se2">🗑️</div><div class="sh">휴지통<span class="ru">Корзина · удалённые файлы</span></div></div>
+      </div>
+    </section>
+
+    <!-- 11 -->
+    <section class="slide" id="s11">
+      <span class="eyebrow">화면 둘러보기 · Обзор</span>
+      <h2 class="h2">이 화면을 보게 돼요<span class="ru">Вы увидите такой экран</span></h2>
+      <div class="tour">
+        <div class="tourlist">
+          <div class="tli"><span class="tk">🧭</span><span class="tt">경로 표시줄<span class="ru">Адресная строка</span></span></div>
+          <div class="tli"><span class="tk">🏷️</span><span class="tt">이름 끝 = 확장자<span class="ru">Расширение в конце</span></span></div>
+          <div class="tli"><span class="tk">🗑️</span><span class="tt">휴지통<span class="ru">Корзина</span></span></div>
+        </div>
+        <div style="display:flex;justify-content:center">
+          <div class="win">
+            <div class="win-top"><span class="win-name">📁 수업폴더</span><span class="win-x">✕</span></div>
+            <div class="win-addr"><span>💻 내 PC</span><span class="sep">›</span><span>📁 문서</span><span class="sep">›</span><span class="here">📁 수업폴더</span></div>
+            <div class="win-body">
+              <div class="fi"><div class="e">📄</div><small>숙제.docx</small></div>
+              <div class="fi"><div class="e">🖼️</div><small>사진.jpg</small></div>
+              <div class="fi"><div class="e">📕</div><small>안내.pdf</small></div>
+              <div class="fi"><div class="e">🗑️</div><small>휴지통</small></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 12 -->
+    <section class="slide" id="s12">
+      <span class="eyebrow">순서 · Порядок</span>
+      <h2 class="h2">지운 파일은 이렇게 움직여요<span class="ru">Куда идёт удалённый файл</span></h2>
+      <div class="order">
+        <div class="ostep"><div class="on">1</div><div class="oe">🗑️</div><div class="ot">삭제<span class="ru">Удалить</span></div></div>
+        <div class="oarr">→</div>
+        <div class="ostep"><div class="on">2</div><div class="oe">📦</div><div class="ot">휴지통 보관<span class="ru">В корзине</span></div></div>
+        <div class="oarr">→</div>
+        <div class="ostep"><div class="on">3</div><div class="oe">♻️</div><div class="ot">복원<span class="ru">Восстановить</span></div></div>
+      </div>
+    </section>
+
+    <!-- 13 -->
+    <section class="slide" id="s13">
+      <span class="eyebrow">조심할 점 · Осторожно</span>
+      <h2 class="h2"><span class="em">이건 </span>조심해요<span class="ru">Будьте внимательны</span></h2>
+      <div class="cautions">
+        <div class="caut"><div class="che">⚠️</div><div class="ct">다운로드 → 내 폴더로 옮기기<span class="ru">Из «Загрузок» — в свою папку</span></div></div>
+        <div class="caut"><div class="che">⚠️</div><div class="ct"><b>원본</b> 지우면 바로가기 깨짐<span class="ru">Удалите оригинал — ярлык сломается</span></div></div>
+        <div class="caut"><div class="che">⚠️</div><div class="ct">휴지통 <b>비우면</b> 복원 불가<span class="ru">Очистите корзину — не вернуть</span></div></div>
+      </div>
+    </section>
+
+    <!-- 14 -->
+    <section class="slide" id="s14">
+      <span class="eyebrow">결과물 미리보기 · Результат</span>
+      <h2 class="h2">이어서 이걸 만들어요<span class="ru">Дальше сделаем это</span></h2>
+      <div class="result">
+        <div class="tree">
+          <div class="root">📂 마리아_학습폴더</div>
+          <div class="br">├ 📁 문서</div>
+          <div class="br">├ 📁 사진</div>
+          <div class="br">├ 📁 AI활동</div>
+          <div class="br">└ 📁 과제</div>
+        </div>
+        <div class="rmsg">파일이 살 집(폴더)!<span class="ru">«Дом» для файлов — папка. На практике сделаете свою.</span></div>
+      </div>
+    </section>
+
+    <!-- 15 -->
+    <section class="slide" id="s15">
+      <span class="eyebrow">이해 확인 · Проверка</span>
+      <h2 class="h2">맞혀 볼까요?<span class="ru">Проверим себя</span></h2>
+      <div class="checks">
+        <div class="q">
+          <div class="qq">바로가기를 지우면 원본도 사라진다<span class="ru">Удалить ярлык — оригинал тоже исчезнет?</span></div>
+          <div class="qrow"><span class="opt">⭕ O</span><span class="opt ok">❌ X</span><span class="ans">정답 · Ответ: X</span></div>
+        </div>
+        <div class="q">
+          <div class="qq">사진 파일의 확장자는?<span class="ru">Расширение фото?</span></div>
+          <div class="qrow"><span class="opt ok">🖼️ .jpg</span><span class="opt">📝 .docx</span><span class="ans">정답 · Ответ: .jpg</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 16 -->
+    <section class="slide" id="s16">
+      <div class="big">🎮</div>
+      <div class="ct2">이제 직접 해 봐요!<span class="ru">Теперь попробуйте сами!</span></div>
+      <span class="pill">▶ 실습: 내 이름 학습 폴더 만들기<span class="ru">Практика: своя папка</span></span>
+    </section>
+
+  </div>
+</div>
+
+<div class="hint" id="hint">← → 방향키 · F 전체화면</div>
+<div class="ctrl" role="toolbar" aria-label="슬라이드 이동">
+  <button id="prev" aria-label="이전 슬라이드">‹</button>
+  <span class="counter" id="counter">1 / 16</span>
+  <div class="dots" id="dots"></div>
+  <button id="next" aria-label="다음 슬라이드">›</button>
+  <button id="full" aria-label="전체화면">⛶</button>
+</div>
+
+<script>
+(function(){
+  var stage=document.getElementById('stage');
+  var slides=[].slice.call(document.querySelectorAll('.slide'));
+  var counter=document.getElementById('counter');
+  var pageno=document.getElementById('pageno');
+  var dotsWrap=document.getElementById('dots');
+  var hint=document.getElementById('hint');
+  var cur=0, N=slides.length;
+
+  slides.forEach(function(_,i){
+    var d=document.createElement('button'); d.className='dot';
+    d.setAttribute('aria-label',(i+1)+'번 슬라이드로 이동');
+    d.addEventListener('click',function(e){ e.stopPropagation(); go(i); });
+    dotsWrap.appendChild(d);
+  });
+  var dots=[].slice.call(dotsWrap.children);
+
+  function fit(){ var s=Math.min(window.innerWidth/1280, window.innerHeight/720);
+    stage.style.transform='translate(-50%,-50%) scale('+s+')'; }
+  function go(i){ i=Math.max(0,Math.min(N-1,i));
+    slides[cur].classList.remove('active'); cur=i; slides[cur].classList.add('active');
+    counter.textContent=(cur+1)+' / '+N; pageno.textContent=(cur+1)+' / '+N;
+    dots.forEach(function(d,k){ d.classList.toggle('on',k===cur); }); }
+  function next(){ go(cur+1); } function prev(){ go(cur-1); }
+
+  document.getElementById('next').addEventListener('click',function(e){e.stopPropagation();next();});
+  document.getElementById('prev').addEventListener('click',function(e){e.stopPropagation();prev();});
+  document.getElementById('full').addEventListener('click',function(e){ e.stopPropagation();
+    if(!document.fullscreenElement){ (document.documentElement.requestFullscreen||function(){})(); }
+    else { (document.exitFullscreen||function(){})(); } });
+
+  document.addEventListener('keydown',function(e){
+    if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown'){ e.preventDefault(); next(); }
+    else if(e.key==='ArrowLeft'||e.key==='PageUp'){ e.preventDefault(); prev(); }
+    else if(e.key==='Home'){ go(0); } else if(e.key==='End'){ go(N-1); }
+    else if(e.key==='f'||e.key==='F'){ document.getElementById('full').click(); }
+  });
+
+  var tx=0;
+  stage.addEventListener('touchstart',function(e){ tx=e.touches[0].clientX; },{passive:true});
+  stage.addEventListener('touchend',function(e){ var dx=e.changedTouches[0].clientX-tx;
+    if(Math.abs(dx)>50){ dx<0?next():prev(); } },{passive:true});
+  stage.addEventListener('click',function(e){ var r=stage.getBoundingClientRect();
+    (e.clientX-r.left)>r.width/2 ? next() : prev(); });
+
+  var ctrl=document.querySelector('.ctrl'); var idle;
+  function showChrome(){ ctrl.classList.remove('hidden'); clearTimeout(idle);
+    idle=setTimeout(function(){ ctrl.classList.add('hidden'); }, 2800); }
+  ['mousemove','touchstart','keydown','click'].forEach(function(ev){ window.addEventListener(ev,showChrome,{passive:true}); });
+
+  window.addEventListener('resize',fit);
+  fit(); go(0); showChrome();
+  setTimeout(function(){ hint.style.opacity='0'; hint.style.transition='opacity 1s'; },4500);
+})();
+</script>

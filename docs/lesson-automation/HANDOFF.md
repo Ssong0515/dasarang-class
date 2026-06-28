@@ -68,6 +68,8 @@ adminApi 레이어: **MCP**(`POST /mcp`) + **REST**(`/api/gpt/*`). 인증 = Bear
 - `docs/lesson-automation/practice-recipe.md` — **실습 생성 레시피(A 결과물).** 입력=회차 details → 출력=시수별 인터랙티브 HTML. 아키타입 카탈로그·20분 분량 규칙·출력 규약·40시수 매핑표.
 - `docs/lesson-automation/sample-practice-mouse-mission.html` — 실습 품질 기준선(2시수 「마우스 미션」: 전원→마우스이동→클릭→더블클릭→드래그분류→미션표 인쇄). claude.ai 아티팩트로도 띄웠음.
 - `docs/lesson-automation/notebooklm-guidelines.md` — 이론(NotebookLM) 공통 지침 ①디자인 ②내용 + 시수별 내용 프롬프트 템플릿.
+- `docs/lesson-automation/theory-html-recipe.md` — **이론을 Claude가 자체 완결 HTML 덱으로 직접 생성**하는 레시피(NotebookLM 수동 경로의 자동화 대안, practice-recipe.md와 짝). 향후 이론+실습 함께 생성 루틴 목표. 시각 우선 + 모국어 병기(현재 러시아어).
+- `docs/lesson-automation/sample-theory-files-and-storage.html` — 이론 HTML 품질 기준선(2회차 심화 "파일의 실제 위치와 저장 구조", 16장, RU 병기).
 
 ## 8. 주의사항
 - 새 세션은 **다른 계정** → 클라우드 루틴 토큰을 그 계정으로. 로컬 `.env`/Firebase 자격증명 의존 금지. class 접속은 배포 MCP + `ADMIN_API_KEY`만.
