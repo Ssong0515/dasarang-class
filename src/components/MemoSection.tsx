@@ -165,7 +165,7 @@ export const MemoSection: React.FC<MemoSectionProps> = ({
   ];
 
   return (
-    <main className="flex-1 overflow-y-auto bg-[#FBFBFA] p-6">
+    <main className="flex-1 overflow-y-auto bg-[#FBFBFA] p-4 sm:p-6">
       <div className="mx-auto max-w-4xl">
         <header className="mb-6">
           <h2 className="mb-2 flex items-center gap-2 font-serif text-2xl font-bold text-[#4A3728]">

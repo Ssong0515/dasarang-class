@@ -1019,7 +1019,7 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
   const notebookLmSyncSummary = notebookLmSyncResult?.summary;
 
   return (
-    <div ref={contentLibraryScrollRef} className="flex-1 overflow-y-auto bg-[#FBFBFA] p-6">
+    <div ref={contentLibraryScrollRef} className="flex-1 overflow-y-auto bg-[#FBFBFA] p-4 sm:p-6">
       <div className="mx-auto max-w-6xl">
         <header className="mb-8 flex items-center justify-between gap-4">
           <div>
@@ -1403,7 +1403,7 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                           setEditingContent({ ...editingContent, html: event.target.value });
                         }}
                         placeholder="HTML 코드를 입력하세요"
-                        className="h-[400px] w-full resize-none rounded-2xl border-none bg-[#F3F2EE] px-6 py-4 font-mono text-sm text-[#4A3728] outline-none transition-all focus:ring-2 focus:ring-[#8B5E3C]"
+                        className="h-[300px] w-full resize-none rounded-2xl border-none bg-[#F3F2EE] px-6 py-4 font-mono text-sm text-[#4A3728] outline-none transition-all focus:ring-2 focus:ring-[#8B5E3C] sm:h-[400px]"
                       />
                     ) : editorTab === 'preview' ? (
                       <div className="w-full overflow-hidden rounded-2xl border border-[#E5E3DD] bg-white">
@@ -1439,7 +1439,7 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                           setEditingContent({ ...editingContent, description: event.target.value });
                         }}
                         placeholder="이 콘텐츠를 수업에서 어떻게 설명할지 입력하세요."
-                        className="h-[240px] w-full resize-none rounded-2xl border-none bg-[#F3F2EE] px-6 py-4 text-sm leading-7 text-[#4A3728] outline-none transition-all focus:ring-2 focus:ring-[#8B5E3C]"
+                        className="h-[200px] w-full resize-none rounded-2xl border-none bg-[#F3F2EE] px-6 py-4 text-sm leading-7 text-[#4A3728] outline-none transition-all focus:ring-2 focus:ring-[#8B5E3C] sm:h-[240px]"
                       />
                     )}
                   </div>

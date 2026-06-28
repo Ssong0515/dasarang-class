@@ -201,7 +201,7 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
   };
 
   return (
-    <main className="flex-1 overflow-y-auto bg-[#FBFBFA] p-6">
+    <main className="flex-1 overflow-y-auto bg-[#FBFBFA] p-4 sm:p-6">
       <div className="mx-auto max-w-6xl">
         <div className="mb-6">
           <span className="rounded-full bg-[#FFF5E9] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#8B5E3C]">

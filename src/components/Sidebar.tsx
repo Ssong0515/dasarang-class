@@ -7,12 +7,15 @@ import {
   ChevronDown,
   EyeOff,
   Menu,
+  X,
 } from 'lucide-react';
 import { Reorder } from 'motion/react';
 import { Classroom } from '../types';
 import { getClassroomIconComponent } from '../utils/classroomAppearance';
 
-const MOBILE_MEDIA_QUERY = '(max-width: 768px)';
+// Tailwind md(768px)와 정확히 일치시킨다: 햄버거는 md:hidden(<768)에서만 보이므로
+// 사이드바 모바일 드로어 기준도 767px 이하로 맞춰 768px 경계의 1px 어긋남을 없앤다.
+const MOBILE_MEDIA_QUERY = '(max-width: 767px)';
 const WIDE_MEDIA_QUERY = '(min-width: 1280px)';
 
 type ViewportMode = 'mobile' | 'compactDesktop' | 'wideDesktop';
@@ -51,11 +54,15 @@ interface SidebarProps {
   classrooms: Classroom[];
   activeClassroomId?: string;
   activeTab: AdminTab;
-  onManageClassroom: (classroom: Classroom) => void;
+  onManageClassroom: (classroom: Classroom, date?: string) => void;
   onLogout: () => void;
   onReorderClassrooms?: (classrooms: Classroom[]) => void;
   onCreateClassroom?: () => void;
   isStudentView?: boolean;
+  /** 모바일 드로어 열림 여부 (데스크톱에서는 무시) */
+  mobileOpen?: boolean;
+  /** 모바일 드로어 닫기 (백드롭/닫기 버튼) */
+  onMobileClose?: () => void;
 }
 
 type SidebarNavButtonProps = {
@@ -100,6 +107,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onReorderClassrooms,
   onCreateClassroom,
   isStudentView = false,
+  mobileOpen = false,
+  onMobileClose,
 }) => {
   const [localClassrooms, setLocalClassrooms] = React.useState(classrooms);
   const [showHidden, setShowHidden] = React.useState(false);
@@ -108,8 +117,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
     getDefaultDesktopCollapsed(getViewportMode())
   );
 
-  const isCollapsed = viewportMode === 'mobile' || isDesktopCollapsed;
-  const showToggleButton = viewportMode !== 'mobile';
+  const isMobile = viewportMode === 'mobile';
+  // 모바일에서는 오프캔버스 드로어로 펼친 형태(라벨 표시), 데스크톱에서만 아이콘 레일로 접는다.
+  const isCollapsed = !isMobile && isDesktopCollapsed;
+  const showToggleButton = !isMobile;
 
   React.useEffect(() => {
     const hasChanges =
@@ -185,13 +196,42 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setIsDesktopCollapsed((prev) => !prev);
   };
 
-  return (
-    <aside
-      className={`flex h-full shrink-0 flex-col overflow-y-auto border-r border-[#E5E3DD] bg-[#FBFBFA] transition-[width,padding] duration-300 ${
+  const asideClassName = isMobile
+    ? `fixed inset-y-0 left-0 z-50 flex h-full w-72 max-w-[82vw] flex-col overflow-y-auto border-r border-[#E5E3DD] bg-[#FBFBFA] px-6 py-6 shadow-2xl transition-transform duration-300 ${
+        mobileOpen ? 'translate-x-0' : '-translate-x-full'
+      }`
+    : `flex h-full shrink-0 flex-col overflow-y-auto border-r border-[#E5E3DD] bg-[#FBFBFA] transition-[width,padding] duration-300 ${
         isCollapsed ? 'w-[88px] px-4 py-6' : 'w-64 px-6 py-6'
-      }`}
-    >
-      {showToggleButton && (
+      }`;
+
+  return (
+    <>
+      {/* 모바일 드로어 백드롭 */}
+      {isMobile && mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40"
+          onClick={onMobileClose}
+          aria-hidden="true"
+        />
+      )}
+      <aside className={asideClassName}>
+      {isMobile ? (
+        <div className="mb-5 flex items-center justify-between">
+          <span className="px-1 text-[11px] font-bold uppercase tracking-widest text-[#A89F94]">
+            클래스
+          </span>
+          <button
+            type="button"
+            onClick={onMobileClose}
+            title="메뉴 닫기"
+            aria-label="메뉴 닫기"
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#E5E3DD] bg-white text-[#8B7E74] transition-all hover:border-[#D8D2C8] hover:text-[#4A3728]"
+          >
+            <X size={18} />
+          </button>
+        </div>
+      ) : (
+        showToggleButton && (
         <div className={`flex items-center ${isCollapsed ? 'justify-center mb-6' : 'justify-between mb-5'}`}>
           {isCollapsed ? (
             <button
@@ -220,6 +260,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </>
           )}
         </div>
+        )
       )}
 
       <nav className="flex min-h-0 flex-1 flex-col">
@@ -337,6 +378,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           />
         </div>
       </nav>
-    </aside>
+      </aside>
+    </>
   );
 };

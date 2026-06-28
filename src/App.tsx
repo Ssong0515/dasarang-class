@@ -200,16 +200,25 @@ const sanitizeTheorySlidesForStorage = (slides: unknown): { url: string; label?:
 
 // 이론 프롬프트 배열 저장용 정규화: prompt 트리밍·빈 항목 제거, 빈 label 키는 빼서 Firestore undefined를 피한다.
 // 루틴(MCP)이 써넣는 읽기 전용 필드라 클라이언트는 만들지 않지만, 통째 setDoc 저장 시 보존하기 위해 정규화해 다시 쓴다.
-const sanitizeTheoryPromptsForStorage = (prompts: unknown): { label?: string; prompt: string }[] => {
+const sanitizeTheoryPromptsForStorage = (
+  prompts: unknown
+): { label?: string; prompt: string; slideUrl?: string }[] => {
   if (!Array.isArray(prompts)) return [];
   return prompts
     .map((entry) => {
       const label = typeof entry?.label === 'string' ? entry.label.trim() : '';
       const prompt = typeof entry?.prompt === 'string' ? entry.prompt : '';
-      return { label, prompt };
+      // slideUrl은 강사가 시수 행에서 붙인 자료 링크. ''(해제)도 보존해야 구버전 theorySlides 폴백을 이긴다.
+      const slideUrl = typeof entry?.slideUrl === 'string' ? entry.slideUrl.trim() : undefined;
+      return { label, prompt, slideUrl };
     })
     .filter((entry) => entry.prompt.trim())
-    .map((entry) => (entry.label ? { label: entry.label, prompt: entry.prompt } : { prompt: entry.prompt }));
+    .map((entry) => {
+      const next: { label?: string; prompt: string; slideUrl?: string } = { prompt: entry.prompt };
+      if (entry.label) next.label = entry.label;
+      if (entry.slideUrl !== undefined) next.slideUrl = entry.slideUrl;
+      return next;
+    });
 };
 
 const getStudentsByClassroomId = (students: Student[]) => {
@@ -281,6 +290,10 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'admin' | 'student'>('student');
   const [isDevSigningIn, setIsDevSigningIn] = useState(DEV_BYPASS);
   const [activeClassroomId, setActiveClassroomId] = useState<string | null>(null);
+  // 대시보드 캘린더에서 수업을 누르면 그 날짜로 클래스 대시보드를 연다 (없으면 오늘).
+  const [dashboardInitialDate, setDashboardInitialDate] = useState<string | undefined>(undefined);
+  // 모바일에서 사이드바를 오프캔버스 드로어로 열고 닫는다 (데스크톱은 항상 표시).
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isContentLibraryDirty, setIsContentLibraryDirty] = useState(false);
   const [selectedContentIdInLibrary, setSelectedContentIdInLibrary] = useState<string | null>(null);
@@ -352,6 +365,7 @@ export default function App() {
   };
 
   const handleTabChange = (nextTab: AdminTab) => {
+    setIsMobileNavOpen(false);
     if (viewMode !== 'student' && nextTab === activeTab) return;
     runWithContentLibraryNavigationGuard(() => {
       setViewMode('admin');
@@ -360,6 +374,7 @@ export default function App() {
   };
 
   const handleSwitchToStudent = () => {
+    setIsMobileNavOpen(false);
     runWithContentLibraryNavigationGuard(() => setViewMode('student'));
   };
 
@@ -1688,10 +1703,12 @@ export default function App() {
     }
   };
 
-  const handleManageClassroom = (classroom: Classroom) => {
+  const handleManageClassroom = (classroom: Classroom, date?: string) => {
+    setIsMobileNavOpen(false);
     runWithContentLibraryNavigationGuard(() => {
       setViewMode('admin');
       setActiveClassroomId(classroom.id);
+      setDashboardInitialDate(date);
       setActiveTab('classroom-management');
     });
   };
@@ -1707,8 +1724,8 @@ export default function App() {
 
     if (!user) {
       return (
-        <div className="h-screen flex flex-col items-center justify-center bg-[#FBFBFA] p-8">
-          <div className="max-w-sm w-full bg-white p-12 rounded-[40px] border border-[#E5E3DD] shadow-xl shadow-[#8B5E3C]/5 text-center">
+        <div className="h-screen flex flex-col items-center justify-center bg-[#FBFBFA] p-4 sm:p-8">
+          <div className="max-w-sm w-full bg-white p-8 sm:p-12 rounded-[40px] border border-[#E5E3DD] shadow-xl shadow-[#8B5E3C]/5 text-center">
             <div className="w-16 h-16 bg-[#FFF5E9] rounded-2xl flex items-center justify-center mx-auto mb-8">
               <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#8B5E3C" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
@@ -1747,8 +1764,8 @@ export default function App() {
 
     if (!canAccessStudentPage) {
       return (
-        <div className="h-screen flex flex-col items-center justify-center bg-[#FBFBFA] p-8">
-          <div className="max-w-md w-full rounded-[40px] border border-[#E5E3DD] bg-white p-10 text-center shadow-xl shadow-[#8B5E3C]/5">
+        <div className="h-screen flex flex-col items-center justify-center bg-[#FBFBFA] p-4 sm:p-8">
+          <div className="max-w-md w-full rounded-[40px] border border-[#E5E3DD] bg-white p-7 text-center shadow-xl shadow-[#8B5E3C]/5 sm:p-10">
             <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50 text-red-500">
               <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 9v4" />
@@ -1800,6 +1817,7 @@ export default function App() {
             onTabChange={handleTabChange}
             onSwitchToStudent={handleSwitchToStudent}
             onGoHome={() => handleTabChange('home')}
+            onToggleMobileNav={() => setIsMobileNavOpen((open) => !open)}
           />
         )}
         <div className="flex flex-1 overflow-hidden">
@@ -1808,9 +1826,14 @@ export default function App() {
           activeClassroomId={activeClassroomId || undefined}
           activeTab={activeTab}
           isStudentView={viewMode === 'student'}
+          mobileOpen={isMobileNavOpen}
+          onMobileClose={() => setIsMobileNavOpen(false)}
           onManageClassroom={handleManageClassroom}
           onLogout={handleLogout}
-          onCreateClassroom={() => setIsCreateModalOpen(true)}
+          onCreateClassroom={() => {
+            setIsMobileNavOpen(false);
+            setIsCreateModalOpen(true);
+          }}
           onReorderClassrooms={async (newOrder) => {
             try {
               await Promise.all(
@@ -1830,7 +1853,7 @@ export default function App() {
           onCreateFromCalendar={handleCreateClassroomFromCalendar}
           onListCalendarClasses={handleListCalendarClasses}
         />
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden min-w-0">
           {viewMode === 'student' ? (
             <StudentPage
               embeddedInAdminShell
@@ -1869,6 +1892,7 @@ export default function App() {
           {activeTab === 'classroom-management' && activeClassroom && (
             <ClassroomDashboard
               classroom={activeClassroom}
+              initialDate={dashboardInitialDate}
               classrooms={classroomsWithStudents}
               studentsById={studentsById}
               dateRecords={classroomDateRecords}

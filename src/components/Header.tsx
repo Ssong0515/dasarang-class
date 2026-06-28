@@ -7,6 +7,7 @@ import {
   KeyRound,
   Globe,
   Users,
+  Menu,
 } from 'lucide-react';
 
 type AdminTab =
@@ -26,6 +27,8 @@ interface HeaderProps {
   onTabChange: (tab: AdminTab) => void;
   onSwitchToStudent: () => void;
   onGoHome: () => void;
+  /** 모바일 햄버거 → 사이드바(클래스 목록) 드로어 토글 */
+  onToggleMobileNav?: () => void;
 }
 
 const DEV_BADGE = import.meta.env.DEV;
@@ -46,6 +49,7 @@ export const Header: React.FC<HeaderProps> = ({
   onTabChange,
   onSwitchToStudent,
   onGoHome,
+  onToggleMobileNav,
 }) => {
   // 사이드바에 있던 메뉴(홈 제외)를 상단 바로 옮긴다. 홈은 로고 클릭으로 이동.
   const navItems: NavItem[] = [
@@ -102,7 +106,20 @@ export const Header: React.FC<HeaderProps> = ({
   ];
 
   return (
-    <header className="flex h-16 shrink-0 items-center gap-3 border-b border-[#E5E3DD] bg-[#FBFBFA] px-5">
+    <header className="flex h-16 shrink-0 items-center gap-2 border-b border-[#E5E3DD] bg-[#FBFBFA] px-3 sm:gap-3 sm:px-5">
+      {/* 모바일 햄버거 → 클래스 사이드바 드로어 */}
+      {onToggleMobileNav && (
+        <button
+          type="button"
+          onClick={onToggleMobileNav}
+          title="메뉴"
+          aria-label="메뉴 열기"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[#8B7E74] transition-all hover:bg-[#F3F2EE] hover:text-[#4A3728] md:hidden"
+        >
+          <Menu size={20} />
+        </button>
+      )}
+
       {/* 로고 = 홈으로 */}
       <button
         type="button"
@@ -115,7 +132,7 @@ export const Header: React.FC<HeaderProps> = ({
       </button>
 
       {/* 상단 네비게이션 (사이드바에서 옮겨온 메뉴들) */}
-      <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+      <nav className="flex min-w-0 flex-1 items-center justify-start gap-1 overflow-x-auto sm:justify-evenly">
         {navItems.map((item) => {
           const hasBadge = typeof item.badge === 'number' && item.badge > 0;
           return (

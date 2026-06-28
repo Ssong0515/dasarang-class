@@ -93,6 +93,8 @@ export interface TheoryPrompt {
   label?: string;
   /** NotebookLM 입력 칸에 그대로 붙여넣을 프롬프트 본문. */
   prompt: string;
+  /** 이 시수에 붙인 이론 슬라이드/자료 링크(임베드용으로 정규화 저장). 비우면 자료 없음. 강사 화면 전용. */
+  slideUrl?: string;
 }
 
 export interface ClassroomDateRecord {

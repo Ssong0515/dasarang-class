@@ -920,14 +920,14 @@ export const StudentPage: React.FC<StudentPageProps> = ({
       </header>
 
       {SHOW_CLASSROOM_SELECTION && !activeClassroomId ? (
-        <main className="mx-auto max-w-5xl p-8">
+        <main className="mx-auto max-w-5xl p-4 sm:p-8">
           <motion.section
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mb-12 rounded-[40px] bg-[#FFF5E9] p-12 text-center"
+            className="mb-8 rounded-[40px] bg-[#FFF5E9] p-6 text-center sm:mb-12 sm:p-12"
           >
-            <h2 className="mb-4 font-serif text-4xl font-bold text-[#4A3728]">{homeT.welcome}</h2>
-            <p className="mx-auto mb-8 max-w-2xl text-lg text-[#8B7E74]">{homeT.welcomeDesc}</p>
+            <h2 className="mb-4 font-serif text-2xl font-bold text-[#4A3728] sm:text-4xl">{homeT.welcome}</h2>
+            <p className="mx-auto mb-8 max-w-2xl text-base text-[#8B7E74] sm:text-lg">{homeT.welcomeDesc}</p>
 
             <div className="mb-6">
               <span className="rounded-full bg-[#EBD9C1]/30 px-3 py-1 text-xs font-bold uppercase tracking-widest text-[#8B5E3C]">

@@ -86,12 +86,14 @@ import { isAttendanceExcluded } from '../utils/attendance';
 import { deleteField } from '../firebase';
 import { formatWon, getPerSessionFee } from '../utils/fee';
 import { openDriveSlidePicker } from '../utils/drivePicker';
-import { SlideEmbed } from './StudentContentPreview';
+import { SlideEmbed, StudentContentPreviewFrame } from './StudentContentPreview';
 import { SessionDetailModal } from './SessionDetailModal';
 import { ClassroomResultGallery } from './ClassroomResultGallery';
 
 interface ClassroomDashboardProps {
   classroom: Classroom;
+  /** 대시보드 캘린더에서 넘어온 날짜(YYYY-MM-DD). 없으면 오늘로 시작. */
+  initialDate?: string;
   classrooms: Classroom[];
   studentsById: Map<string, Student>;
   dateRecords: ClassroomDateRecord[];
@@ -258,8 +260,91 @@ const DashboardInfoTooltip: React.FC<{
   </div>
 );
 
+// 좁은 폭(모바일/태블릿, <lg=1024px) 여부. Tailwind lg와 맞춘다.
+const NARROW_MEDIA_QUERY = '(max-width: 1023px)';
+const useIsNarrow = (): boolean => {
+  const [isNarrow, setIsNarrow] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.matchMedia(NARROW_MEDIA_QUERY).matches : false
+  );
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia(NARROW_MEDIA_QUERY);
+    const handler = () => setIsNarrow(mq.matches);
+    handler();
+    if (typeof mq.addEventListener === 'function') {
+      mq.addEventListener('change', handler);
+      return () => mq.removeEventListener('change', handler);
+    }
+    mq.addListener(handler);
+    return () => mq.removeListener(handler);
+  }, []);
+  return isNarrow;
+};
+
+/**
+ * 넓은 폭: 카드(children)를 그대로 인라인 표시.
+ * 좁은 폭: 요약 타일만 보여주고, 누르면 children을 팝업(모달)으로 띄운다.
+ */
+const ResponsiveCardOrPopup: React.FC<{
+  isNarrow: boolean;
+  icon?: React.ReactNode;
+  title: string;
+  summary?: React.ReactNode;
+  desktopClassName: string;
+  tileClassName?: string;
+  children: React.ReactNode;
+}> = ({ isNarrow, icon, title, summary, desktopClassName, tileClassName = '', children }) => {
+  const [open, setOpen] = useState(false);
+
+  if (!isNarrow) {
+    return <div className={desktopClassName}>{children}</div>;
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className={`flex h-full w-full items-center gap-3 rounded-[24px] border border-[#E5E3DD] bg-white p-3.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#8B5E3C] hover:shadow-md ${tileClassName}`}
+      >
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#FFF5E9]">
+          {icon}
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="text-[11px] font-bold uppercase tracking-wide text-[#A89F94]">{title}</span>
+          <span className="truncate text-sm font-bold text-[#4A3728]">{summary}</span>
+        </span>
+        <ChevronRight size={18} className="shrink-0 text-[#C4B6A4]" />
+      </button>
+      {open && (
+        <div
+          className="fixed inset-0 z-[120] flex items-end justify-center bg-black/40 p-2 sm:items-center sm:p-4"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setOpen(false);
+          }}
+        >
+          <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-[28px] bg-white shadow-2xl">
+            <div className="flex items-center justify-end border-b border-[#E5E3DD] px-3 py-2">
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                aria-label="닫기"
+                className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#E5E3DD] bg-white text-[#8B7E74] transition-all hover:text-[#4A3728]"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
 export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   classroom,
+  initialDate,
   classrooms,
   studentsById: allStudentsById,
   dateRecords,
@@ -285,8 +370,10 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   onNavigateToContent,
 }) => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  // 수업기록 칩을 누르면 콘텐츠로 이동하지 않고 바로 미리보기 모달을 띄운다.
+  const [previewContent, setPreviewContent] = useState<LessonContent | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>(categories[0]?.id || '');
-  const [selectedDate, setSelectedDate] = useState(getLocalDateString(new Date()));
+  const [selectedDate, setSelectedDate] = useState(initialDate ?? getLocalDateString(new Date()));
   const [students, setStudents] = useState<Student[]>(classroom.students || []);
   const [newStudentName, setNewStudentName] = useState('');
   const [newStudentAge, setNewStudentAge] = useState('');
@@ -304,6 +391,11 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const [theoryLabelInput, setTheoryLabelInput] = useState('');
   const [isPickingTheorySlide, setIsPickingTheorySlide] = useState(false);
   const [copiedPromptIndex, setCopiedPromptIndex] = useState<number | null>(null);
+  // 이론 프롬프트(시수) 행에서 자료 링크를 인라인으로 입력 중인 index와 입력값.
+  const [slideInputPromptIndex, setSlideInputPromptIndex] = useState<number | null>(null);
+  const [slideInputValue, setSlideInputValue] = useState('');
+  // 좁은 폭(모바일/태블릿, <lg)에서는 날짜상태·캘린더·출석·메모를 타일+팝업으로 보여준다.
+  const isNarrow = useIsNarrow();
   // 이론 프롬프트 보기·수정 팝업: 열린 프롬프트 index와 편집 중 본문.
   const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null);
   const [promptDraft, setPromptDraft] = useState('');
@@ -537,6 +629,11 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   useEffect(() => {
     setStudents(classroom.students || []);
   }, [classroom.students]);
+
+  // 대시보드 캘린더에서 특정 날짜로 진입하면 그 날짜를 선택한다 (없으면 사용자가 고른 날짜 유지).
+  useEffect(() => {
+    if (initialDate) setSelectedDate(initialDate);
+  }, [initialDate]);
 
   useEffect(() => {
     setStudentMoveTargets((previousTargets) => {
@@ -1020,6 +1117,28 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     setEditingPromptIndex(null);
   };
 
+  // 이론 프롬프트(시수)에 자료 링크를 붙인다. 입력값은 임베드용으로 정규화해 저장하고 인라인 입력을 닫는다.
+  const handleSetTheoryPromptSlide = (index: number, rawUrl: string) => {
+    if (!currentDateRecord) return;
+    const url = toSlideEmbedUrl(rawUrl.trim());
+    if (!url) return;
+    const nextPrompts = effectiveTheoryPrompts.map((item, idx) =>
+      idx === index ? { ...item, slideUrl: url } : item
+    );
+    onSaveDateRecord({ ...currentDateRecord, theoryPrompts: nextPrompts });
+    setSlideInputPromptIndex(null);
+    setSlideInputValue('');
+  };
+
+  // 이론 프롬프트(시수)의 자료 링크를 제거한다 (빈 문자열로 저장해 구버전 theorySlides 폴백도 막는다).
+  const handleClearTheoryPromptSlide = (index: number) => {
+    if (!currentDateRecord) return;
+    const nextPrompts = effectiveTheoryPrompts.map((item, idx) =>
+      idx === index ? { ...item, slideUrl: '' } : item
+    );
+    onSaveDateRecord({ ...currentDateRecord, theoryPrompts: nextPrompts });
+  };
+
   const handlePickTheorySlide = async () => {
     const clientId = import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID;
     const apiKey = import.meta.env.VITE_GOOGLE_PICKER_API_KEY;
@@ -1421,10 +1540,10 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -10 }}
-        className="grid grid-cols-1 gap-8 lg:grid-cols-3"
+        className="grid grid-cols-2 gap-3 lg:grid-cols-3 lg:gap-8"
       >
-        <div className="space-y-6 lg:col-span-2">
-          <div className="hidden rounded-[40px] border border-[#E5E3DD] bg-white p-8 shadow-sm sm:p-10">
+        <div className="contents lg:col-span-2 lg:block lg:space-y-6">
+          <div className="hidden rounded-[40px] border border-[#E5E3DD] bg-white p-5 shadow-sm sm:p-10">
           <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
             <div className="space-y-3">
               <h2 className="flex items-center gap-2 text-xl font-bold text-[#4A3728]">
@@ -1583,7 +1702,20 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
           </AnimatePresence>
         </div>
 
-        <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-6 shadow-sm sm:p-8">
+        <ResponsiveCardOrPopup
+          isNarrow={isNarrow}
+          icon={<Clock size={20} className="text-[#8B5E3C]" />}
+          title="날짜 상태"
+          summary={
+            currentSessionId
+              ? SESSION_STATUS_LABELS[currentDateStatus]
+              : isCurrentDateActive
+                ? '활성'
+                : '비활성'
+          }
+          desktopClassName="rounded-[32px] border border-[#E5E3DD] bg-white p-6 shadow-sm sm:p-8"
+          tileClassName="order-1 col-span-1"
+        >
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="space-y-3">
               <h2 className="flex items-center gap-2 text-xl font-bold text-[#4A3728]">
@@ -1649,203 +1781,9 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               </button>
             )}
           </div>
-        </div>
+        </ResponsiveCardOrPopup>
 
-        {isDateOpen && (
-          <div className="rounded-[40px] border border-[#E5E3DD] bg-white p-8 shadow-sm sm:p-10">
-            <div className="mb-6">
-              <h2 className="flex items-center gap-2 text-xl font-bold text-[#4A3728]">
-                <Presentation className="text-[#8B5E3C]" size={20} />
-                이론 수업
-                <DashboardInfoTooltip
-                  content="이 날짜 이론 수업용 슬라이드를 시수마다 추가합니다. 구글 슬라이드·드라이브는 화면에 바로 임베드되고, NotebookLM 등 임베드가 막힌 링크는 새 탭에서 열립니다. 강사 화면 전용이라 학생에게는 공개되지 않습니다."
-                  label="이론 수업 설명 보기"
-                />
-              </h2>
-              <p className="mt-2 text-sm text-[#8B7E74]">
-                시수마다 이론 슬라이드를 추가하세요. 구글 슬라이드·NotebookLM 링크를 붙여넣거나 드라이브에서 선택하면 됩니다.
-              </p>
-            </div>
-
-            {effectiveTheoryPrompts.length > 0 && (
-              <div className="mb-5 space-y-2">
-                <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#8B7E74]">
-                  <Sparkles size={14} className="text-[#8B5E3C]" />
-                  NotebookLM 이론 프롬프트
-                  <DashboardInfoTooltip
-                    content="새벽 루틴이 이 회차 시수별로 자동 만든 NotebookLM 입력 프롬프트입니다. [복사]해서 NotebookLM 입력 칸에 붙여 슬라이드를 만든 뒤, 완성된 슬라이드 링크를 아래 '이론 수업'에 붙이세요. 내용은 [보기·수정]에서 확인하거나 고칠 수 있습니다. 강사 화면 전용입니다."
-                    label="이론 프롬프트 설명 보기"
-                  />
-                </p>
-                {effectiveTheoryPrompts.map((item, index) => {
-                  const promptLabel = item.label?.trim() || `${index + 1}번째 이론수업 프롬프트`;
-                  const isCopied = copiedPromptIndex === index;
-                  return (
-                    <div
-                      key={`${index}-${item.label ?? ''}`}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] px-4 py-2.5"
-                    >
-                      <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#8B5E3C]">
-                        <Sparkles size={13} />
-                        {promptLabel}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleCopyTheoryPrompt(item.prompt, index)}
-                          className="inline-flex items-center gap-1.5 rounded-xl border border-[#E5E3DD] bg-white px-3 py-1.5 text-xs font-bold text-[#4A3728] transition-all hover:border-[#8B5E3C]"
-                        >
-                          {isCopied ? <Check size={14} className="text-[#3A7D44]" /> : <Copy size={14} />}
-                          {isCopied ? '복사됨' : '복사'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleOpenPromptEditor(index)}
-                          className="inline-flex items-center gap-1.5 rounded-xl border border-[#E5E3DD] bg-white px-3 py-1.5 text-xs font-bold text-[#8B7E74] transition-all hover:border-[#8B5E3C] hover:text-[#8B5E3C]"
-                        >
-                          <Eye size={14} />
-                          보기·수정
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {effectiveTheorySlides.length > 0 && (
-              <div className="mb-5 space-y-4">
-                {effectiveTheorySlides.map((slide, index) => {
-                  const slideLabel = slide.label?.trim() || `이론 ${index + 1}`;
-                  return (
-                    <div
-                      key={`${index}-${slide.url}`}
-                      className="rounded-[28px] border border-[#E5E3DD] bg-[#FBFBFA] p-4"
-                    >
-                      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FFF5E9] px-3 py-1.5 text-xs font-bold text-[#8B5E3C]">
-                          <Presentation size={13} />
-                          {slideLabel}
-                        </span>
-                        <div className="flex items-center gap-2">
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => handleMoveTheorySlide(index, -1)}
-                              disabled={index === 0}
-                              aria-label="위로 이동"
-                              className="inline-flex items-center justify-center rounded-xl border border-[#E5E3DD] bg-white p-2 text-[#4A3728] transition-all hover:border-[#8B5E3C] disabled:cursor-not-allowed disabled:opacity-40"
-                            >
-                              <ChevronUp size={14} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleMoveTheorySlide(index, 1)}
-                              disabled={index === effectiveTheorySlides.length - 1}
-                              aria-label="아래로 이동"
-                              className="inline-flex items-center justify-center rounded-xl border border-[#E5E3DD] bg-white p-2 text-[#4A3728] transition-all hover:border-[#8B5E3C] disabled:cursor-not-allowed disabled:opacity-40"
-                            >
-                              <ChevronDown size={14} />
-                            </button>
-                          </div>
-                          <a
-                            href={toSlidePresentUrl(slide.url)}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1.5 rounded-xl border border-[#E5E3DD] bg-white px-3 py-2 text-xs font-bold text-[#4A3728] transition-all hover:border-[#8B5E3C]"
-                          >
-                            <ExternalLink size={14} />
-                            새 탭에서 열기
-                          </a>
-                          <button
-                            onClick={() => handleRemoveTheorySlide(index)}
-                            className="inline-flex items-center gap-1.5 rounded-xl bg-[#FDECEC] px-3 py-2 text-xs font-bold text-[#B42318] transition-all hover:bg-[#FAD4D1]"
-                          >
-                            <X size={14} />
-                            제거
-                          </button>
-                        </div>
-                      </div>
-                      {isEmbeddableSlideUrl(slide.url) ? (
-                        <div className="overflow-hidden rounded-2xl border border-[#E5E3DD] bg-white">
-                          <SlideEmbed slideUrl={slide.url} title={slideLabel} roundedBottom />
-                        </div>
-                      ) : (
-                        <a
-                          href={slide.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[#E5E3DD] bg-white px-6 py-8 text-center transition-all hover:border-[#8B5E3C] hover:bg-[#FFF5E9]"
-                        >
-                          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#FFF5E9]">
-                            <ExternalLink size={22} className="text-[#8B5E3C]" />
-                          </div>
-                          <p className="text-sm font-bold text-[#4A3728]">이론 수업 자료 열기</p>
-                          <p className="max-w-md text-xs leading-relaxed text-[#8B7E74]">
-                            NotebookLM 등 일부 자료는 화면에 바로 띄울 수 없어 새 탭에서 열립니다.
-                          </p>
-                          <span className="max-w-full truncate text-xs font-medium text-[#A89F94]">{slide.url}</span>
-                        </a>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            <div className="rounded-[28px] border border-dashed border-[#E5E3DD] bg-[#FBFBFA] p-4">
-              <p className="mb-3 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#8B7E74]">
-                <Plus size={14} />
-                {effectiveTheorySlides.length > 0 ? '이론 수업 더 추가' : '이론 수업 추가'}
-              </p>
-              <form
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  if (!theoryUrlInput.trim()) return;
-                  handleAddTheorySlide(theoryUrlInput, theoryLabelInput);
-                }}
-                className="space-y-2"
-              >
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <input
-                    type="text"
-                    value={theoryLabelInput}
-                    onChange={(event) => setTheoryLabelInput(event.target.value)}
-                    placeholder="라벨 (예: 1시수, 선택)"
-                    className="w-full rounded-2xl border border-[#E5E3DD] bg-white px-4 py-3 text-sm text-[#4A3728] outline-none transition-all focus:border-[#8B5E3C] focus:ring-2 focus:ring-[#8B5E3C] sm:w-40"
-                  />
-                  <input
-                    type="text"
-                    value={theoryUrlInput}
-                    onChange={(event) => setTheoryUrlInput(event.target.value)}
-                    placeholder="구글 슬라이드 또는 NotebookLM 링크"
-                    className="flex-1 rounded-2xl border border-[#E5E3DD] bg-white px-4 py-3 text-sm text-[#4A3728] outline-none transition-all focus:border-[#8B5E3C] focus:ring-2 focus:ring-[#8B5E3C]"
-                  />
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="submit"
-                    disabled={!theoryUrlInput.trim()}
-                    className="inline-flex items-center gap-1.5 rounded-2xl bg-[#8B5E3C] px-5 py-3 text-sm font-bold text-white transition-all hover:bg-[#724D31] disabled:cursor-not-allowed disabled:bg-[#B8AA9A]"
-                  >
-                    <Plus size={15} />
-                    추가
-                  </button>
-                  <span className="text-xs font-bold text-[#A89F94]">또는</span>
-                  <button
-                    type="button"
-                    disabled={isPickingTheorySlide || !import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID}
-                    onClick={handlePickTheorySlide}
-                    className="inline-flex items-center gap-1.5 rounded-2xl border-2 border-dashed border-[#E5E3DD] bg-white px-4 py-3 text-sm font-bold text-[#8B7E74] transition-all hover:border-[#8B5E3C] hover:bg-[#FFF5E9] hover:text-[#8B5E3C] disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <FolderOpen size={16} />
-                    {isPickingTheorySlide ? '드라이브 열기 중...' : 'Google Drive에서 선택'}
-                  </button>
-                </div>
-              </form>
-            </div>
-
-            {editingPromptIndex !== null && (
+        {editingPromptIndex !== null && (
               <div
                 className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4"
                 onClick={(event) => {
@@ -1913,35 +1851,9 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 </div>
               </div>
             )}
-          </div>
-        )}
 
         {isDateOpen && (
-          <div className="rounded-[40px] border border-[#E5E3DD] bg-white p-8 shadow-sm sm:p-10">
-            <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-              <div className="space-y-3">
-                <h2 className="flex items-center gap-2 text-xl font-bold text-[#4A3728]">
-                  <Clock className="text-[#8B5E3C]" size={20} />
-                  날짜별 수업기록
-                  <DashboardInfoTooltip
-                    content={lessonRecordTooltipText}
-                    label="날짜별 수업기록 설명 보기"
-                  />
-                </h2>
-                <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
-                  <span className="rounded-full bg-[#EAF2FF] px-3 py-1.5 text-[#2F5EA8]">
-                    기록됨
-                  </span>
-                  <span className="rounded-full bg-[#F2FBF3] px-3 py-1.5 text-[#2F7A4D]">
-                    선택 가능
-                  </span>
-                  <span className="rounded-full bg-[#FFF5E9] px-3 py-1.5 text-[#8B5E3C]">
-                    {selectedDate}
-                  </span>
-                </div>
-              </div>
-            </div>
-
+          <div className="order-3 col-span-2 rounded-[40px] border border-[#E5E3DD] bg-white p-5 shadow-sm sm:p-10">
             {missingCurrentDateContentCount > 0 && (
               <div className="mb-8 flex items-center gap-3 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-amber-800">
                 <AlertCircle size={20} />
@@ -1954,35 +1866,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                     이 기록에 포함된 콘텐츠 중 일부는 삭제되었거나 현재 목록에서 찾을 수 없습니다. 남아 있는 콘텐츠는 그대로 유지되고, 아래에서는 지금 보이는 콘텐츠만 추가로 선택할 수 있습니다.
                   </p>
                 </div>
-              </div>
-            )}
-
-            {currentDateRecordedContents.length > 0 ? (
-              <div className="mb-8 flex flex-wrap items-center gap-2 border-b border-[#E5E3DD] pb-8">
-                {currentDateRecordedContents.map((content) => (
-                  <div key={content.id} className="group relative inline-flex">
-                    <button
-                      onClick={() => onNavigateToContent?.(content.id)}
-                      className="cursor-pointer rounded-full border border-[#CFE0FF] bg-[#EAF2FF] px-5 py-3 pr-10 text-left text-sm font-bold text-[#2F5EA8] shadow-sm hover:bg-[#D6E6FF] hover:border-[#A3C4FF] transition-all"
-                    >
-                      {content.title}
-                    </button>
-                    <button
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleToggleDateRecordContent(content);
-                      }}
-                      className="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-white/70 text-[#2F5EA8] opacity-0 transition-all hover:bg-[#D9534F] hover:text-white group-hover:opacity-100"
-                      title="기록에서 제거"
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="mb-8 rounded-[28px] border border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-6 py-8 text-sm text-[#8B7E74]">
-                아직 이 날짜에 기록된 수업 콘텐츠가 없습니다. 아래에서 실제 진행한 콘텐츠를 선택해주세요.
               </div>
             )}
 
@@ -2067,47 +1950,165 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                       </span>
                     </p>
                     <div className="space-y-2">
-                      {recordedPracticeContents.map((content) => {
+                      {recordedPracticeContents.map((content, index) => {
                         const isPublished = publishedContentIdSet.has(content.id);
+                        // 실습 항목 i ↔ 이론 프롬프트 i (순서 매칭). 매칭되는 프롬프트가 있을 때만 이론 컨트롤 노출.
+                        const matchedPrompt = effectiveTheoryPrompts[index];
+                        const isCopied = copiedPromptIndex === index;
+                        const storedSlide = matchedPrompt?.slideUrl;
+                        const promptSlideUrl =
+                          storedSlide !== undefined && storedSlide !== null
+                            ? storedSlide.trim()
+                            : effectiveTheorySlides[index]?.url?.trim() ?? '';
+                        const hasSlide = promptSlideUrl.length > 0;
+                        const isSlideInputOpen = slideInputPromptIndex === index;
                         return (
                           <div
                             key={content.id}
-                            className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 transition-all ${
+                            className={`rounded-2xl border px-4 py-3 transition-all ${
                               isPublished
                                 ? 'border-[#BFE3CC] bg-[#F2FBF3]'
                                 : 'border-[#E5E3DD] bg-white'
                             }`}
                           >
-                            <div className="flex min-w-0 items-center gap-2">
-                              {isPublished ? (
-                                <Eye size={16} className="shrink-0 text-[#2D7A4D]" />
-                              ) : (
-                                <Lock size={16} className="shrink-0 text-[#8B7E74]" />
-                              )}
-                              <span className="truncate text-sm font-bold text-[#4A3728]">
-                                {content.title}
-                              </span>
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                              <button
+                                type="button"
+                                onClick={() => setPreviewContent(content)}
+                                title={`${content.title} 미리보기`}
+                                className="flex min-w-0 items-center gap-2 text-left transition-opacity hover:opacity-70"
+                              >
+                                {isPublished ? (
+                                  <Eye size={16} className="shrink-0 text-[#2D7A4D]" />
+                                ) : (
+                                  <Lock size={16} className="shrink-0 text-[#8B7E74]" />
+                                )}
+                                <span className="truncate text-sm font-bold text-[#4A3728]">
+                                  {content.title}
+                                </span>
+                              </button>
+                              <div className="flex shrink-0 items-center gap-1.5">
+                                {matchedPrompt && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCopyTheoryPrompt(matchedPrompt.prompt, index)}
+                                      title={isCopied ? '복사됨' : '이론 프롬프트 복사'}
+                                      aria-label="이론 프롬프트 복사"
+                                      className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[#E5E3DD] bg-white text-[#4A3728] transition-all hover:border-[#8B5E3C]"
+                                    >
+                                      {isCopied ? <Check size={14} className="text-[#3A7D44]" /> : <Copy size={14} />}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenPromptEditor(index)}
+                                      title="이론 프롬프트 보기·수정"
+                                      aria-label="이론 프롬프트 보기·수정"
+                                      className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[#E5E3DD] bg-white text-[#8B7E74] transition-all hover:border-[#8B5E3C] hover:text-[#8B5E3C]"
+                                    >
+                                      <Edit3 size={14} />
+                                    </button>
+                                    {hasSlide ? (
+                                      <>
+                                        <a
+                                          href={toSlidePresentUrl(promptSlideUrl)}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          title="이론 수업 자료 열기"
+                                          aria-label="이론 수업 자료 열기"
+                                          className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[#CFE0FF] bg-[#EAF2FF] text-[#2F5EA8] transition-all hover:bg-[#D6E6FF]"
+                                        >
+                                          <ExternalLink size={14} />
+                                        </a>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleClearTheoryPromptSlide(index)}
+                                          title="이론 자료 링크 제거"
+                                          aria-label="이론 자료 링크 제거"
+                                          className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[#E5E3DD] bg-white text-[#B7AFA4] transition-all hover:border-[#D9534F] hover:text-[#D9534F]"
+                                        >
+                                          <X size={14} />
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setSlideInputPromptIndex(isSlideInputOpen ? null : index);
+                                          setSlideInputValue('');
+                                        }}
+                                        title="이론 자료 링크 추가"
+                                        aria-label="이론 자료 링크 추가"
+                                        className={`inline-flex h-8 w-8 items-center justify-center rounded-xl border transition-all ${
+                                          isSlideInputOpen
+                                            ? 'border-[#8B5E3C] bg-[#FFF5E9] text-[#8B5E3C]'
+                                            : 'border-[#E5E3DD] bg-white text-[#8B7E74] hover:border-[#8B5E3C] hover:text-[#8B5E3C]'
+                                        }`}
+                                      >
+                                        <Plus size={14} />
+                                      </button>
+                                    )}
+                                  </>
+                                )}
+                                <button
+                                  onClick={() => handleTogglePublishContent(content)}
+                                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+                                    isPublished
+                                      ? 'bg-[#FDECEC] text-[#B42318] hover:bg-[#FAD4D1]'
+                                      : 'bg-[#8B5E3C] text-white hover:bg-[#724D31]'
+                                  }`}
+                                >
+                                  {isPublished ? (
+                                    <>
+                                      <EyeOff size={14} />
+                                      잠그기
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Eye size={14} />
+                                      공개
+                                    </>
+                                  )}
+                                </button>
+                              </div>
                             </div>
-                            <button
-                              onClick={() => handleTogglePublishContent(content)}
-                              className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
-                                isPublished
-                                  ? 'bg-[#FDECEC] text-[#B42318] hover:bg-[#FAD4D1]'
-                                  : 'bg-[#8B5E3C] text-white hover:bg-[#724D31]'
-                              }`}
-                            >
-                              {isPublished ? (
-                                <>
-                                  <EyeOff size={14} />
-                                  잠그기
-                                </>
-                              ) : (
-                                <>
-                                  <Eye size={14} />
-                                  공개
-                                </>
-                              )}
-                            </button>
+
+                            {matchedPrompt && isSlideInputOpen && !hasSlide && (
+                              <form
+                                onSubmit={(event) => {
+                                  event.preventDefault();
+                                  if (!slideInputValue.trim()) return;
+                                  handleSetTheoryPromptSlide(index, slideInputValue);
+                                }}
+                                className="mt-2 flex items-center gap-2"
+                              >
+                                <input
+                                  type="text"
+                                  autoFocus
+                                  value={slideInputValue}
+                                  onChange={(event) => setSlideInputValue(event.target.value)}
+                                  placeholder="이론 슬라이드/자료 링크 붙여넣기"
+                                  className="min-w-0 flex-1 rounded-xl border border-[#E5E3DD] bg-white px-3 py-2 text-xs text-[#4A3728] outline-none transition-all focus:border-[#8B5E3C] focus:ring-2 focus:ring-[#8B5E3C]"
+                                />
+                                <button
+                                  type="submit"
+                                  disabled={!slideInputValue.trim()}
+                                  className="inline-flex shrink-0 items-center rounded-xl bg-[#8B5E3C] px-3 py-2 text-xs font-bold text-white transition-all hover:bg-[#724D31] disabled:cursor-not-allowed disabled:bg-[#B8AA9A]"
+                                >
+                                  확인
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSlideInputPromptIndex(null);
+                                    setSlideInputValue('');
+                                  }}
+                                  className="inline-flex shrink-0 items-center rounded-xl border border-[#E5E3DD] bg-white px-3 py-2 text-xs font-bold text-[#8B7E74] transition-all hover:text-[#4A3728]"
+                                >
+                                  취소
+                                </button>
+                              </form>
+                            )}
                           </div>
                         );
                       })}
@@ -2187,17 +2188,39 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                       {catContents.map((content) => {
                         const isRecorded = currentDateRecordedContentIdSet.has(content.id);
                         return (
-                          <button
-                            key={content.id}
-                            onClick={() => handleToggleDateRecordContent(content)}
-                            className={`rounded-full border px-5 py-3 text-left text-sm font-bold transition-all ${
-                              isRecorded
-                                ? 'border-[#CFE0FF] bg-[#EAF2FF] text-[#2F5EA8] shadow-sm'
-                                : 'border-[#D7EBD9] bg-[#F2FBF3] text-[#2F7A4D] hover:-translate-y-0.5 hover:bg-[#E3F6E6] hover:shadow-sm'
-                            }`}
-                          >
-                            {content.title}
-                          </button>
+                          <div key={content.id} className="group relative inline-flex">
+                            <button
+                              onClick={() => setPreviewContent(content)}
+                              title={`${content.title} 미리보기`}
+                              className={`rounded-full border px-5 py-3 pr-11 text-left text-sm font-bold transition-all ${
+                                isRecorded
+                                  ? 'border-[#CFE0FF] bg-[#EAF2FF] text-[#2F5EA8] shadow-sm'
+                                  : 'border-[#D7EBD9] bg-[#F2FBF3] text-[#2F7A4D] hover:-translate-y-0.5 hover:bg-[#E3F6E6] hover:shadow-sm'
+                              }`}
+                            >
+                              {content.title}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleToggleDateRecordContent(content);
+                              }}
+                              title={isRecorded ? '수업기록에서 빼기' : '수업기록에 추가'}
+                              aria-label={
+                                isRecorded
+                                  ? `${content.title} 수업기록에서 빼기`
+                                  : `${content.title} 수업기록에 추가`
+                              }
+                              className={`absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full transition-all ${
+                                isRecorded
+                                  ? 'bg-[#2F5EA8] text-white hover:bg-[#24487E]'
+                                  : 'bg-white/80 text-[#2F7A4D] hover:bg-[#2F7A4D] hover:text-white'
+                              }`}
+                            >
+                              {isRecorded ? <Check size={14} /> : <Plus size={14} />}
+                            </button>
+                          </div>
                         );
                       })}
                     </div>
@@ -2215,7 +2238,14 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
         )}
 
         {isDateOpen && (
-          <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-8 text-left shadow-sm">
+          <ResponsiveCardOrPopup
+            isNarrow={isNarrow}
+            icon={<CheckCircle2 size={16} className="text-[#8B5E3C]" />}
+            title="출석 체크"
+            summary={`${attendanceStats.present}명 출석 · 대상 ${attendanceStats.total}명`}
+            desktopClassName="rounded-[32px] border border-[#E5E3DD] bg-white p-5 text-left shadow-sm sm:p-8"
+            tileClassName="order-4 col-span-1"
+          >
             <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
               <div className="space-y-3">
                 <h2 className="flex items-center gap-2 text-xl font-bold text-[#4A3728]">
@@ -2368,12 +2398,19 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 </div>
               )}
             </div>
-          </div>
+          </ResponsiveCardOrPopup>
         )}
       </div>
 
-        <div className="space-y-6">
-          <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-6 shadow-sm">
+        <div className="contents lg:block lg:space-y-6">
+          <ResponsiveCardOrPopup
+            isNarrow={isNarrow}
+            icon={<Calendar size={20} className="text-[#8B5E3C]" />}
+            title="수업 달력"
+            summary={selectedDate}
+            desktopClassName="rounded-[32px] border border-[#E5E3DD] bg-white p-6 shadow-sm"
+            tileClassName="order-2 col-span-1"
+          >
             <div className="mb-6 flex items-start justify-between gap-3">
               <div className="space-y-2">
                 <h3 className="flex items-center gap-2 text-lg font-bold text-[#4A3728]">
@@ -2426,7 +2463,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               </div>
             </div>
 
-            <div className="mb-2 grid grid-cols-7 gap-1">
+            <div className="mx-auto w-full max-w-[340px]">
+            <div className="mb-2 grid grid-cols-7 gap-1.5">
               {weekDays.map((day) => (
                 <div key={day} className="py-1 text-center text-[10px] font-bold text-[#A89F94]">
                   {day}
@@ -2497,10 +2535,18 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 );
               })}
             </div>
-          </div>
+            </div>
+          </ResponsiveCardOrPopup>
 
           {isDateOpen ? (
-            <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-6 text-left shadow-sm">
+            <ResponsiveCardOrPopup
+              isNarrow={isNarrow}
+              icon={<MessageSquare size={16} className="text-[#8B5E3C]" />}
+              title="오늘의 수업 메모"
+              summary={localMemo.trim() ? localMemo.trim() : '메모 없음'}
+              desktopClassName="rounded-[32px] border border-[#E5E3DD] bg-white p-6 text-left shadow-sm"
+              tileClassName="order-5 col-span-1"
+            >
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div className="space-y-2">
                   <h2 className="flex items-center gap-2 text-lg font-bold text-[#4A3728]">
@@ -2538,9 +2584,9 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               {generationError && (
                 <p className="mt-3 text-xs font-medium text-[#B42318]">{generationError}</p>
               )}
-            </div>
+            </ResponsiveCardOrPopup>
           ) : currentSessionId ? (
-            <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-6 shadow-sm">
+            <div className="order-5 col-span-2 rounded-[32px] border border-[#E5E3DD] bg-white p-6 shadow-sm">
               <div className="mb-4 flex items-start gap-2 text-[#8B7E74]">
                 <AlertCircle size={18} className="mt-0.5 shrink-0" />
                 <div className="space-y-3">
@@ -2574,7 +2620,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               </div>
             </div>
           ) : (
-            <div className="rounded-[32px] border border-[#E5E3DD] bg-white p-6 shadow-sm">
+            <div className="order-5 col-span-2 rounded-[32px] border border-[#E5E3DD] bg-white p-6 shadow-sm">
               <div className="mb-4 flex items-start gap-2 text-[#8B7E74]">
                 <AlertCircle size={18} className="mt-0.5 shrink-0" />
                 <div className="space-y-3">
@@ -3686,7 +3732,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   };
 
   return (
-    <main className="flex-1 overflow-y-auto bg-[#FBFBFA] p-6">
+    <main className="flex-1 overflow-y-auto bg-[#FBFBFA] p-4 sm:p-6">
       <div className="mx-auto max-w-6xl">
         <div className="mb-6">
           <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -3712,7 +3758,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
           </div>
         </div>
 
-        <div className="mb-6 flex gap-6 border-b border-[#E5E3DD]">
+        <div className="mb-6 flex gap-4 overflow-x-auto border-b border-[#E5E3DD] sm:gap-6">
           {[
             { id: 'dashboard', label: '수업 대시보드', icon: ClipboardList },
             { id: 'results', label: '결과물', icon: Images },
@@ -3723,7 +3769,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as Tab)}
-              className={`relative flex items-center gap-2 pb-4 text-sm font-bold transition-all ${
+              className={`relative flex shrink-0 items-center gap-2 whitespace-nowrap pb-4 text-sm font-bold transition-all ${
                 activeTab === tab.id ? 'text-[#8B5E3C]' : 'text-[#8B7E74] hover:text-[#4A3728]'
               }`}
             >
@@ -3752,6 +3798,81 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
         </AnimatePresence>
       </div>
       <SessionDetailModal session={detailSession} onClose={() => setDetailSession(null)} />
+
+      {/* 수업기록 콘텐츠 빠른 미리보기 */}
+      {previewContent && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-3 sm:p-4"
+          onClick={() => setPreviewContent(null)}
+        >
+          <div
+            className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-[24px] bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-[#E5E3DD] px-4 py-3 sm:px-5 sm:py-4">
+              <h3 className="flex min-w-0 items-center gap-2 text-base font-bold text-[#4A3728]">
+                <Eye size={18} className="shrink-0 text-[#8B5E3C]" />
+                <span className="truncate">{previewContent.title}</span>
+              </h3>
+              <div className="flex shrink-0 items-center gap-2">
+                {onNavigateToContent && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const targetId = previewContent.id;
+                      setPreviewContent(null);
+                      onNavigateToContent(targetId);
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-[#E5E3DD] bg-white px-3 py-2 text-xs font-bold text-[#4A3728] transition-all hover:border-[#8B5E3C] hover:bg-[#FFF5E9]"
+                  >
+                    <ExternalLink size={14} />
+                    <span className="hidden sm:inline">콘텐츠에서 열기</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setPreviewContent(null)}
+                  aria-label="미리보기 닫기"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#E5E3DD] bg-white text-[#8B7E74] transition-all hover:border-[#D8D2C8] hover:text-[#4A3728]"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto bg-[#FBFBFA] p-3 sm:p-4">
+              {previewContent.slideUrl?.trim() ? (
+                <div className="overflow-hidden rounded-2xl border border-[#E5E3DD] bg-white">
+                  <SlideEmbed
+                    slideUrl={previewContent.slideUrl}
+                    title={previewContent.title?.trim() || '슬라이드 미리보기'}
+                    roundedBottom
+                  />
+                </div>
+              ) : previewContent.html?.trim() ? (
+                <div className="overflow-hidden rounded-2xl border border-[#E5E3DD] bg-white">
+                  <StudentContentPreviewFrame
+                    html={previewContent.html}
+                    title={previewContent.title?.trim() || '콘텐츠 미리보기'}
+                    className="w-full"
+                  />
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[#E5E3DD] bg-white py-16 text-center text-[#8B7E74]">
+                  <Eye size={28} className="mb-3 opacity-30" />
+                  <p className="text-sm">이 콘텐츠에는 미리볼 슬라이드나 HTML이 없습니다.</p>
+                </div>
+              )}
+
+              {previewContent.description?.trim() && (
+                <div className="mt-3 whitespace-pre-wrap rounded-2xl border border-[#E5E3DD] bg-white p-4 text-sm leading-7 text-[#4A3728]">
+                  {previewContent.description}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 };

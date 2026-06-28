@@ -73,7 +73,7 @@ export const StudentAccessManager: React.FC<StudentAccessManagerProps> = ({
   };
 
   return (
-    <main className="min-h-0 flex-1 overflow-y-auto px-6 py-8">
+    <main className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6 sm:py-8">
       <section className="mb-8">
         <div className="mb-6 flex items-center justify-between gap-4">
           <div>
