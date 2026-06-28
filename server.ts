@@ -309,6 +309,34 @@ async function startServer() {
     }
   });
 
+  // 실습 콘텐츠 HTML 미리보기. 채팅에서 받은 previewUrl로 전체를 다운로드하지 않고 브라우저에서 바로 본다.
+  // 인증 없음(랜덤 20자 content id가 곧 캡처빌리티). 키를 URL에 박으면 채팅·기록에 새므로 공개가 더 안전.
+  // 기본은 렌더(text/html), ?raw=1이면 소스(text/plain). edit 후 즉시 반영되도록 캐시 안 함.
+  app.get(withBasePath(APP_BASE_PATH, '/preview/:contentId'), async (req, res) => {
+    const { contentId } = req.params as { contentId?: string };
+    if (!contentId) {
+      res.status(400).type('text/plain; charset=utf-8').send('contentId가 필요합니다.');
+      return;
+    }
+    try {
+      const doc = await getAdminDb().collection('contents').doc(contentId).get();
+      const html = doc.exists ? (doc.data() as { html?: unknown }).html : undefined;
+      if (typeof html !== 'string' || !html.trim()) {
+        res.status(404).type('text/plain; charset=utf-8').send('미리볼 실습 콘텐츠를 찾을 수 없습니다.');
+        return;
+      }
+      const raw = req.query.raw === '1' || req.query.raw === 'true';
+      res.setHeader('X-Robots-Tag', 'noindex');
+      res.setHeader('Cache-Control', 'no-store');
+      res.type(raw ? 'text/plain; charset=utf-8' : 'text/html; charset=utf-8').send(html);
+    } catch (error) {
+      res
+        .status(500)
+        .type('text/plain; charset=utf-8')
+        .send(error instanceof Error ? error.message : '미리보기에 실패했습니다.');
+    }
+  });
+
   // 관리자 UI에서 학생 게시물 승인(홈페이지 공유)/숨김. 승인 시 Drive 파일 공개 전환은 서버만 가능.
   app.post(
     withBasePath(APP_BASE_PATH, '/api/student-posts/:id/review'),

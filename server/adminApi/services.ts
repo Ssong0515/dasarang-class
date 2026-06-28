@@ -29,6 +29,18 @@ type DocData = Record<string, unknown>;
 const docToObject = (id: string, data: DocData): DocData & { id: string } => ({ ...data, id });
 
 /**
+ * 실습 콘텐츠를 브라우저에서 바로 보는 미리보기 URL(서버 /preview/:id 라우트).
+ * APP_URL이 있으면 절대 URL, 없으면 상대 경로. 채팅에서 전체 HTML을 받지 않고 "일단 보기"용.
+ * `?raw=1`을 붙이면 렌더 대신 소스 텍스트를 본다.
+ */
+const contentPreviewUrl = (id: string): string => {
+  const origin = (process.env.APP_URL || '').replace(/\/+$/, '');
+  const basePath = (process.env.APP_BASE_PATH || '/').replace(/\/+$/, '');
+  const prefix = basePath && basePath !== '/' ? basePath : '';
+  return `${origin}${prefix}/preview/${id}`;
+};
+
+/**
  * 커리큘럼 회차 배열을 정규화한다: 모든 회차에 안정적인 `id`와 1-based `order`를 보장.
  *
  * `sessions`를 통째로 넣어 만든 커리큘럼(create/update)은 회차에 id가 없을 수 있는데,
@@ -118,6 +130,10 @@ export const listResource = async (resource: ResourceName, options: ListOptions 
     });
   }
 
+  if (resource === 'contents') {
+    items = items.map((item) => ({ ...item, previewUrl: contentPreviewUrl(item.id as string) }));
+  }
+
   return { total, count: items.length, items };
 };
 
@@ -127,7 +143,11 @@ export const getResource = async (resource: ResourceName, id: string) => {
   if (!doc.exists) {
     throw new AdminApiError(404, `'${resource}'에서 id '${id}' 문서를 찾을 수 없습니다.`);
   }
-  return docToObject(doc.id, doc.data() as DocData);
+  const obj = docToObject(doc.id, doc.data() as DocData);
+  if (resource === 'contents') {
+    obj.previewUrl = contentPreviewUrl(obj.id);
+  }
+  return obj;
 };
 
 const buildInitials = (name: string) => name.trim().slice(0, 2);
@@ -595,7 +615,8 @@ export const createPracticeContent = async (input: CreatePracticeContentInput) =
     categoryId,
     title: contentData.title,
     order: contentData.order,
-    message: '콘텐츠가 생성되었습니다. 학생 화면에는 바로 안 보이며, 클래스 관리 > 수업 진행에서 "공개"해야 학생에게 열립니다(게이팅).',
+    previewUrl: contentPreviewUrl(contentRef.id),
+    message: '콘텐츠가 생성되었습니다. previewUrl로 브라우저에서 바로 확인할 수 있습니다. 학생 화면에는 바로 안 보이며, 클래스 관리 > 수업 진행에서 "공개"해야 학생에게 열립니다(게이팅).',
   };
 };
 
@@ -701,8 +722,9 @@ export const editContentHtml = async (id: string, edits: ContentHtmlEdit[]) => {
     id,
     editsApplied: applied,
     htmlLength: { before: original.length, after: html.length },
+    previewUrl: contentPreviewUrl(id),
     message:
-      '실습 HTML을 부분 수정했습니다. content id가 그대로라 날짜기록·회차 연결과 공개 상태(게이팅)는 유지됩니다.',
+      '실습 HTML을 부분 수정했습니다. previewUrl 새로고침으로 결과를 확인하세요. content id가 그대로라 날짜기록·회차 연결과 공개 상태(게이팅)는 유지됩니다.',
   };
 };
 

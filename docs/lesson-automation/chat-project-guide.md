@@ -37,7 +37,7 @@
 ### `{회차}회차` 또는 `N번` — 한 회차 상세 + 이론 프롬프트
 선택한 회차(현재 과정 기준):
 1. 그 회차 `details` 파싱 → **시수별** (제목/모듈/주요활동/결과물) 표.
-2. **기존 실습 HTML**: 그 커리큘럼을 쓰는 한 반의 그 날짜 날짜기록 `contentIds`로 `get_resource(contents, <id>)`를 가져와 시수별 **content id + 제목 + description** 표시(원하면 html 전문). → 이 id들을 **작업 대상으로 기억**(아래 ③④에서 재검색 없이 사용).
+2. **기존 실습 HTML**: 그 커리큘럼을 쓰는 한 반의 그 날짜 날짜기록 `contentIds`로 `get_resource(contents, <id>)`를 가져와 시수별 **content id + 제목 + description + previewUrl** 표시(실물은 html 전문을 채팅에 붓지 말고 previewUrl로 본다). → 이 id들을 **작업 대상으로 기억**(아래 ③④에서 재검색 없이 사용).
 3. **시수별 NotebookLM 16장 프롬프트** 생성(각 시수마다 1개). 디자인·형식(§1·§2, **병기 번역 레이아웃 포함**)은 NotebookLM 소스에 이미 고정돼 있다고 전제하고, [`notebooklm-guidelines.md`](./notebooklm-guidelines.md) **§4의 16장 템플릿**에 그 시수 값({회차}·{시수}·{시수제목}·{모듈}·{주요활동}·{결과물})을 채우고, **`{병기언어}`에는 그 반의 `topLanguages`(get_overview의 최다 2개 언어; 없으면 빈칸)** 를 넣어 **1번부터 16번까지 전체를 그대로 출력**한다(짧게 줄이지 말 것). ⚠️ 슬라이드엔 학생이 직접 따라 하는 **실습 단계·완료 확인 기준을 넣지 말 것** — 순수 이론, 16번 장에서 실습 HTML로 연결만. 강사는 이 프롬프트를 그대로 NotebookLM 슬라이드 생성 칸에 붙인다.
    > 참고: 평소엔 **새벽 루틴이 이 16장 프롬프트를 자동 생성**해 대시보드 '이론 수업'의 "N번째 이론수업 프롬프트"(복사 버튼)로 뜬다([`cloud-routine-setup.md`](./cloud-routine-setup.md)). 이 명령은 **수동 생성·검수·수정용 폴백**이며, §4 템플릿과 형식을 동일하게 맞춘다.
 4. 그 반·그 회차 날짜기록에 실습 콘텐츠가 **없으면** "이 회차는 아직 실습이 없어요. 만들까요?" → 승인 시 `practice-recipe.md`대로 생성 후 ④ 등록. (같은 커리큘럼 다른 반에 이미 있으면 새로 만들지 말고 그 content id를 연결.)
@@ -50,7 +50,7 @@
 - content id를 직접 주면 그대로 사용.
 
 수정 절차:
-1. `get_resource(contents, <id>)`로 html 전문을 가져온다. **이미 이 채팅에서 다룬 콘텐츠면 다시 안 가져와도 된다** — 작은 수정은 `find_in_content_html(contents, <id>, "<주변 문자열>")`로 고칠 부분만 들여다본다(전체 재조회 금지).
+1. **현재 모습을 보려면 전체를 채팅에 받지 말 것**: 콘텐츠 응답의 `previewUrl`(없으면 `list_resource`/`get_resource`로 한 번 확인)을 강사에게 그대로 안내하면 브라우저에서 바로 본다. 소스가 필요하면 `previewUrl?raw=1`. 작은 수정은 `find_in_content_html(contents, <id>, "<preview에서 본 문구>")`로 고칠 부분만 소스로 들여다본다. `get_resource`로 html 전문을 받는 건 전체 재작성 때만(전체 재조회 금지).
 2. **content id·제목·(회차/시수/날짜/과정)** 을 **"열어둔 작업물"로 기억**(④에서 재검색 금지).
 3. 요청대로 html 수정. `practice-recipe.md` 규칙 유지: 외부 리소스 0, 마우스+터치, **시작 이름 필수**, **완료=저장 브리지([6.5], 인쇄 아님)**, 제목은 내용에 맞게(접두 없음), ~900KB.
 4. 수정본(또는 핵심 diff)을 보여주고 "**'올려줘'라고 하면 같은 자리에 바로 업데이트할게요**" 안내.
@@ -59,7 +59,7 @@
 1. ③에서 **열어둔 작업물의 content id**를 그대로 사용(모든 수업을 다시 뒤지지 않는다).
 2. **부분 수정이 기본**: 글자·버튼·버그 한두 군데면 `edit_content_html(contents, <기억한 id>, [{ find, replace }])` — 전체 HTML을 다시 보내지 말 것. find는 현재 html에 그대로(공백·따옴표 포함) 있어야 하고 유일해야 한다(여러 번이면 맥락을 더 넣거나 `replaceAll: true`). description도 바꾸려면 이어서 `update_resource(contents, <id>, { description })`.
    - **전체 재작성**(레이아웃 갈아엎기 등)일 때만 `update_resource(contents, <기억한 id>, { html: <수정본>, description })` — 부분 병합. 어느 쪽이든 id가 같아 날짜기록·회차 연결은 자동 유지(날짜기록이 id를 가리킴).
-3. 보고: 어떤 id를 무슨 과정/회차/시수로 갱신했는지. **publishedLessons 안 건드림**(학생 비공개 유지).
+3. 보고: 어떤 id를 무슨 과정/회차/시수로 갱신했는지 + **previewUrl**(강사가 새로고침해 결과 확인). **publishedLessons 안 건드림**(학생 비공개 유지).
 4. 새로 만든 경우만: `create_practice_content` 후, 그 커리큘럼을 쓰는 **각 반**의 그 날짜기록에 `upsert_lesson_record`로 contentIds **합집합** 추가(`curriculumId`·`curriculumSessionId` 연결).
 
 ---
