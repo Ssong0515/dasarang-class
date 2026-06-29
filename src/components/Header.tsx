@@ -8,6 +8,7 @@ import {
   Globe,
   Users,
   Menu,
+  ArrowUpRight,
 } from 'lucide-react';
 
 type AdminTab =
@@ -43,7 +44,6 @@ type NavItem = {
 };
 
 export const Header: React.FC<HeaderProps> = ({
-  user,
   activeTab = 'home',
   pendingShowcaseCount = 0,
   onTabChange,
@@ -96,17 +96,10 @@ export const Header: React.FC<HeaderProps> = ({
       onClick: () => onTabChange('student-showcase'),
       badge: pendingShowcaseCount,
     },
-    {
-      key: 'student-page',
-      label: '학생 페이지',
-      icon: <Users size={17} />,
-      isActive: false,
-      onClick: onSwitchToStudent,
-    },
   ];
 
   return (
-    <header className="flex h-16 shrink-0 items-center gap-2 border-b border-[#E5E3DD] bg-[#FBFBFA] px-3 sm:gap-3 sm:px-5">
+    <header className="flex h-16 shrink-0 items-center gap-2 border-b border-[#E5E3DD] bg-[#FBFBFA] px-3 sm:gap-3 sm:px-5 md:pl-0">
       {/* 모바일 햄버거 → 클래스 사이드바 드로어 */}
       {onToggleMobileNav && (
         <button
@@ -120,19 +113,24 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
       )}
 
-      {/* 로고 = 홈으로 */}
-      <button
-        type="button"
-        onClick={onGoHome}
-        title="홈으로"
-        aria-label="홈으로"
-        className="flex shrink-0 items-center gap-2.5"
-      >
-        <img src="/logo.svg" alt="다사랑 로고" className="h-9 w-9 rounded-xl" />
-      </button>
+      {/* 로고 + 서비스명 = 홈으로 (펼친 사이드바 너비에 맞춰 정렬) */}
+      <div className="flex shrink-0 items-center md:w-64 md:pl-3">
+        <button
+          type="button"
+          onClick={onGoHome}
+          title="홈 대시보드로"
+          aria-label="홈 대시보드로"
+          className="flex items-center gap-2.5 rounded-xl px-3 py-2 transition-all hover:bg-[#F3F2EE]"
+        >
+          <img src="/logo.svg" alt="다사랑 로고" className="h-9 w-9 shrink-0 rounded-xl" />
+          <span className="hidden whitespace-nowrap font-serif text-lg font-bold text-[#4A3728] sm:inline">
+            다사랑 클래스
+          </span>
+        </button>
+      </div>
 
       {/* 상단 네비게이션 (사이드바에서 옮겨온 메뉴들) */}
-      <nav className="flex min-w-0 flex-1 items-center justify-start gap-1 overflow-x-auto sm:justify-evenly">
+      <nav className="flex min-w-0 flex-1 items-center justify-start gap-1 overflow-x-auto sm:gap-2">
         {navItems.map((item) => {
           const hasBadge = typeof item.badge === 'number' && item.badge > 0;
           return (
@@ -165,30 +163,24 @@ export const Header: React.FC<HeaderProps> = ({
         })}
       </nav>
 
-      {/* 사용자 */}
-      <div className="flex shrink-0 items-center gap-3 border-l border-[#E5E3DD] pl-3">
+      {/* 학생 페이지로 이동 */}
+      <div className="flex shrink-0 items-center gap-2 border-l border-[#E5E3DD] pl-2 sm:pl-3">
         {DEV_BADGE && (
           <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-amber-600">
             DEV
           </span>
         )}
-        <span className="hidden text-sm font-bold text-[#4A3728] sm:inline">
-          {user?.displayName || user?.email || (DEV_BADGE ? 'Dev Admin' : '')}
-        </span>
-        <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl border-2 border-[#EBD9C1] bg-[#FFF5E9]">
-          {user?.photoURL ? (
-            <img
-              src={user.photoURL}
-              alt="Profile"
-              className="h-full w-full object-cover"
-              referrerPolicy="no-referrer"
-            />
-          ) : (
-            <span className="font-bold text-[#8B5E3C]">
-              {user?.email?.[0]?.toUpperCase() ?? (DEV_BADGE ? 'D' : '?')}
-            </span>
-          )}
-        </div>
+        <button
+          type="button"
+          onClick={onSwitchToStudent}
+          title="학생 페이지로 가기"
+          aria-label="학생 페이지로 가기"
+          className="flex items-center gap-1.5 rounded-xl bg-[#8B5E3C] px-3 py-2 text-sm font-bold text-white transition-all hover:bg-[#724D31] sm:px-4"
+        >
+          <Users size={17} />
+          <span className="hidden whitespace-nowrap sm:inline">학생 페이지</span>
+          <ArrowUpRight size={16} className="shrink-0" />
+        </button>
       </div>
     </header>
   );

@@ -43,6 +43,12 @@ export interface LessonContent {
   description: string;
   html: string;
   slideUrl?: string;
+  /**
+   * 이 실습 콘텐츠에 1:1로 묶인 이론 수업 자료 링크(강사 화면 전용).
+   * 콘텐츠에 저장하므로 같은 실습을 다른 반·날짜에 쓰면 이론이 자동으로 따라온다.
+   * (반별 수업 진행 상태는 classroomDateRecord에 따로 있어 동기화되지 않는다.)
+   */
+  theorySlideUrl?: string;
   createdAt: string;
   order?: number;
   sourceDriveFileId?: string;

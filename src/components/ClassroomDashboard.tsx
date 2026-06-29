@@ -112,6 +112,8 @@ interface ClassroomDashboardProps {
   onMoveStudent: (sourceClassroomId: string, targetClassroomId: string, studentId: string) => Promise<void>;
   onSaveDateRecord: (record: ClassroomDateRecord) => void;
   onDeleteDateRecord: (recordId: string) => void;
+  /** 실습 콘텐츠에 묶인 이론 자료 링크(theorySlideUrl) 저장용. 콘텐츠 문서에 merge 저장된다. */
+  onSaveContent?: (content: Partial<LessonContent>) => Promise<LessonContent>;
   onUpdatePublishedLesson?: (
     classroomId: string,
     classroomName: string,
@@ -360,6 +362,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   onMoveStudent,
   onSaveDateRecord,
   onDeleteDateRecord,
+  onSaveContent,
   onUpdatePublishedLesson,
   onEndLesson,
   onUpdateClassroom,
@@ -1137,6 +1140,23 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       idx === index ? { ...item, slideUrl: '' } : item
     );
     onSaveDateRecord({ ...currentDateRecord, theoryPrompts: nextPrompts });
+  };
+
+  // 이론 자료 링크를 "실습 콘텐츠"에 저장한다. 콘텐츠에 묶이므로 같은 실습을 쓰는 모든 반·날짜에 자동으로 따라온다.
+  // (categoryId·createdAt 등이 기본값으로 덮어써지지 않도록 콘텐츠 전체를 스프레드해서 넘긴다.)
+  const handleSetContentTheorySlide = (content: LessonContent, rawUrl: string) => {
+    const url = toSlideEmbedUrl(rawUrl.trim());
+    if (!url || !onSaveContent) return;
+    void onSaveContent({ ...content, theorySlideUrl: url });
+    setSlideInputPromptIndex(null);
+    setSlideInputValue('');
+  };
+
+  // 콘텐츠에 묶인 이론 자료 링크 제거. 구버전(날짜기록에 붙인) 링크가 있으면 폴백으로 되살아나지 않도록 같이 지운다.
+  const handleClearContentTheorySlide = (content: LessonContent, index: number) => {
+    if (onSaveContent) void onSaveContent({ ...content, theorySlideUrl: '' });
+    const legacy = effectiveTheoryPrompts[index]?.slideUrl;
+    if (legacy && legacy.trim()) handleClearTheoryPromptSlide(index);
   };
 
   const handlePickTheorySlide = async () => {
@@ -1941,14 +1961,17 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                     <div className="space-y-2">
                       {recordedPracticeContents.map((content, index) => {
                         const isPublished = publishedContentIdSet.has(content.id);
-                        // 실습 항목 i ↔ 이론 프롬프트 i (순서 매칭). 매칭되는 프롬프트가 있을 때만 이론 컨트롤 노출.
+                        // 이론 프롬프트(복사·수정)는 시수 순서(index)로 매칭. 자료 링크는 콘텐츠에 묶여 별도.
                         const matchedPrompt = effectiveTheoryPrompts[index];
                         const isCopied = copiedPromptIndex === index;
-                        const storedSlide = matchedPrompt?.slideUrl;
-                        const promptSlideUrl =
-                          storedSlide !== undefined && storedSlide !== null
-                            ? storedSlide.trim()
+                        // 이론 자료 링크: 콘텐츠에 묶인 theorySlideUrl을 우선 사용하고,
+                        // 없으면 구버전(날짜기록 프롬프트/슬라이드)에서 폴백해 보여준다.
+                        const legacyStored = matchedPrompt?.slideUrl;
+                        const legacySlideUrl =
+                          legacyStored !== undefined && legacyStored !== null
+                            ? legacyStored.trim()
                             : effectiveTheorySlides[index]?.url?.trim() ?? '';
+                        const promptSlideUrl = content.theorySlideUrl?.trim() || legacySlideUrl;
                         const hasSlide = promptSlideUrl.length > 0;
                         const isSlideInputOpen = slideInputPromptIndex === index;
                         return (
@@ -1997,48 +2020,50 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                                     >
                                       <Edit3 size={14} />
                                     </button>
-                                    {hasSlide ? (
-                                      <>
-                                        <a
-                                          href={toSlidePresentUrl(promptSlideUrl)}
-                                          target="_blank"
-                                          rel="noreferrer"
-                                          title="이론 수업 자료 열기"
-                                          aria-label="이론 수업 자료 열기"
-                                          className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[#CFE0FF] bg-[#EAF2FF] text-[#2F5EA8] transition-all hover:bg-[#D6E6FF]"
-                                        >
-                                          <ExternalLink size={14} />
-                                        </a>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleClearTheoryPromptSlide(index)}
-                                          title="이론 자료 링크 제거"
-                                          aria-label="이론 자료 링크 제거"
-                                          className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[#E5E3DD] bg-white text-[#B7AFA4] transition-all hover:border-[#D9534F] hover:text-[#D9534F]"
-                                        >
-                                          <X size={14} />
-                                        </button>
-                                      </>
-                                    ) : (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setSlideInputPromptIndex(isSlideInputOpen ? null : index);
-                                          setSlideInputValue('');
-                                        }}
-                                        title="이론 자료 링크 추가"
-                                        aria-label="이론 자료 링크 추가"
-                                        className={`inline-flex h-8 w-8 items-center justify-center rounded-xl border transition-all ${
-                                          isSlideInputOpen
-                                            ? 'border-[#8B5E3C] bg-[#FFF5E9] text-[#8B5E3C]'
-                                            : 'border-[#E5E3DD] bg-white text-[#8B7E74] hover:border-[#8B5E3C] hover:text-[#8B5E3C]'
-                                        }`}
-                                      >
-                                        <Plus size={14} />
-                                      </button>
-                                    )}
                                   </>
                                 )}
+                                {/* 이론 자료 링크 — 실습 콘텐츠에 묶이므로 프롬프트 유무와 무관하게 모든 실습행에서 다룬다. */}
+                                {onSaveContent &&
+                                  (hasSlide ? (
+                                    <>
+                                      <a
+                                        href={toSlidePresentUrl(promptSlideUrl)}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        title="이론 수업 자료 열기"
+                                        aria-label="이론 수업 자료 열기"
+                                        className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[#CFE0FF] bg-[#EAF2FF] text-[#2F5EA8] transition-all hover:bg-[#D6E6FF]"
+                                      >
+                                        <ExternalLink size={14} />
+                                      </a>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleClearContentTheorySlide(content, index)}
+                                        title="이론 자료 링크 제거"
+                                        aria-label="이론 자료 링크 제거"
+                                        className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[#E5E3DD] bg-white text-[#B7AFA4] transition-all hover:border-[#D9534F] hover:text-[#D9534F]"
+                                      >
+                                        <X size={14} />
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSlideInputPromptIndex(isSlideInputOpen ? null : index);
+                                        setSlideInputValue('');
+                                      }}
+                                      title="이론 자료 링크 추가"
+                                      aria-label="이론 자료 링크 추가"
+                                      className={`inline-flex h-8 w-8 items-center justify-center rounded-xl border transition-all ${
+                                        isSlideInputOpen
+                                          ? 'border-[#8B5E3C] bg-[#FFF5E9] text-[#8B5E3C]'
+                                          : 'border-[#E5E3DD] bg-white text-[#8B7E74] hover:border-[#8B5E3C] hover:text-[#8B5E3C]'
+                                      }`}
+                                    >
+                                      <Plus size={14} />
+                                    </button>
+                                  ))}
                                 <button
                                   onClick={() => handleTogglePublishContent(content)}
                                   className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
@@ -2062,12 +2087,12 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                               </div>
                             </div>
 
-                            {matchedPrompt && isSlideInputOpen && !hasSlide && (
+                            {onSaveContent && isSlideInputOpen && !hasSlide && (
                               <form
                                 onSubmit={(event) => {
                                   event.preventDefault();
                                   if (!slideInputValue.trim()) return;
-                                  handleSetTheoryPromptSlide(index, slideInputValue);
+                                  handleSetContentTheorySlide(content, slideInputValue);
                                 }}
                                 className="mt-2 flex items-center gap-2"
                               >

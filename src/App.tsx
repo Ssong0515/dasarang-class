@@ -790,11 +790,19 @@ export default function App() {
               ? {
                   theoryPrompts: data.theoryPrompts
                     .filter((entry) => entry && typeof entry.prompt === 'string' && entry.prompt.trim())
-                    .map((entry): { prompt: string; label?: string } =>
-                      typeof entry.label === 'string' && entry.label.trim()
-                        ? { prompt: entry.prompt, label: entry.label.trim() }
-                        : { prompt: entry.prompt }
-                    ),
+                    .map((entry): { prompt: string; label?: string; slideUrl?: string } => {
+                      const normalized: { prompt: string; label?: string; slideUrl?: string } = {
+                        prompt: entry.prompt,
+                      };
+                      if (typeof entry.label === 'string' && entry.label.trim()) {
+                        normalized.label = entry.label.trim();
+                      }
+                      // 시수에 붙인 이론 자료 링크. 빼먹으면 스냅샷·새로고침마다 사라진다('' 해제 상태도 보존).
+                      if (typeof entry.slideUrl === 'string') {
+                        normalized.slideUrl = entry.slideUrl.trim();
+                      }
+                      return normalized;
+                    }),
                 }
               : {}),
             ...(typeof data.curriculumId === 'string' && data.curriculumId.trim()
@@ -858,6 +866,8 @@ export default function App() {
           description: data.description ?? '',
           html: data.html ?? '',
           slideUrl: data.slideUrl ?? '',
+          // 실습에 묶인 이론 자료 링크. 빼먹으면 스냅샷마다 사라지므로 반드시 보존한다.
+          ...(typeof data.theorySlideUrl === 'string' ? { theorySlideUrl: data.theorySlideUrl } : {}),
           createdAt: data.createdAt ?? new Date(0).toISOString(),
           order: hasNumericOrder(data.order) ? data.order : undefined,
           sourceDriveFileId: data.sourceDriveFileId,
@@ -1489,6 +1499,7 @@ export default function App() {
       description,
       html: content.html ?? '',
       slideUrl: content.slideUrl ?? '',
+      ...(typeof content.theorySlideUrl === 'string' ? { theorySlideUrl: content.theorySlideUrl } : {}),
       createdAt,
       order,
       sourceDriveFileId: content.sourceDriveFileId,
@@ -1908,6 +1919,7 @@ export default function App() {
               onMoveStudent={handleMoveStudent}
               onSaveDateRecord={handleSaveClassroomDateRecord}
               onDeleteDateRecord={handleDeleteClassroomDateRecord}
+              onSaveContent={handleSaveContent}
               onUpdatePublishedLesson={handleUpdatePublishedLesson}
               onEndLesson={handleEndLesson}
               onUpdateClassroom={handleUpdateClassroom}

@@ -86,7 +86,13 @@ const MonthlyEarningsCalendar: React.FC<{
     const record = recordByKey.get(`${classroomId}_${dateStr}`);
     if (!record) return { theoryReady: false, practiceReady: false };
     const theoryReady =
+      // 이론은 실습 콘텐츠에 묶인다 — 그날 배정된 콘텐츠 중 하나라도 theorySlideUrl이 있으면 '이론 준비됨'.
+      (record.contentIds || []).some((id) =>
+        Boolean(contentsById.get(id)?.theorySlideUrl?.trim())
+      ) ||
+      // 구버전 폴백: 날짜기록에 직접 붙어 있던 이론 슬라이드/프롬프트 링크.
       (record.theorySlides?.some((slide) => slide.url && slide.url.trim()) ?? false) ||
+      (record.theoryPrompts?.some((prompt) => prompt.slideUrl && prompt.slideUrl.trim()) ?? false) ||
       Boolean(record.theorySlideUrl && record.theorySlideUrl.trim());
     const practiceReady = (record.contentIds || []).some((id) => {
       const content = contentsById.get(id);
@@ -144,27 +150,6 @@ const MonthlyEarningsCalendar: React.FC<{
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          {/* 수업 달력 ↔ 강사비 달력 전환 */}
-          <div className="inline-flex rounded-xl border border-[#E5E3DD] bg-[#FBFBFA] p-0.5">
-            <button
-              type="button"
-              onClick={() => setMode('class')}
-              className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
-                mode === 'class' ? 'bg-white text-[#8B5E3C] shadow-sm' : 'text-[#8B7E74] hover:text-[#4A3728]'
-              }`}
-            >
-              수업 달력
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode('income')}
-              className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
-                mode === 'income' ? 'bg-white text-[#8B5E3C] shadow-sm' : 'text-[#8B7E74] hover:text-[#4A3728]'
-              }`}
-            >
-              강사비
-            </button>
-          </div>
           <div className="flex items-center gap-2">
             <button
               onClick={goToday}
@@ -254,10 +239,15 @@ const MonthlyEarningsCalendar: React.FC<{
       </div>
       )}
 
-      {/* 달력 */}
+      {/* 달력 — 더블클릭하면 강사비 달력 ↔ 수업 달력 전환 (평소엔 강사비를 숨겨 둔다) */}
+      <div
+        onDoubleClick={() => setMode((current) => (current === 'income' ? 'class' : 'income'))}
+        title="달력을 더블클릭하면 강사비 달력으로 전환됩니다"
+        className="select-none"
+      >
       <div className="mb-2 grid grid-cols-7 gap-1">
         {EARNINGS_WEEKDAYS.map((weekday) => (
-          <div key={weekday} className="py-1 text-center text-[11px] font-bold text-[#A89F94]">
+          <div key={weekday} className="py-1.5 text-center text-[13px] font-bold text-[#6C6258] sm:text-sm">
             {weekday}
           </div>
         ))}
@@ -282,8 +272,8 @@ const MonthlyEarningsCalendar: React.FC<{
               }`}
             >
               <span
-                className={`text-[11px] font-bold leading-none ${
-                  isToday ? 'text-[#2F5EA8]' : 'text-[#8B7E74]'
+                className={`text-sm font-bold leading-none sm:text-base ${
+                  isToday ? 'text-[#2F5EA8]' : 'text-[#4A3728]'
                 }`}
               >
                 {dayNum}
@@ -382,6 +372,7 @@ const MonthlyEarningsCalendar: React.FC<{
             </div>
           );
         })}
+      </div>
       </div>
 
       {/* 클래스별 범례 — 색점이 어느 반인지 안내 (강사비는 단가 설정 시 곁들임) */}

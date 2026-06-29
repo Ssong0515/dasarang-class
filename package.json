@@ -14,7 +14,8 @@
     "migrate-classroom-domain": "node scripts/migrateClassroomDomain.mjs",
     "migrate-global-students": "node scripts/migrateStudentsToGlobalCollection.mjs",
     "clear-legacy-lesson-content-links": "node scripts/clearLegacyLessonContentLinks.mjs",
-    "delete-legacy-lessons": "node scripts/deleteLegacyLessons.mjs"
+    "delete-legacy-lessons": "node scripts/deleteLegacyLessons.mjs",
+    "migrate-theory-slides-to-contents": "node scripts/migrateTheorySlidesToContents.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
