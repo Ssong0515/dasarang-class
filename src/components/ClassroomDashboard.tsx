@@ -85,7 +85,7 @@ import {
 } from '../utils/students';
 import { isAttendanceExcluded } from '../utils/attendance';
 import { deleteField } from '../firebase';
-import { formatWon, getPerSessionFee, getSessionFee, getSessionHours } from '../utils/fee';
+import { formatWon, getPerSessionFee, getSessionFee } from '../utils/fee';
 import { openDriveSlidePicker } from '../utils/drivePicker';
 import { SlideEmbed, StudentContentPreviewFrame } from './StudentContentPreview';
 import { SessionDetailModal } from './SessionDetailModal';
@@ -301,14 +301,16 @@ const DashboardInfoTooltip: React.FC<{
 
 // 좁은 폭(모바일/태블릿, <lg=1024px) 여부. Tailwind lg와 맞춘다.
 const NARROW_MEDIA_QUERY = '(max-width: 1023px)';
-const useIsNarrow = (): boolean => {
-  const [isNarrow, setIsNarrow] = useState<boolean>(() =>
-    typeof window !== 'undefined' ? window.matchMedia(NARROW_MEDIA_QUERY).matches : false
+// 아주 좁은 폭(폰). 이보다 좁으면 한 달치 달력을 카드에 펼치기엔 비좁아 팝업으로 떨어뜨린다.
+const VERY_NARROW_MEDIA_QUERY = '(max-width: 639px)';
+const useMediaQuery = (query: string): boolean => {
+  const [matches, setMatches] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.matchMedia(query).matches : false
   );
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const mq = window.matchMedia(NARROW_MEDIA_QUERY);
-    const handler = () => setIsNarrow(mq.matches);
+    const mq = window.matchMedia(query);
+    const handler = () => setMatches(mq.matches);
     handler();
     if (typeof mq.addEventListener === 'function') {
       mq.addEventListener('change', handler);
@@ -316,8 +318,8 @@ const useIsNarrow = (): boolean => {
     }
     mq.addListener(handler);
     return () => mq.removeListener(handler);
-  }, []);
-  return isNarrow;
+  }, [query]);
+  return matches;
 };
 
 /**
@@ -458,7 +460,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const [slideInputPromptIndex, setSlideInputPromptIndex] = useState<number | null>(null);
   const [slideInputValue, setSlideInputValue] = useState('');
   // 좁은 폭(모바일/태블릿, <lg)에서는 날짜상태·캘린더·출석·메모를 타일+팝업으로 보여준다.
-  const isNarrow = useIsNarrow();
+  const isNarrow = useMediaQuery(NARROW_MEDIA_QUERY);
+  const isVeryNarrow = useMediaQuery(VERY_NARROW_MEDIA_QUERY);
   // 이론 프롬프트 보기·수정 팝업: 열린 프롬프트 index와 편집 중 본문.
   const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null);
   const [promptDraft, setPromptDraft] = useState('');
@@ -523,13 +526,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const currentDateStatus: CurriculumSessionStatus = currentSessionId
     ? classroom.sessionStates?.[currentSessionId]?.status || 'planned'
     : 'planned';
-  // 선택한 회차의 상태 객체(시수 덮어쓰기 포함)와, 그 회차의 실제 시수·강사비.
-  const currentSessionState = currentSessionId
-    ? classroom.sessionStates?.[currentSessionId]
-    : undefined;
-  const currentSessionHours = getSessionHours(classroom, currentSessionState);
-  const currentSessionFee = getSessionFee(classroom, currentSessionState);
-  const hasSessionHoursOverride = currentSessionState?.hours != null;
   const isDateSkipped = Boolean(currentSessionId) && currentDateStatus === 'skipped';
   // 기록 영역 열림 규칙:
   // - 회차(자동 배정) 날짜 → 기본 '예정'이라 열림, '건너뜀'일 때만 닫힘. (완료도 열림)
@@ -814,7 +810,9 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   }, [loadCalendarClasses, onUpdateClassroom, classroom.calendarClassId, classroom.id, classroom.organization]);
 
   useEffect(() => {
-    if (activeTab !== 'curriculum') {
+    // 커리큘럼 탭(시간표 연결)뿐 아니라 대시보드 탭에서도 시간표를 불러온다.
+    // 수업 달력 셀에 그 날짜의 수업 시작 시각을 보여주려면 연결된 시간표가 필요하다.
+    if (activeTab !== 'curriculum' && activeTab !== 'dashboard') {
       return;
     }
     void loadCalendarClasses();
@@ -828,6 +826,20 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const linkedCalendarClass = useMemo(
     () => calendarClasses.find((calendarClass) => calendarClass.id === classroom.calendarClassId) || null,
     [calendarClasses, classroom.calendarClassId]
+  );
+
+  // 달력 셀에 보여줄 수업 시간. 연결된 참고 시간표에서 그 날짜의 요일에 맞는 일정의 시작 시각을 찾는다.
+  // 시간표 days는 0=월…5=토(DOW_LABELS) 기준이라 JS getDay()(0=일)를 (getDay()+6)%7로 변환한다.
+  const getScheduleStartForDate = useCallback(
+    (date: Date): string | null => {
+      if (!linkedCalendarClass) return null;
+      const dow = (date.getDay() + 6) % 7;
+      const match = linkedCalendarClass.schedules.find(
+        (schedule) => (schedule.days || []).includes(dow) && schedule.start
+      );
+      return match?.start || null;
+    },
+    [linkedCalendarClass]
   );
 
   const sortedCurriculumSessions = useMemo(
@@ -1086,22 +1098,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
         playFeeChime();
       }
     }
-  };
-
-  // 이 회차만의 시수를 덮어쓴다(오리엔테이션 1시수 등). null이면 덮어쓰기를 지워 반 기본값으로 되돌린다.
-  const setSessionHours = (hours: number | null) => {
-    if (!currentSessionId || !onUpdateClassroom) return;
-    const states: Record<string, { date?: string; status?: CurriculumSessionStatus; hours?: number }> = {
-      ...(classroom.sessionStates || {}),
-    };
-    const prev = states[currentSessionId] || {};
-    if (hours == null || !Number.isFinite(hours) || hours <= 0) {
-      const { hours: _drop, ...rest } = prev;
-      states[currentSessionId] = rest;
-    } else {
-      states[currentSessionId] = { ...prev, hours };
-    }
-    onUpdateClassroom(classroom.id, { sessionStates: states });
   };
 
   const toggleAssignmentCard = () => {
@@ -1638,8 +1634,15 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   };
 
   const renderDashboardTab = () => {
-    // 선택한 날짜에 매칭되는 커리큘럼 회차 (날짜 상태 카드의 회차 칩 표시용)
-    const linkedSessionForDate = plannedSessionsByDate.get(selectedDate)?.[0] || null;
+    // 선택한 날짜의 수업 시작 시각 (연결된 시간표 기준). 날짜 상태 카드에서 날짜 칩 옆에 보여준다.
+    const [selYear, selMonth, selDay] = selectedDate.split('-').map(Number);
+    const selectedDateStartTime =
+      selYear && selMonth && selDay
+        ? getScheduleStartForDate(new Date(selYear, selMonth - 1, selDay))
+        : null;
+    // 아주 좁은 폭(폰)에서 수업 달력을 한 달치 대신 '오늘'만 보여주는 위젯용 값.
+    const todayDate = new Date();
+    const todayStr = getLocalDateString(todayDate);
     const assignmentTooltipText =
       '학생 페이지에는 여기에서 배정한 콘텐츠만 보입니다. 날짜를 바꿔도 이 목록은 달라지지 않습니다.';
     const dateStatusTooltipText =
@@ -1843,7 +1846,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
           desktopClassName="rounded-[32px] border border-[#E5E3DD] bg-white p-6 shadow-sm sm:p-8 lg:max-w-xl"
           tileClassName="order-1 col-span-1"
           alwaysExpanded
-          narrowClassName="order-1 col-span-2"
+          narrowClassName="order-1 col-span-1"
         >
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="space-y-3">
@@ -1859,15 +1862,16 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 <span className="rounded-full bg-[#FFF5E9] px-4 py-2 text-xs font-bold text-[#8B5E3C]">
                   {selectedDate}
                 </span>
-                {linkedSessionForDate && (
-                  <span className="rounded-full bg-[#FBF4EA] px-4 py-2 text-xs font-bold text-[#8B5E3C]">
-                    {linkedSessionForDate.order}회차 · {linkedSessionForDate.topic || '주제 미정'}
+                {(currentSessionId || isCurrentDateActive) && selectedDateStartTime && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-[#FBF4EA] px-4 py-2 text-xs font-bold text-[#B07A3F]">
+                    <Clock size={12} />
+                    {selectedDateStartTime}
                   </span>
                 )}
               </div>
             </div>
             {currentSessionId ? (
-              <div className="relative inline-flex shrink-0 rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] p-1">
+              <div className="relative flex w-full flex-row gap-1 rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] p-1 max-[639px]:flex-col lg:inline-flex lg:w-auto lg:shrink-0 lg:gap-0">
                 {STATUS_SEGMENTS.map((segment) => {
                   const SegmentIcon = segment.icon;
                   const isActive = currentDateStatus === segment.value;
@@ -1875,7 +1879,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                     <button
                       key={segment.value}
                       onClick={() => setDateStatus(segment.value)}
-                      className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-bold transition-all ${
+                      className={`flex flex-1 items-center justify-center gap-1 rounded-xl px-2.5 py-2 text-sm font-bold transition-all lg:w-auto lg:flex-none lg:justify-start lg:gap-1.5 lg:px-4 ${
                         isActive ? segment.activeClass : 'text-[#8B7E74] hover:bg-[#F3F2EE]'
                       }`}
                     >
@@ -1916,52 +1920,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               </button>
             )}
           </div>
-
-          {/* 이 회차의 시수·강사비. 평소(반 기본)와 다른 날(오리엔테이션 등)만 회차별로 시수를 덮어쓴다. */}
-          {currentSessionId && Number(classroom.feePerHour) > 0 && (
-            <div className="mt-4 rounded-2xl border border-[#E0EFE4] bg-[#F4FAF6] p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <Coins size={16} className="shrink-0 text-[#2D7A4D]" />
-                  <span className="text-sm font-bold text-[#2D7A4D]">이 수업 강사비</span>
-                  <span className="text-base font-extrabold text-[#2D7A4D]">
-                    {formatWon(currentSessionFee)}
-                  </span>
-                  <span className="text-xs text-[#6B8E7A]">
-                    ({formatWon(Number(classroom.feePerHour))} × {currentSessionHours}시수 ·{' '}
-                    {hasSessionHoursOverride ? '이 날만' : '반 기본'})
-                  </span>
-                </div>
-                <div className="flex items-center gap-1">
-                  {[1, 2, 3].map((hour) => (
-                    <button
-                      key={hour}
-                      onClick={() => setSessionHours(hour)}
-                      className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
-                        currentSessionHours === hour
-                          ? 'bg-[#2D7A4D] text-white shadow-sm'
-                          : 'bg-white text-[#6B8E7A] hover:bg-[#E7F3EB]'
-                      }`}
-                    >
-                      {hour}시수
-                    </button>
-                  ))}
-                  {hasSessionHoursOverride && (
-                    <button
-                      onClick={() => setSessionHours(null)}
-                      className="rounded-lg px-3 py-1.5 text-xs font-bold text-[#8B7E74] transition-all hover:bg-[#EFEDE8]"
-                    >
-                      기본값
-                    </button>
-                  )}
-                </div>
-              </div>
-              <p className="mt-2 text-[10px] text-[#A89F94]">
-                이 날 시수를 바꾸면 이 회차 강사비만 따로 잡혀요. (오리엔테이션처럼 평소와 시수가 다른
-                날에 쓰세요. 평소 시수는 클래스 설정에서 바꿉니다.)
-              </p>
-            </div>
-          )}
         </ResponsiveCardOrPopup>
 
         {editingPromptIndex !== null && (
@@ -2596,38 +2554,38 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
             summary={selectedDate}
             desktopClassName="rounded-[32px] border border-[#E5E3DD] bg-white p-6 shadow-sm"
             tileClassName="order-2 col-span-1"
+            alwaysExpanded
+            narrowClassName="order-2 col-span-1"
           >
-            <div className="mb-6 flex items-start justify-between gap-3">
+            {isVeryNarrow ? (
+              // 아주 좁은 폭: 한 달치 대신 '오늘'만 보여주는 컴팩트 캘린더 위젯 (탭하면 오늘로 이동)
+              <button
+                type="button"
+                onClick={() => setSelectedDate(todayStr)}
+                className="flex w-full flex-col items-center gap-2 rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] p-4 text-center transition-all hover:border-[#8B5E3C] hover:shadow-sm"
+              >
+                <div className="flex h-16 w-16 flex-col items-center justify-center rounded-2xl bg-[#2F5EA8] text-white shadow-md shadow-[#2F5EA8]/25">
+                  <span className="text-[11px] font-bold leading-none">{todayDate.getMonth() + 1}월</span>
+                  <span className="text-2xl font-extrabold leading-tight">{todayDate.getDate()}</span>
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-[#4A3728]">
+                    오늘 · {weekDays[todayDate.getDay()]}요일
+                  </p>
+                  <p className="text-[11px] font-bold text-[#A89F94]">
+                    {todayDate.getFullYear()}년 {todayDate.getMonth() + 1}월 {todayDate.getDate()}일
+                  </p>
+                </div>
+              </button>
+            ) : (
+            <>
+            <div className="mb-4 flex items-start justify-between gap-3 lg:mb-6">
               <div className="space-y-2">
                 <h3 className="flex items-center gap-2 text-lg font-bold text-[#4A3728]">
                   <Calendar className="text-[#8B5E3C]" size={18} />
                   {viewMonth.getFullYear()}년 {viewMonth.getMonth() + 1}월
                   <DashboardInfoTooltip content={calendarTooltipText} label="캘린더 설명 보기" />
                 </h3>
-                <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
-                  <span className="rounded-full bg-[#FFF5E9] px-3 py-1.5 text-[#8B5E3C]">
-                    {selectedDate}
-                  </span>
-                  <span
-                    className={`rounded-full px-3 py-1.5 ${
-                      currentSessionId
-                        ? currentDateStatus === 'planned'
-                          ? 'bg-[#EAF7EE] text-[#2D7A4D]'
-                          : currentDateStatus === 'done'
-                            ? 'bg-[#EFEDE8] text-[#6B625A]'
-                            : 'bg-[#EFEDE8] text-[#B7AFA4] line-through'
-                        : isCurrentDateActive
-                          ? 'bg-[#EEF7F0] text-[#2D7A4D]'
-                          : 'bg-[#F3F2EE] text-[#8B7E74]'
-                    }`}
-                  >
-                    {currentSessionId
-                      ? SESSION_STATUS_LABELS[currentDateStatus]
-                      : isCurrentDateActive
-                        ? '활성'
-                        : '비활성'}
-                  </span>
-                </div>
               </div>
               <div className="flex gap-1">
                 <button
@@ -2650,7 +2608,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
             </div>
 
             <div className="mx-auto w-full max-w-[340px]">
-            <div className="mb-2 grid grid-cols-7 gap-1.5">
+            <div className="mb-2 grid grid-cols-7 gap-1 lg:gap-1.5">
               {weekDays.map((day) => (
                 <div key={day} className="py-1 text-center text-[10px] font-bold text-[#A89F94]">
                   {day}
@@ -2658,7 +2616,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               ))}
             </div>
 
-            <div className="grid grid-cols-7 gap-1.5">
+            <div className="grid grid-cols-7 gap-1 lg:gap-1.5">
               {calendarDays.map((date, idx) => {
                 if (!date) {
                   return <div key={`empty-${idx}`} className="h-11" />;
@@ -2722,6 +2680,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               })}
             </div>
             </div>
+            </>
+            )}
           </ResponsiveCardOrPopup>
 
           {isDateOpen ? (
