@@ -9,3 +9,4 @@ coverage/
 !.env.example
 scripts/classroom-domain-audit.json
 scripts/theory-slides-migration-audit.json
+.mcp.json
