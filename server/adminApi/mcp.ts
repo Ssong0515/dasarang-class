@@ -372,6 +372,16 @@ export const handleMcpPostRequest: express.RequestHandler = async (req, res) => 
       // 기존 세션 재사용
       transport = transports[sessionId];
       touchSession(sessionId);
+    } else if (sessionId) {
+      // 세션ID는 왔는데 서버가 모른다 = 재배포/재시작으로 메모리 세션이 소실됨(매 배포마다 발생).
+      // MCP 스펙: 만료된 세션ID 요청에는 404를 줘야 클라이언트가 새 initialize로 자동 재연결한다.
+      // (400을 주면 클라가 하드 에러로 처리해 재연결하지 않아 배포 후 MCP가 죽은 채로 남았다.)
+      res.status(404).json({
+        jsonrpc: '2.0',
+        error: { code: -32001, message: 'Session not found: 세션이 만료되었습니다. 다시 initialize 하세요.' },
+        id: null,
+      });
+      return;
     } else if (!sessionId && isInitializeRequest(req.body)) {
       // 새 세션 시작: initialize 요청에만 transport를 생성한다.
       transport = new StreamableHTTPServerTransport({
@@ -421,10 +431,19 @@ const handleMcpSessionRequest: express.RequestHandler = async (req, res) => {
     return;
   }
   const sessionId = req.headers['mcp-session-id'] as string | undefined;
-  if (!sessionId || !transports[sessionId]) {
+  if (!sessionId) {
     res.status(400).json({
       jsonrpc: '2.0',
-      error: { code: -32000, message: 'Bad Request: 유효한 Mcp-Session-Id가 없습니다.' },
+      error: { code: -32000, message: 'Bad Request: Mcp-Session-Id 헤더가 필요합니다.' },
+      id: null,
+    });
+    return;
+  }
+  if (!transports[sessionId]) {
+    // 재배포로 소실된 세션. 404로 알려 클라이언트가 새 세션을 시작하게 한다(스펙 준수).
+    res.status(404).json({
+      jsonrpc: '2.0',
+      error: { code: -32001, message: 'Session not found: 세션이 만료되었습니다. 다시 initialize 하세요.' },
       id: null,
     });
     return;
