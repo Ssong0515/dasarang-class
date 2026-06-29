@@ -152,6 +152,12 @@ export interface ClassroomSessionState {
   date?: string;
   /** 이 반에서의 회차 진행 상태. 없으면 'planned'. */
   status?: CurriculumSessionStatus;
+  /**
+   * 이 회차(수업일)만의 시수. 비우면 반 기본값(`hoursPerSession`, 없으면 1)을 쓴다.
+   * 오리엔테이션처럼 평소(예: 2시수)와 시수가 다른 날에 회차별로 덮어쓴다.
+   * 강사비는 `feePerHour × (이 값 ?? hoursPerSession ?? 1)`로 회차마다 따로 계산한다.
+   */
+  hours?: number;
 }
 
 export interface Classroom {

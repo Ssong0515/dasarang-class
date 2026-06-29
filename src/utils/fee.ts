@@ -1,4 +1,4 @@
-import { Classroom, CurriculumSessionStatus } from '../types';
+import { Classroom, ClassroomSessionState, CurriculumSessionStatus } from '../types';
 
 /**
  * 강사비(수업료) 집계 유틸.
@@ -17,6 +17,31 @@ export const getPerSessionFee = (
   const hoursRaw = Number(classroom.hoursPerSession);
   const hours = Number.isFinite(hoursRaw) && hoursRaw > 0 ? hoursRaw : 1;
   return Math.round(rate * hours);
+};
+
+/**
+ * 한 회차의 실제 시수.
+ * 회차별 덮어쓴 값(`state.hours`)이 있으면 그걸, 없으면 반 기본(`hoursPerSession`),
+ * 그것도 없으면 1을 쓴다. 오리엔테이션(1시수)과 평소(2시수)가 한 반 안에서 섞일 때 쓴다.
+ */
+export const getSessionHours = (
+  classroom: Pick<Classroom, 'hoursPerSession'>,
+  state?: Pick<ClassroomSessionState, 'hours'> | null
+): number => {
+  const override = Number(state?.hours);
+  if (Number.isFinite(override) && override > 0) return override;
+  const base = Number(classroom.hoursPerSession);
+  return Number.isFinite(base) && base > 0 ? base : 1;
+};
+
+/** 한 회차의 강사비(원) = 시수 단가 × 그 회차의 시수(회차별 덮어쓴 값 우선). 단가가 없으면 0. */
+export const getSessionFee = (
+  classroom: Pick<Classroom, 'feePerHour' | 'hoursPerSession'>,
+  state?: Pick<ClassroomSessionState, 'hours'> | null
+): number => {
+  const rate = Number(classroom.feePerHour);
+  if (!Number.isFinite(rate) || rate <= 0) return 0;
+  return Math.round(rate * getSessionHours(classroom, state));
 };
 
 /**
@@ -117,7 +142,6 @@ export const buildMonthEarnings = (
   let scheduledCount = 0;
 
   for (const classroom of classrooms) {
-    const fee = getPerSessionFee(classroom);
     const states = classroom.sessionStates || {};
     let cEarned = 0;
     let cExpected = 0;
@@ -128,6 +152,8 @@ export const buildMonthEarnings = (
       const date = state?.date;
       if (!date || !date.startsWith(prefix)) continue;
       const status: CurriculumSessionStatus = state?.status || 'planned';
+      // 회차마다 시수가 다를 수 있어(오리엔테이션 1시수 vs 평소 2시수) 회차별로 강사비를 계산한다.
+      const fee = getSessionFee(classroom, state);
 
       let day = byDate.get(date);
       if (!day) {

@@ -85,7 +85,7 @@ import {
 } from '../utils/students';
 import { isAttendanceExcluded } from '../utils/attendance';
 import { deleteField } from '../firebase';
-import { formatWon, getPerSessionFee } from '../utils/fee';
+import { formatWon, getPerSessionFee, getSessionFee, getSessionHours } from '../utils/fee';
 import { openDriveSlidePicker } from '../utils/drivePicker';
 import { SlideEmbed, StudentContentPreviewFrame } from './StudentContentPreview';
 import { SessionDetailModal } from './SessionDetailModal';
@@ -137,6 +137,42 @@ interface ClassroomDashboardProps {
 type Tab = 'dashboard' | 'results' | 'students' | 'curriculum' | 'settings';
 
 const DOW_LABELS = ['월', '화', '수', '목', '금', '토'];
+
+// 회차를 '완료'로 누른 순간 울리는 "띠링~" 동전 효과음. (Web Audio, 짧은 두 음 상승)
+// 오디오 미지원·사용자 제스처 차단 등으로 실패하면 조용히 무시한다(시각 효과만 남음).
+let sharedAudioCtx: AudioContext | null = null;
+const playFeeChime = () => {
+  try {
+    const AudioCtx =
+      window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+    if (!sharedAudioCtx) sharedAudioCtx = new AudioCtx();
+    const ctx = sharedAudioCtx;
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    const start = ctx.currentTime;
+    // 띠링: E6 → A6 빠르게 (동전 먹는 듯한 상승음)
+    const notes = [
+      { freq: 1318.5, at: 0, dur: 0.12 },
+      { freq: 1760.0, at: 0.08, dur: 0.22 },
+    ];
+    for (const { freq, at, dur } of notes) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.value = freq;
+      const t0 = start + at;
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.exponentialRampToValueAtTime(0.16, t0 + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t0);
+      osc.stop(t0 + dur + 0.02);
+    }
+  } catch {
+    // 효과음 재생 실패는 무시
+  }
+};
+
 const SESSION_STATUS_LABELS: Record<CurriculumSessionStatus, string> = {
   planned: '예정',
   done: '완료',
@@ -408,6 +444,14 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const [generationMessage, setGenerationMessage] = useState<string | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [viewMonth, setViewMonth] = useState(new Date());
+  // 회차를 '완료'로 누른 순간 완료 버튼 위로 잠깐 떠오르는 "+강사비" 동전 효과(띠링~).
+  const [feeBurst, setFeeBurst] = useState<{ id: number; amount: number } | null>(null);
+  const feeBurstIdRef = useRef(0);
+  useEffect(() => {
+    if (!feeBurst) return;
+    const timer = window.setTimeout(() => setFeeBurst(null), 1600);
+    return () => window.clearTimeout(timer);
+  }, [feeBurst]);
   const [settingsDraft, setSettingsDraft] = useState({
     name: classroom.name,
     color: classroom.color || DEFAULT_CLASSROOM_COLOR,
@@ -456,6 +500,13 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const currentDateStatus: CurriculumSessionStatus = currentSessionId
     ? classroom.sessionStates?.[currentSessionId]?.status || 'planned'
     : 'planned';
+  // 선택한 회차의 상태 객체(시수 덮어쓰기 포함)와, 그 회차의 실제 시수·강사비.
+  const currentSessionState = currentSessionId
+    ? classroom.sessionStates?.[currentSessionId]
+    : undefined;
+  const currentSessionHours = getSessionHours(classroom, currentSessionState);
+  const currentSessionFee = getSessionFee(classroom, currentSessionState);
+  const hasSessionHoursOverride = currentSessionState?.hours != null;
   const isDateSkipped = Boolean(currentSessionId) && currentDateStatus === 'skipped';
   // 기록 영역 열림 규칙:
   // - 회차(자동 배정) 날짜 → 기본 '예정'이라 열림, '건너뜀'일 때만 닫힘. (완료도 열림)
@@ -998,10 +1049,35 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     if (!currentSessionId || !onUpdateClassroom || next === currentDateStatus) {
       return;
     }
-    const states: Record<string, { date?: string; status?: CurriculumSessionStatus }> = {
+    const states: Record<string, { date?: string; status?: CurriculumSessionStatus; hours?: number }> = {
       ...(classroom.sessionStates || {}),
     };
     states[currentSessionId] = { ...states[currentSessionId], status: next };
+    onUpdateClassroom(classroom.id, { sessionStates: states });
+    // 완료로 바꾼 순간, 강사비가 잡혀 있으면 동전 띠링 + "+강사비" 떠오르기 효과를 낸다.
+    if (next === 'done') {
+      const fee = getSessionFee(classroom, states[currentSessionId]);
+      if (fee > 0) {
+        feeBurstIdRef.current += 1;
+        setFeeBurst({ id: feeBurstIdRef.current, amount: fee });
+        playFeeChime();
+      }
+    }
+  };
+
+  // 이 회차만의 시수를 덮어쓴다(오리엔테이션 1시수 등). null이면 덮어쓰기를 지워 반 기본값으로 되돌린다.
+  const setSessionHours = (hours: number | null) => {
+    if (!currentSessionId || !onUpdateClassroom) return;
+    const states: Record<string, { date?: string; status?: CurriculumSessionStatus; hours?: number }> = {
+      ...(classroom.sessionStates || {}),
+    };
+    const prev = states[currentSessionId] || {};
+    if (hours == null || !Number.isFinite(hours) || hours <= 0) {
+      const { hours: _drop, ...rest } = prev;
+      states[currentSessionId] = rest;
+    } else {
+      states[currentSessionId] = { ...prev, hours };
+    }
     onUpdateClassroom(classroom.id, { sessionStates: states });
   };
 
@@ -1766,7 +1842,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               </div>
             </div>
             {currentSessionId ? (
-              <div className="inline-flex shrink-0 rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] p-1">
+              <div className="relative inline-flex shrink-0 rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] p-1">
                 {STATUS_SEGMENTS.map((segment) => {
                   const SegmentIcon = segment.icon;
                   const isActive = currentDateStatus === segment.value;
@@ -1783,6 +1859,23 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                     </button>
                   );
                 })}
+                {/* 완료 누른 순간 버튼 위로 동전이 띠링~ 하고 떠오르는 "+강사비" 효과 */}
+                <AnimatePresence>
+                  {feeBurst && (
+                    <motion.div
+                      key={feeBurst.id}
+                      initial={{ opacity: 0, y: 4, scale: 0.6 }}
+                      animate={{ opacity: 1, y: -42, scale: 1 }}
+                      exit={{ opacity: 0, y: -64, scale: 0.85 }}
+                      transition={{ type: 'spring', stiffness: 340, damping: 15 }}
+                      className="pointer-events-none absolute right-2 top-0 z-[60] whitespace-nowrap"
+                    >
+                      <div className="flex items-center gap-1.5 rounded-full bg-[#2D7A4D] px-4 py-2 text-sm font-extrabold text-white shadow-xl shadow-[#2D7A4D]/40">
+                        <span className="text-base">🪙</span>+{formatWon(feeBurst.amount)}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             ) : (
               <button
@@ -1798,6 +1891,52 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               </button>
             )}
           </div>
+
+          {/* 이 회차의 시수·강사비. 평소(반 기본)와 다른 날(오리엔테이션 등)만 회차별로 시수를 덮어쓴다. */}
+          {currentSessionId && Number(classroom.feePerHour) > 0 && (
+            <div className="mt-4 rounded-2xl border border-[#E0EFE4] bg-[#F4FAF6] p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <Coins size={16} className="shrink-0 text-[#2D7A4D]" />
+                  <span className="text-sm font-bold text-[#2D7A4D]">이 수업 강사비</span>
+                  <span className="text-base font-extrabold text-[#2D7A4D]">
+                    {formatWon(currentSessionFee)}
+                  </span>
+                  <span className="text-xs text-[#6B8E7A]">
+                    ({formatWon(Number(classroom.feePerHour))} × {currentSessionHours}시수 ·{' '}
+                    {hasSessionHoursOverride ? '이 날만' : '반 기본'})
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3].map((hour) => (
+                    <button
+                      key={hour}
+                      onClick={() => setSessionHours(hour)}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+                        currentSessionHours === hour
+                          ? 'bg-[#2D7A4D] text-white shadow-sm'
+                          : 'bg-white text-[#6B8E7A] hover:bg-[#E7F3EB]'
+                      }`}
+                    >
+                      {hour}시수
+                    </button>
+                  ))}
+                  {hasSessionHoursOverride && (
+                    <button
+                      onClick={() => setSessionHours(null)}
+                      className="rounded-lg px-3 py-1.5 text-xs font-bold text-[#8B7E74] transition-all hover:bg-[#EFEDE8]"
+                    >
+                      기본값
+                    </button>
+                  )}
+                </div>
+              </div>
+              <p className="mt-2 text-[10px] text-[#A89F94]">
+                이 날 시수를 바꾸면 이 회차 강사비만 따로 잡혀요. (오리엔테이션처럼 평소와 시수가 다른
+                날에 쓰세요. 평소 시수는 클래스 설정에서 바꿉니다.)
+              </p>
+            </div>
+          )}
         </ResponsiveCardOrPopup>
 
         {editingPromptIndex !== null && (
