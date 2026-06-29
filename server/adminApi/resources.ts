@@ -94,6 +94,11 @@ export const RESOURCE_SPECS: Record<ResourceName, ResourceSpec> = {
       age: { type: 'string', description: '나이' },
       contact: { type: 'string', description: '연락처' },
       memo: { type: 'string', description: '학생 메모' },
+      language: {
+        type: 'string',
+        description:
+          '학생의 모국어/사용 언어 (자유 입력, 예: "러시아어", "베트남어"). 슬라이드 병기 번역 언어를 반별로 정하는 데 쓴다(반에서 가장 많은 2개).',
+      },
       inactiveAt: { type: 'string', description: '비활성 처리 시각 (ISO)' },
       deletedAt: { type: 'string', description: '소프트 삭제 시각 (ISO)' },
     },
