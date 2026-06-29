@@ -44,6 +44,7 @@ import {
   Sparkles,
   Wallet,
   Coins,
+  Languages,
 } from 'lucide-react';
 import {
   AssignCurriculumDatesResult,
@@ -415,7 +416,10 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     organization: classroom.organization || '',
     feePerHour: classroom.feePerHour != null ? String(classroom.feePerHour) : '',
     hoursPerSession: classroom.hoursPerSession != null ? String(classroom.hoursPerSession) : '2',
+    annotationLanguages: classroom.annotationLanguages ?? [],
   });
+  // 설정에서 새 병기 언어를 입력 중인 칸 (추가 버튼/엔터로 settingsDraft.annotationLanguages에 넣는다)
+  const [annotationLanguageInput, setAnnotationLanguageInput] = useState('');
 
   const [calendarClasses, setCalendarClasses] = useState<CalendarClassSummary[]>([]);
   const [calendarClassesLoading, setCalendarClassesLoading] = useState(false);
@@ -609,6 +613,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       .map(({ record }) => record);
   }, [allStudentsById, effectiveAttendance]);
 
+  // 배열은 스냅샷마다 새 참조라 deps에 그대로 넣으면 편집 중에도 리셋된다. 내용 기반 키로 비교한다.
+  const annotationLanguagesKey = (classroom.annotationLanguages ?? []).join('');
   useEffect(() => {
     setSettingsDraft({
       name: classroom.name,
@@ -618,6 +624,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       organization: classroom.organization || '',
       feePerHour: classroom.feePerHour != null ? String(classroom.feePerHour) : '',
       hoursPerSession: classroom.hoursPerSession != null ? String(classroom.hoursPerSession) : '2',
+      annotationLanguages: classroom.annotationLanguages ?? [],
     });
   }, [
     classroom.color,
@@ -627,6 +634,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     classroom.organization,
     classroom.feePerHour,
     classroom.hoursPerSession,
+    annotationLanguagesKey,
   ]);
 
   useEffect(() => {
@@ -2751,7 +2759,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                     }
                     disabled={isSavingStudentAction}
                     placeholder="사용 언어 (예: 러시아어)"
-                    title="반에서 가장 많은 2개 언어가 이론 슬라이드 병기 번역에 쓰입니다."
+                    title="학생 참고용 정보예요. 슬라이드·실습 병기 언어는 클래스 설정 > 병기 번역 언어에서 직접 정합니다."
                     className="w-full rounded-xl border border-[#E5E3DD] px-3 py-2 text-sm focus:border-[#8B5E3C] focus:outline-none"
                   />
                   <textarea
@@ -3042,7 +3050,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                       onChange={(event) => setNewStudentLanguage(event.target.value)}
                       disabled={isSavingStudentAction}
                       placeholder="사용 언어 (예: 러시아어)"
-                      title="학생의 모국어/사용 언어. 반에서 가장 많은 2개 언어가 이론 슬라이드 병기 번역에 쓰입니다."
+                      title="학생 참고용 정보예요. 슬라이드·실습 병기 언어는 클래스 설정 > 병기 번역 언어에서 직접 정합니다."
                       className="col-span-2 rounded-2xl border border-[#E5E3DD] bg-white px-4 py-3 text-sm transition-all focus:border-[#8B5E3C] focus:outline-none"
                     />
                     <div className="col-span-2">
@@ -3425,6 +3433,15 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 window.alert('강사비는 0 이상의 숫자만 입력할 수 있어요. (비우면 단가가 삭제됩니다)');
                 return;
               }
+              // 병기 언어: 입력칸에 미처 추가 못한 값도 함께 반영하고, 트림·중복 제거 후 저장.
+              // 0개면 빈 배열로 저장해 "병기 없음"을 명시한다.
+              const annotationLanguages = Array.from(
+                new Set(
+                  [...settingsDraft.annotationLanguages, annotationLanguageInput]
+                    .map((lang) => lang.trim())
+                    .filter(Boolean)
+                )
+              );
               // 저장은 await로 끝까지 기다리고, 실패하면 진짜 에러를 알린다.
               // (이전엔 await 없이 곧바로 "저장됨"을 띄워, 쓰기가 실패해도 성공처럼 보이고
               //  새로고침하면 값이 사라졌다.)
@@ -3438,7 +3455,9 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                   organization: settingsDraft.organization,
                   feePerHour: feePerHour.value,
                   hoursPerSession: hoursPerSession.value,
+                  annotationLanguages,
                 } as Partial<Classroom>);
+                setAnnotationLanguageInput('');
                 window.alert('클래스 설정이 저장되었습니다.');
               } catch {
                 window.alert('저장에 실패했습니다. 권한·네트워크를 확인하고 다시 시도해주세요.');
@@ -3557,6 +3576,96 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
             placeholder="예: 9~24세 이주민 학생 12명. 한국어 학습 중이라 텍스트보다 시각 자료 위주로 진행. 디지털 기기 사용 편차 큼."
             className="custom-scrollbar min-h-[120px] w-full resize-none rounded-2xl border-2 border-[#E5E3DD] p-4 text-sm text-[#4A3728] outline-none transition-all focus:border-[#8B5E3C]"
           />
+        </div>
+
+        <div className="mb-5">
+          <div className="mb-3 flex items-center gap-2">
+            <Languages size={16} className="text-[#8B5E3C]" />
+            <h3 className="text-sm font-bold text-[#4A3728]">병기 번역 언어</h3>
+            <DashboardInfoTooltip
+              content="이론 슬라이드·실습 핵심 문구 옆에 함께 보여줄 번역 언어예요. 여기 추가한 언어대로 루틴이 자료를 만들 때 번역을 병기합니다. 0개면 병기 없이 쉬운 한국어+그림만 써요. (학생별 사용 언어로 자동 유추하지 않고, 여기서 직접 정합니다.)"
+              label="병기 번역 언어 설명 보기"
+            />
+          </div>
+          {settingsDraft.annotationLanguages.length > 0 ? (
+            <div className="mb-3 flex flex-wrap gap-2">
+              {settingsDraft.annotationLanguages.map((lang, index) => (
+                <span
+                  key={`${lang}-${index}`}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-[#F3EEFB] px-3 py-1.5 text-sm font-bold text-[#6D4FB0]"
+                >
+                  {lang}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSettingsDraft({
+                        ...settingsDraft,
+                        annotationLanguages: settingsDraft.annotationLanguages.filter(
+                          (_, i) => i !== index
+                        ),
+                      })
+                    }
+                    className="rounded-full p-0.5 text-[#9B86C9] transition-colors hover:bg-[#E5DBF7] hover:text-[#6D4FB0]"
+                    aria-label={`${lang} 삭제`}
+                  >
+                    <X size={14} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="mb-3 text-sm text-[#A89F94]">
+              아직 병기 언어가 없어요. 비워 두면 번역 병기 없이 쉬운 한국어+그림으로만 만듭니다.
+            </p>
+          )}
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={annotationLanguageInput}
+              onChange={(event) => setAnnotationLanguageInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  const next = annotationLanguageInput.trim();
+                  if (
+                    next &&
+                    !settingsDraft.annotationLanguages.some((lang) => lang === next)
+                  ) {
+                    setSettingsDraft({
+                      ...settingsDraft,
+                      annotationLanguages: [...settingsDraft.annotationLanguages, next],
+                    });
+                  }
+                  setAnnotationLanguageInput('');
+                }
+              }}
+              placeholder='예: 러시아어 (입력 후 Enter 또는 추가)'
+              className="w-full rounded-2xl border-2 border-[#E5E3DD] px-4 py-2.5 text-sm font-medium text-[#4A3728] transition-all focus:border-[#8B5E3C] focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                const next = annotationLanguageInput.trim();
+                if (
+                  next &&
+                  !settingsDraft.annotationLanguages.some((lang) => lang === next)
+                ) {
+                  setSettingsDraft({
+                    ...settingsDraft,
+                    annotationLanguages: [...settingsDraft.annotationLanguages, next],
+                  });
+                }
+                setAnnotationLanguageInput('');
+              }}
+              className="inline-flex shrink-0 items-center gap-1 rounded-2xl border-2 border-[#E5E3DD] px-4 py-2.5 text-sm font-bold text-[#8B5E3C] transition-all hover:bg-[#F3F2EE]"
+            >
+              <Plus size={16} />
+              추가
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-[#A89F94]">
+            추가/삭제 후 위의 <span className="font-bold">저장</span>을 눌러야 반영됩니다.
+          </p>
         </div>
 
         <div className="mb-5">

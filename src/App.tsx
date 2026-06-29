@@ -684,6 +684,13 @@ export default function App() {
           feePerHour: typeof data.feePerHour === 'number' ? data.feePerHour : undefined,
           hoursPerSession:
             typeof data.hoursPerSession === 'number' ? data.hoursPerSession : undefined,
+          // 병기 번역 언어 목록(강사가 설정에서 직접 지정). 문자열 배열만 받아들이고, 빈 항목은 떨군다.
+          annotationLanguages: Array.isArray(data.annotationLanguages)
+            ? data.annotationLanguages
+                .filter((lang): lang is string => typeof lang === 'string')
+                .map((lang) => lang.trim())
+                .filter(Boolean)
+            : undefined,
           calendarClassId: typeof data.calendarClassId === 'string' ? data.calendarClassId : undefined,
           sessionStates:
             data.sessionStates && typeof data.sessionStates === 'object'

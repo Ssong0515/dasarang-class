@@ -78,6 +78,11 @@ export const RESOURCE_SPECS: Record<ResourceName, ResourceSpec> = {
       curriculumId: { type: 'stringOrNull', description: '연결된 커리큘럼 id (null=연결 해제)' },
       driveFolderId: { type: 'string', description: '학생 작업물 업로드용 Google Drive 폴더 id' },
       driveFolderName: { type: 'string', description: 'Drive 폴더 이름' },
+      annotationLanguages: {
+        type: 'array',
+        description:
+          '이론 슬라이드·실습에 병기할 번역 언어 목록 (문자열 배열, 0개~여러 개. 예: ["러시아어","베트남어"]). 강사가 직접 지정하며, 학생 language로 유추하지 않는다. 비면 병기 없이 쉬운 한국어+그림만 쓴다.',
+      },
     },
     defaults: ({ nowIso }) => ({ createdAt: nowIso }),
   },
@@ -97,7 +102,7 @@ export const RESOURCE_SPECS: Record<ResourceName, ResourceSpec> = {
       language: {
         type: 'string',
         description:
-          '학생의 모국어/사용 언어 (자유 입력, 예: "러시아어", "베트남어"). 슬라이드 병기 번역 언어를 반별로 정하는 데 쓴다(반에서 가장 많은 2개).',
+          '학생의 모국어/사용 언어 (자유 입력, 예: "러시아어", "베트남어"). 참고용 정보일 뿐, 슬라이드·실습 병기 언어는 여기서 유추하지 않고 반 설정(classrooms.annotationLanguages)에서 직접 정한다.',
       },
       inactiveAt: { type: 'string', description: '비활성 처리 시각 (ISO)' },
       deletedAt: { type: 'string', description: '소프트 삭제 시각 (ISO)' },

@@ -10,7 +10,7 @@ export interface Student {
   age?: string;
   contact?: string;
   memo?: string;
-  /** 학생의 모국어/사용 언어 (강사가 자유 입력, 예: "러시아어", "베트남어"). 슬라이드 병기 번역 언어를 반별로 정하는 데 쓴다(반에서 가장 많은 2개). */
+  /** 학생의 모국어/사용 언어 (강사가 자유 입력, 예: "러시아어", "베트남어"). 참고용 정보일 뿐, 슬라이드·실습 병기 언어는 여기서 유추하지 않고 반 설정(Classroom.annotationLanguages)에서 직접 정한다. */
   language?: string;
   inactiveAt?: string;
   deletedAt?: string;
@@ -189,6 +189,13 @@ export interface Classroom {
   feePerHour?: number;
   /** 한 회차(수업일)당 시수. feePerHour와 곱해 회차당 강사비를 계산한다. 비우면 1로 본다. */
   hoursPerSession?: number;
+  /**
+   * 이 반 이론 슬라이드·실습에 병기할 번역 언어 목록 (강사가 클래스 설정에서 직접 추가, 0개~여러 개).
+   * 예: ["러시아어", "베트남어"]. 비어 있으면(또는 없음) 병기 없이 쉬운 한국어+그림만 쓴다.
+   * 루틴/강사가 자료를 만들 때 이 목록대로 번역 사전(window.__DSR_TR__)·병기 박스를 채운다.
+   * (예전엔 학생들 language를 모아 최다 2개로 유추했으나, 이제 학생 유추를 하지 않고 여기서만 정한다.)
+   */
+  annotationLanguages?: string[];
 }
 
 /** calendar.damuna.org `classes` 컬렉션의 참고 시간표 요약 (읽기 전용) */
