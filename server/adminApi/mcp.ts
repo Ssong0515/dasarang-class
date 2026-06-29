@@ -299,6 +299,48 @@ const buildMcpServer = () => {
  * 다른 인스턴스로 가서 깨진다. 따라서 apphosting.yaml에서 maxInstances를 1로 고정해야 한다.
  */
 const transports: Record<string, StreamableHTTPServerTransport> = {};
+// 세션별 마지막 활동 시각. min 1로 인스턴스를 항상 띄워두면 재시작으로 청소될 일이 없어,
+// 클라이언트가 DELETE 없이 버린 세션이 영영 메모리에 남는다(누수→OOM). 아래 스윕으로 막는다.
+const lastSeenAt: Record<string, number> = {};
+
+const SESSION_IDLE_MS = 2 * 60 * 60 * 1000; // 2시간 무활동이면 정리
+const MAX_SESSIONS = 200; // 상한 — 초과 시 오래된 순으로 추가 정리
+const SWEEP_INTERVAL_MS = 10 * 60 * 1000; // 10분마다 스윕
+
+const touchSession = (id: string) => {
+  lastSeenAt[id] = Date.now();
+};
+
+const dropSession = (id: string) => {
+  const transport = transports[id];
+  delete transports[id];
+  delete lastSeenAt[id];
+  // close()는 스트림 정리 후 onclose를 부른다. 위에서 이미 맵에서 지웠으므로 재진입해도 안전.
+  try {
+    void transport?.close();
+  } catch {
+    /* 이미 닫힌 세션 — 무시 */
+  }
+};
+
+// 무활동 세션 + 상한 초과분을 주기적으로 정리해 메모리 누수를 막는다.
+const sweepSessions = () => {
+  const now = Date.now();
+  for (const id of Object.keys(transports)) {
+    if (now - (lastSeenAt[id] ?? 0) > SESSION_IDLE_MS) {
+      dropSession(id);
+    }
+  }
+  const ids = Object.keys(transports);
+  if (ids.length > MAX_SESSIONS) {
+    ids
+      .sort((a, b) => (lastSeenAt[a] ?? 0) - (lastSeenAt[b] ?? 0))
+      .slice(0, ids.length - MAX_SESSIONS)
+      .forEach(dropSession);
+  }
+};
+
+setInterval(sweepSessions, SWEEP_INTERVAL_MS).unref();
 
 // 인증: Authorization 헤더(Bearer) 우선, 없으면 URL 쿼리 파라미터(?key= 또는 ?token=).
 // 쿼리 방식은 커스텀 헤더를 못 넣는 클라이언트를 위한 것. 통과하면 true, 실패면 401 응답 후 false.
@@ -329,6 +371,7 @@ export const handleMcpPostRequest: express.RequestHandler = async (req, res) => 
     if (sessionId && transports[sessionId]) {
       // 기존 세션 재사용
       transport = transports[sessionId];
+      touchSession(sessionId);
     } else if (!sessionId && isInitializeRequest(req.body)) {
       // 새 세션 시작: initialize 요청에만 transport를 생성한다.
       transport = new StreamableHTTPServerTransport({
@@ -336,12 +379,15 @@ export const handleMcpPostRequest: express.RequestHandler = async (req, res) => 
         enableJsonResponse: true,
         onsessioninitialized: (id) => {
           transports[id] = transport;
+          touchSession(id);
         },
       });
-      // 세션 종료(클라이언트 DELETE 또는 스트림 종료) 시 메모리에서 정리한다.
+      // 세션 종료(클라이언트 DELETE 또는 transport.close) 시 메모리에서 정리한다.
+      // 주의: GET SSE 스트림이 끊겨도 onclose는 호출되지 않으므로(세션은 유지) 여기서 안전.
       transport.onclose = () => {
         if (transport.sessionId) {
           delete transports[transport.sessionId];
+          delete lastSeenAt[transport.sessionId];
         }
       };
       const server = buildMcpServer();
@@ -383,6 +429,7 @@ const handleMcpSessionRequest: express.RequestHandler = async (req, res) => {
     });
     return;
   }
+  touchSession(sessionId);
   try {
     await transports[sessionId].handleRequest(req, res);
   } catch (error) {
