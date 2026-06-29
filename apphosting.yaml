@@ -2,9 +2,11 @@ runConfig:
   runtime: nodejs22
   cpu: 1
   memoryMiB: 512
-  minInstances: 0
-  # MCP가 유상태 세션(transport)을 인스턴스 메모리에 보관하므로 1개로 고정한다.
-  # 세션 어피니티가 없어 2개 이상이면 후속 요청이 다른 인스턴스로 가서 연결이 끊긴다.
+  # MCP 유상태 세션(transport)이 인스턴스 메모리에 있어, min 0이면 유휴 시 인스턴스가
+  # 0으로 스케일다운되며 세션이 전부 날아가 커넥터 연결이 끊긴다(콜드 스타트). 1로 유지해
+  # 인스턴스를 항상 띄워둬 세션 메모리를 보존한다.
+  minInstances: 1
+  # 세션 어피니티가 없어 2개 이상이면 후속 요청이 다른 인스턴스로 가서 연결이 끊긴다. 1개 고정.
   maxInstances: 1
 
 buildCommand: npm run build
