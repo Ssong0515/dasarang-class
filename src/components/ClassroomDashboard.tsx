@@ -331,12 +331,35 @@ const ResponsiveCardOrPopup: React.FC<{
   summary?: React.ReactNode;
   desktopClassName: string;
   tileClassName?: string;
+  /** 좁은 화면에서도 팝업(탭해서 열기) 대신 카드 내용을 바로 펼쳐서 보여준다. */
+  alwaysExpanded?: boolean;
+  /** alwaysExpanded일 때 좁은 화면에서 쓸 카드 클래스(그리드 배치·여백 등). */
+  narrowClassName?: string;
   children: React.ReactNode;
-}> = ({ isNarrow, icon, title, summary, desktopClassName, tileClassName = '', children }) => {
+}> = ({
+  isNarrow,
+  icon,
+  title,
+  summary,
+  desktopClassName,
+  tileClassName = '',
+  alwaysExpanded = false,
+  narrowClassName = '',
+  children,
+}) => {
   const [open, setOpen] = useState(false);
 
   if (!isNarrow) {
     return <div className={desktopClassName}>{children}</div>;
+  }
+
+  // 좁은 화면에서도 항상 펼쳐 보여주는 카드 (팝업 없이 인라인 렌더 → 떠오르는 효과가 잘림 없이 보인다).
+  if (alwaysExpanded) {
+    return (
+      <div className={`rounded-[24px] border border-[#E5E3DD] bg-white p-4 shadow-sm ${narrowClassName}`}>
+        {children}
+      </div>
+    );
   }
 
   return (
@@ -1819,6 +1842,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
           }
           desktopClassName="rounded-[32px] border border-[#E5E3DD] bg-white p-6 shadow-sm sm:p-8 lg:max-w-xl"
           tileClassName="order-1 col-span-1"
+          alwaysExpanded
+          narrowClassName="order-1 col-span-2"
         >
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="space-y-3">
@@ -1868,7 +1893,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                       animate={{ opacity: 1, y: -42, scale: 1 }}
                       exit={{ opacity: 0, y: -64, scale: 0.85 }}
                       transition={{ type: 'spring', stiffness: 340, damping: 15 }}
-                      className="pointer-events-none absolute right-2 top-0 z-[60] whitespace-nowrap"
+                      className="pointer-events-none absolute left-1/2 top-0 z-[60] -translate-x-1/2 whitespace-nowrap"
                     >
                       <div className="flex items-center gap-1.5 rounded-full bg-[#2D7A4D] px-4 py-2 text-sm font-extrabold text-white shadow-xl shadow-[#2D7A4D]/40">
                         <span className="text-base">🪙</span>+{formatWon(feeBurst.amount)}
