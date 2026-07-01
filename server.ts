@@ -37,6 +37,17 @@ const normalizeBasePath = (value?: string) => {
 
 const escapeForRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+// multer(busboy)는 멀티파트 파일명을 latin1로 디코드해 한글 파일명이 깨진다(예: 학습화면.png → íìµí´ë.png).
+// latin1 바이트를 UTF-8로 되돌린다. 재해석 결과가 유효하지 않으면(치환문자 등) 원본을 그대로 둔다.
+const decodeMultipartFilename = (name: string): string => {
+  try {
+    const decoded = Buffer.from(name, 'latin1').toString('utf8');
+    return decoded.includes('�') ? name : decoded;
+  } catch {
+    return name;
+  }
+};
+
 const withBasePath = (basePath: string, routePath: string) => {
   const normalizedRoute = routePath === '/' ? '/' : `/${routePath.replace(/^\/+/, '')}`;
 
@@ -174,7 +185,7 @@ async function startServer() {
         const result = await uploadStudentWork({
           studentName: studentName.trim(),
           fileBuffer: req.file.buffer,
-          originalName: req.file.originalname,
+          originalName: decodeMultipartFilename(req.file.originalname),
           mimeType: req.file.mimetype,
         });
 
