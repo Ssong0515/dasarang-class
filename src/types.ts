@@ -322,6 +322,22 @@ export interface StudentVoiceMessage {
   createdAt: string;    // ISO 문자열
 }
 
+/**
+ * 위의 반대 방향 — 교사가 한국어로 말하면 STT로 받아 적고, 그 순간 출석한 학생들의 언어로만 온디바이스 번역해
+ * 학생 화면 하단에 실시간 자막으로 뿌리는 한 건. (교사 방송 → 학생 자막)
+ * 공용 학생 계정 1개를 쓰므로 학생 식별 정보는 담지 않는다.
+ */
+export interface TeacherBroadcastMessage {
+  id: string;
+  classroomId: string;
+  classroomName?: string;
+  date: string;          // 'YYYY-MM-DD'
+  koreanText: string;    // 교사 발화 원문(한국어)
+  /** 그 시점 출석 언어만 번역해 담는다. 예: { ru: '...', vi: '...' }. 번역 불가 언어는 한국어 원문으로 폴백될 수 있다. */
+  translations: Record<string, string>;
+  createdAt: string;     // ISO 문자열
+}
+
 export interface AccessLog {
   id: string;
   email: string;

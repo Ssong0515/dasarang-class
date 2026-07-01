@@ -313,5 +313,29 @@ service cloud.firestore {
       allow read: if isAdmin();
       allow update, delete: if isAdmin();
     }
+
+    function isValidTeacherBroadcastMessage(data) {
+      return data.keys().hasAll([
+               'classroomId',
+               'date',
+               'koreanText',
+               'translations',
+               'createdAt'
+             ]) &&
+             data.classroomId is string &&
+             data.date is string &&
+             data.koreanText is string && data.koreanText.size() > 0 && data.koreanText.size() < 5000 &&
+             data.translations is map &&
+             data.createdAt is string &&
+             (!('classroomName' in data) || data.classroomName is string);
+    }
+
+    // 교사가 한국어로 말한 걸 출석 학생 언어로 번역해 학생 자막으로 뿌리는 실시간 방송 — studentVoiceMessages와 방향이 반대다.
+    // 강사(관리자)만 create/update/delete, 학생(공용 계정)은 read만(반 구분은 클라이언트 쿼리로 — publishedLessons와 같은 방식).
+    match /teacherBroadcastMessages/{messageId} {
+      allow read: if canReadStudentPage();
+      allow create, update: if isAdmin() && isValidTeacherBroadcastMessage(request.resource.data);
+      allow delete: if isAdmin();
+    }
   }
 }

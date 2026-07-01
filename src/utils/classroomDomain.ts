@@ -6,6 +6,7 @@ export const STUDENTS_COLLECTION = 'students';
 export const DAILY_REVIEWS_COLLECTION = 'dailyReviews';
 export const PUBLISHED_LESSONS_COLLECTION = 'publishedLessons';
 export const STUDENT_VOICE_MESSAGES_COLLECTION = 'studentVoiceMessages';
+export const TEACHER_BROADCAST_MESSAGES_COLLECTION = 'teacherBroadcastMessages';
 
 export const getClassroomDateRecordId = (classroomId: string, date: string) =>
   `${classroomId.trim()}_${date.trim()}`;

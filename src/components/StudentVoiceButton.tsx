@@ -23,7 +23,9 @@ export const VOICE_LANG_OPTIONS: VoiceLangOption[] = [
 ];
 
 const VOICE_LANG_STORAGE_KEY = 'dsr_voice_lang';
-const LANG_MAX_AGE_MS = 3 * 60 * 60 * 1000; // 3시간
+// 학생 언어 세션 TTL(180분). 교사 방송(TeacherBroadcastButton)의 최대 자동 정지 시간과 같은 값을 써야 하므로
+// 상수를 이중으로 정의하지 않고 여기서 export해 공유한다.
+export const LANG_MAX_AGE_MS = 3 * 60 * 60 * 1000; // 3시간
 
 interface StoredVoiceLang {
   iso: string;

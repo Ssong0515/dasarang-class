@@ -9,6 +9,7 @@ import { StudentPage } from './components/StudentPage';
 import { StudentAccessManager } from './components/StudentAccessManager';
 import { StudentShowcaseManager } from './components/StudentShowcaseManager';
 import { TeacherVoiceChat } from './components/TeacherVoiceChat';
+import { TeacherBroadcastButton } from './components/TeacherBroadcastButton';
 import {
   AssignCurriculumDatesResult,
   CalendarClassSummary,
@@ -64,6 +65,7 @@ import {
   sanitizeAttendanceRecordsForStorage,
 } from './utils/attendance';
 import { normalizeClassroomDateRecordContentIds } from './utils/classroomDateRecordContent';
+import { mapStudentLanguageToIso } from './utils/studentLanguage';
 import {
   CLASSROOM_COLOR_OPTIONS,
   DEFAULT_CLASSROOM_COLOR,
@@ -274,6 +276,14 @@ const parsePathToAppState = (
   return                                          { viewMode: 'admin',    activeTab: 'home',                  activeClassroomId: null };
 };
 
+// 강사 화면(ClassroomDashboard)의 selectedDate·학생 FAB와 동일한 '로컬' 날짜 규칙 — 게이팅/방송 날짜가 어긋나지 않도록 맞춘다.
+const getLocalDateString = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -346,6 +356,51 @@ export default function App() {
     () => classroomsWithStudents.find((classroom) => classroom.id === activeClassroomId) || null,
     [classroomsWithStudents, activeClassroomId]
   );
+
+  // 교사 통역 방송용 파생값. 방송은 실시간 학생용이므로 항상 '실제 오늘'(로컬) 기준으로 쓴다(미리보기 날짜와 무관).
+  const broadcastTodayString = getLocalDateString(new Date());
+  // 오늘 활성 반의 '출석(결석/제외 아님) 학생' 언어만 모아 번역 대상 iso 코드로 만든다.
+  // classroomDateRecords·students onSnapshot 위에 얹혀 있어 늦은 등교 등 출석 변화가 다음 발화부터 자동 반영된다.
+  const broadcastTargetLangCodes = useMemo(() => {
+    if (!activeClassroomId) return [] as string[];
+    const recordId = getClassroomDateRecordId(activeClassroomId, broadcastTodayString);
+    const record =
+      classroomDateRecords.find((candidate) => candidate.id === recordId) ??
+      classroomDateRecords.find(
+        (candidate) =>
+          candidate.classroomId === activeClassroomId && candidate.date === broadcastTodayString
+      );
+    if (!record) return [] as string[];
+    const attendingIds = new Set(
+      record.attendance
+        .filter((entry) => entry.status !== 'Absent' && !entry.isExcluded)
+        .map((entry) => entry.studentId)
+    );
+    const codes = new Set<string>();
+    for (const student of students) {
+      if (!attendingIds.has(student.id)) continue;
+      const iso = mapStudentLanguageToIso(student.language);
+      if (iso) codes.add(iso);
+    }
+    return Array.from(codes);
+  }, [activeClassroomId, broadcastTodayString, classroomDateRecords, students]);
+
+  // 활성 반 오늘 문서의 endNoticeAt — '수업 종료'를 누르면(이 값이 갱신되면) 방송이 자동으로 꺼지도록 방송 버튼에 내려준다.
+  const broadcastEndNoticeAt = useMemo(() => {
+    if (!activeClassroomId) return null;
+    return (
+      publishedLessons
+        .filter(
+          (lesson) =>
+            lesson.classroomId === activeClassroomId &&
+            lesson.date === broadcastTodayString &&
+            lesson.endNoticeAt
+        )
+        .map((lesson) => lesson.endNoticeAt as string)
+        .sort()
+        .pop() ?? null
+    );
+  }, [activeClassroomId, broadcastTodayString, publishedLessons]);
   const getUserIdToken = useCallback(async () => {
     if (!user) return null;
     return user.getIdToken();
@@ -2082,6 +2137,16 @@ export default function App() {
         <TeacherVoiceChat
           messages={voiceMessages}
           activeClassroomId={activeClassroomId || undefined}
+        />
+      )}
+      {/* 교사 실시간 통역 자막 방송 토글 — 활성 반이 있을 때만(방송 대상·출석 언어를 특정할 수 있으므로) 띄운다. */}
+      {user && isAdmin && activeClassroom && (
+        <TeacherBroadcastButton
+          classroomId={activeClassroom.id}
+          classroomName={activeClassroom.name}
+          date={broadcastTodayString}
+          targetLangCodes={broadcastTargetLangCodes}
+          endNoticeAt={broadcastEndNoticeAt}
         />
       )}
     </ErrorBoundary>

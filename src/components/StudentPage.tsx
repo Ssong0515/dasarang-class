@@ -16,6 +16,7 @@ import { Classroom, LessonCategory, LessonContent, PublishedLesson } from '../ty
 import { resolveAppPath } from '../utils/appPaths';
 import { StudentContentCard } from './StudentContentPreview';
 import { StudentVoiceButton } from './StudentVoiceButton';
+import { StudentSubtitleOverlay } from './StudentSubtitleOverlay';
 import {
   getClassroomCardColors,
   getClassroomIconComponent,
@@ -1197,6 +1198,15 @@ export const StudentPage: React.FC<StudentPageProps> = ({
         <StudentVoiceButton
           classroomId={effectiveClassroom?.id}
           classroomName={effectiveClassroom?.name}
+          date={gatingDateString}
+          endNoticeAt={activeEndNoticeAt}
+        />
+      )}
+
+      {/* 교사 통역 자막 방송 수신 — 실제 학생 화면에서만(강사 미리보기 제외). 내 반+오늘의 최신 방송을 내 언어 자막으로 하단에 띄운다. */}
+      {!isAdmin && (
+        <StudentSubtitleOverlay
+          classroomId={effectiveClassroom?.id}
           date={gatingDateString}
           endNoticeAt={activeEndNoticeAt}
         />
