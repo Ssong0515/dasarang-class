@@ -347,13 +347,19 @@ export const StudentVoiceButton: React.FC<StudentVoiceButtonProps> = ({
 
         <button
           type="button"
-          // 누르고 있는 동안 녹음 (마우스·터치·펜 모두 지원)
+          // 누르고 있는 동안 녹음 (마우스·터치·펜 모두 지원).
+          // 포인터 캡처로 손/마우스가 버튼 밖으로 살짝 나가도 뗄 때까지 녹음이 끊기지 않게 한다.
           onPointerDown={(e) => {
             e.preventDefault();
+            try {
+              e.currentTarget.setPointerCapture(e.pointerId);
+            } catch {
+              /* 캡처 미지원 환경은 무시 */
+            }
             startRecording();
           }}
           onPointerUp={stopRecording}
-          onPointerLeave={stopRecording}
+          onPointerCancel={stopRecording}
           onContextMenu={(e) => e.preventDefault()}
           aria-label="누르고 있는 동안 말하기"
           className={`flex h-16 w-16 select-none items-center justify-center rounded-full text-white shadow-lg transition-transform ${
