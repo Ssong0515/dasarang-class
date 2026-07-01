@@ -21,6 +21,28 @@ const formatTime = (iso: string): string => {
   return `${hh}:${mm}`;
 };
 
+// 마지막으로 확인한 메시지의 createdAt(ISO)을 저장한다. 새로고침/재접속해도 "봤음" 상태가 유지돼
+// 이미 확인한 오늘치 메시지가 안읽음 뱃지로 다시 뜨지 않는다. (SSR/차단 환경 안전)
+const VOICE_CHAT_SEEN_KEY = 'dsr_voice_chat_seen_at';
+
+const readSeenAt = (): string => {
+  if (typeof window === 'undefined') return '';
+  try {
+    return window.localStorage.getItem(VOICE_CHAT_SEEN_KEY) ?? '';
+  } catch {
+    return '';
+  }
+};
+
+const writeSeenAt = (iso: string): void => {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(VOICE_CHAT_SEEN_KEY, iso);
+  } catch {
+    /* 무시 */
+  }
+};
+
 export interface TeacherVoiceChatProps {
   messages: StudentVoiceMessage[];
   activeClassroomId?: string;
@@ -31,8 +53,9 @@ export const TeacherVoiceChat: React.FC<TeacherVoiceChatProps> = ({
   activeClassroomId,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  // 접혀 있는 동안 도착한 개수를 센다. 마지막으로 확인한 시점 이후 개수 = 안읽음.
-  const [seenCount, setSeenCount] = useState(0);
+  // 마지막으로 확인한 메시지의 createdAt. 이보다 뒤에 온 메시지 수 = 안읽음.
+  // localStorage에서 초기화해 새로고침해도 "봤음" 상태가 유지된다.
+  const [seenAt, setSeenAt] = useState<string>(() => readSeenAt());
   const listRef = useRef<HTMLDivElement | null>(null);
 
   // 오래된→최신 정렬. activeClassroomId가 있으면 해당 반을 뒤(가까운 곳)로 안정 정렬해 살짝 강조하되 전부 보여준다.
@@ -44,12 +67,19 @@ export const TeacherVoiceChat: React.FC<TeacherVoiceChatProps> = ({
   }, [messages]);
 
   const total = ordered.length;
-  const unread = isOpen ? 0 : Math.max(0, total - seenCount);
+  // 정렬돼 있으므로 마지막이 가장 최신. ISO 문자열은 사전순=시간순이라 문자열 비교로 안전.
+  const latestAt = total > 0 ? ordered[total - 1].createdAt : '';
+  const unread = isOpen
+    ? 0
+    : ordered.reduce((n, m) => (m.createdAt > seenAt ? n + 1 : n), 0);
 
-  // 열려 있을 때는 항상 최신까지 읽은 것으로 간주.
+  // 열려 있으면 현재 최신까지 확인한 것으로 간주하고 영구 저장. (열려 있는 동안 새로 와도 계속 갱신)
   useEffect(() => {
-    if (isOpen) setSeenCount(total);
-  }, [isOpen, total]);
+    if (isOpen && latestAt && latestAt > seenAt) {
+      setSeenAt(latestAt);
+      writeSeenAt(latestAt);
+    }
+  }, [isOpen, latestAt, seenAt]);
 
   // 새 메시지 도착 시 맨 아래로 자동 스크롤 (열려 있을 때).
   useEffect(() => {
