@@ -2068,7 +2068,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       {renderContent()}
-      {isAdmin && (
+      {user && isAdmin && (
         <TeacherVoiceChat
           messages={voiceMessages}
           activeClassroomId={activeClassroomId || undefined}
