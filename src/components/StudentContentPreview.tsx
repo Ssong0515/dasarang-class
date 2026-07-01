@@ -370,8 +370,12 @@ export const buildResponsiveSrcDoc = (html: string) => {
     return '';
   }
 
+  // 학생이 실습 안의 🌐 번역 버튼을 헷갈려해서 일단 숨긴다. 다시 켜려면 true로.
+  const ENABLE_INLINE_TRANSLATE = false;
+  const translateTag = ENABLE_INLINE_TRANSLATE ? iframeTranslateScriptTag : '';
+
   if (/<html[\s>]/i.test(trimmedHtml) || /<body[\s>]/i.test(trimmedHtml) || /<!doctype/i.test(trimmedHtml)) {
-    return injectIframeMarkup(trimmedHtml, iframeResponsiveStyleTag, iframeHeightScriptTag + iframeTranslateScriptTag);
+    return injectIframeMarkup(trimmedHtml, iframeResponsiveStyleTag, iframeHeightScriptTag + translateTag);
   }
 
   return `<!DOCTYPE html>
@@ -384,7 +388,7 @@ export const buildResponsiveSrcDoc = (html: string) => {
       <body>
         <div class="student-content-root">${trimmedHtml}</div>
         ${iframeHeightScriptTag}
-        ${iframeTranslateScriptTag}
+        ${translateTag}
       </body>
     </html>`;
 };
