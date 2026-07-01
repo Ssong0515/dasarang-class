@@ -45,6 +45,7 @@ import {
   Wallet,
   Coins,
   Languages,
+  Search,
 } from 'lucide-react';
 import {
   AssignCurriculumDatesResult,
@@ -487,6 +488,9 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     feePerHour: classroom.feePerHour != null ? String(classroom.feePerHour) : '',
     hoursPerSession: classroom.hoursPerSession != null ? String(classroom.hoursPerSession) : '2',
     annotationLanguages: classroom.annotationLanguages ?? [],
+    // 값이 없으면(레거시 반) 활성으로 본다. 대시보드에는 켜진 영역만 보인다.
+    showTheory: classroom.showTheory !== false,
+    showPractice: classroom.showPractice !== false,
   });
   // 설정에서 새 병기 언어를 입력 중인 칸 (추가 버튼/엔터로 settingsDraft.annotationLanguages에 넣는다)
   const [annotationLanguageInput, setAnnotationLanguageInput] = useState('');
@@ -695,6 +699,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       feePerHour: classroom.feePerHour != null ? String(classroom.feePerHour) : '',
       hoursPerSession: classroom.hoursPerSession != null ? String(classroom.hoursPerSession) : '2',
       annotationLanguages: classroom.annotationLanguages ?? [],
+      showTheory: classroom.showTheory !== false,
+      showPractice: classroom.showPractice !== false,
     });
   }, [
     classroom.color,
@@ -705,6 +711,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     classroom.feePerHour,
     classroom.hoursPerSession,
     annotationLanguagesKey,
+    classroom.showTheory,
+    classroom.showPractice,
   ]);
 
   useEffect(() => {
@@ -1667,6 +1675,20 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     );
     const excludedAttendanceCount =
       currentDateRecord?.attendance.filter((attendance) => isAttendanceExcluded(attendance)).length || 0;
+    // 반 설정에서 켜 둔 영역만 '수업 진행·학생 공개'에 보인다. 값이 없으면(레거시 반) 켜진 것으로 본다.
+    const showTheorySection = classroom.showTheory !== false;
+    const showPracticeSection = classroom.showPractice !== false;
+    // 카드 헤더 = 선택 날짜에 배정된 커리큘럼 회차 주제. 여러 회차면 이어 붙이고, 배정 없으면 기본 문구로 폴백.
+    const daySessions = plannedSessionsByDate.get(selectedDate) || [];
+    const sessionTopicTitle =
+      daySessions.length > 0
+        ? daySessions.map((session) => `${session.order}회차 · ${session.topic}`).join(' / ')
+        : null;
+    // 이론 슬라이드 소구간 / 콘텐츠 목록의 표시 여부. 둘 다 안 보이면 빈 안내를 띄운다.
+    // (콘텐츠 목록은 이론·실습 중 하나라도 켜져 있으면 보여서, 이론만 반에서도 이론 버튼이 사라지지 않는다.)
+    const theorySlidesVisible = showTheorySection && recordedSlideContents.length > 0;
+    const contentListVisible =
+      (showTheorySection || showPracticeSection) && recordedPracticeContents.length > 0;
 
     return (
       <motion.div
@@ -2012,20 +2034,29 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               </div>
             )}
 
-            {onUpdatePublishedLesson && (
+            {onUpdatePublishedLesson && (showTheorySection || showPracticeSection) && (
               <div className="mb-8 rounded-[28px] border border-[#E5E3DD] bg-[#FBFBFA] p-6">
                 <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-1">
+                    {sessionTopicTitle && (
+                      <p className="text-[11px] font-bold uppercase tracking-wider text-[#B7AFA4]">
+                        수업 진행 · 학생 공개
+                      </p>
+                    )}
                     <h3 className="flex items-center gap-2 text-base font-bold text-[#4A3728]">
-                      <Presentation className="text-[#8B5E3C]" size={18} />
-                      수업 진행 · 학생 공개
+                      <Presentation className="shrink-0 text-[#8B5E3C]" size={18} />
+                      {sessionTopicTitle || '수업 진행 · 학생 공개'}
                     </h3>
                     <p className="text-xs text-[#8B7E74]">
-                      이론(슬라이드)은 강사 화면 전용입니다. 실습을 공개하면 학생 화면에서 즉시 잠금이 풀립니다.
+                      {showTheorySection && showPracticeSection
+                        ? '이론(슬라이드)은 강사 화면 전용입니다. 실습을 공개하면 학생 화면에서 즉시 잠금이 풀립니다.'
+                        : showPracticeSection
+                          ? '실습을 공개하면 학생 화면에서 즉시 잠금이 풀립니다.'
+                          : '이론 슬라이드는 강사 화면 전용입니다. (이 반은 이론만 진행합니다.)'}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    {recordedPracticeContents.length > 0 && (
+                    {showPracticeSection && recordedPracticeContents.length > 0 && (
                       <>
                         <button
                           onClick={handlePublishAllPractice}
@@ -2045,23 +2076,27 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                         </button>
                       </>
                     )}
-                    <button
-                      onClick={() => setIsEndLessonModalOpen(true)}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-[#E5C9C6] bg-white px-3 py-2 text-xs font-bold text-[#B42318] transition-all hover:bg-[#FDECEC]"
-                    >
-                      <Power size={14} />
-                      수업 종료
-                    </button>
+                    {showPracticeSection && (
+                      <button
+                        onClick={() => setIsEndLessonModalOpen(true)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-[#E5C9C6] bg-white px-3 py-2 text-xs font-bold text-[#B42318] transition-all hover:bg-[#FDECEC]"
+                      >
+                        <Power size={14} />
+                        수업 종료
+                      </button>
+                    )}
                   </div>
                 </div>
 
-                {recordedPracticeContents.length === 0 && recordedSlideContents.length === 0 && (
+                {!theorySlidesVisible && !contentListVisible && (
                   <p className="rounded-2xl border border-dashed border-[#E5E3DD] bg-white px-4 py-6 text-center text-sm text-[#8B7E74]">
-                    아직 이 날짜에 공개할 실습이 없습니다. 아래에서 수업 콘텐츠를 추가하면 학생에게 공개할 수 있고, 수업을 마치면 ‘수업 종료’로 학생 화면을 잠글 수 있어요.
+                    {showPracticeSection
+                      ? '아직 이 날짜에 등록된 수업 콘텐츠가 없습니다. 아래에서 콘텐츠를 추가하면 학생에게 공개할 수 있고, 수업을 마치면 ‘수업 종료’로 학생 화면을 잠글 수 있어요.'
+                      : '아직 이 날짜에 등록된 수업 콘텐츠가 없습니다. 아래에서 콘텐츠를 추가하면 이론 자료·프롬프트를 여기서 다룰 수 있어요.'}
                   </p>
                 )}
 
-                {recordedSlideContents.length > 0 && (
+                {theorySlidesVisible && (
                   <div className="mb-4">
                     <p className="mb-2 text-xs font-bold uppercase tracking-wider text-[#8B7E74]">
                       이론 슬라이드 (강사 화면 전용)
@@ -2084,13 +2119,15 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                   </div>
                 )}
 
-                {recordedPracticeContents.length > 0 ? (
+                {contentListVisible ? (
                   <div>
                     <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#8B7E74]">
-                      실습 (학생 화면)
-                      <span className="rounded-full bg-[#EEF7F0] px-2 py-0.5 text-[10px] text-[#2D7A4D]">
-                        {publishedPracticeCount}/{recordedPracticeContents.length} 공개됨
-                      </span>
+                      {showPracticeSection ? '실습 (학생 화면)' : '이론 자료'}
+                      {showPracticeSection && (
+                        <span className="rounded-full bg-[#EEF7F0] px-2 py-0.5 text-[10px] text-[#2D7A4D]">
+                          {publishedPracticeCount}/{recordedPracticeContents.length} 공개됨
+                        </span>
+                      )}
                     </p>
                     <div className="space-y-2">
                       {recordedPracticeContents.map((content, index) => {
@@ -2108,32 +2145,35 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                         const promptSlideUrl = content.theorySlideUrl?.trim() || legacySlideUrl;
                         const hasSlide = promptSlideUrl.length > 0;
                         const isSlideInputOpen = slideInputPromptIndex === index;
+                        // 이론 영역: 프롬프트(복사·수정)나 자료 링크 컨트롤이 하나라도 있을 때만 표시.
+                        const hasTheoryControls = Boolean(matchedPrompt) || Boolean(onSaveContent);
+                        const showRowTheory = showTheorySection && hasTheoryControls;
+                        const showRowPractice = showPracticeSection;
                         return (
                           <div
                             key={content.id}
                             className={`rounded-2xl border px-4 py-3 transition-all ${
-                              isPublished
+                              isPublished && showPracticeSection
                                 ? 'border-[#BFE3CC] bg-[#F2FBF3]'
                                 : 'border-[#E5E3DD] bg-white'
                             }`}
                           >
                             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                              <button
-                                type="button"
-                                onClick={() => setPreviewContent(content)}
-                                title={`${content.title} 미리보기`}
-                                className="flex min-w-0 items-center gap-2 text-left transition-opacity hover:opacity-70"
-                              >
-                                {isPublished ? (
-                                  <Eye size={16} className="shrink-0 text-[#2D7A4D]" />
-                                ) : (
-                                  <Lock size={16} className="shrink-0 text-[#8B7E74]" />
-                                )}
+                              {/* 콘텐츠 이름 — 미리보기 버튼은 실습 영역으로 옮겼다 */}
+                              <div className="flex min-w-0 items-center gap-2">
+                                {showPracticeSection &&
+                                  (isPublished ? (
+                                    <Eye size={16} className="shrink-0 text-[#2D7A4D]" />
+                                  ) : (
+                                    <Lock size={16} className="shrink-0 text-[#8B7E74]" />
+                                  ))}
                                 <span className="truncate text-sm font-bold text-[#4A3728]">
                                   {content.title}
                                 </span>
-                              </button>
+                              </div>
                               <div className="flex shrink-0 items-center gap-1.5">
+                                {showRowTheory && (
+                                  <>
                                 {matchedPrompt && (
                                   <>
                                     <button
@@ -2198,30 +2238,48 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                                       <Plus size={14} />
                                     </button>
                                   ))}
-                                <button
-                                  onClick={() => handleTogglePublishContent(content)}
-                                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
-                                    isPublished
-                                      ? 'bg-[#FDECEC] text-[#B42318] hover:bg-[#FAD4D1]'
-                                      : 'bg-[#8B5E3C] text-white hover:bg-[#724D31]'
-                                  }`}
-                                >
-                                  {isPublished ? (
-                                    <>
-                                      <EyeOff size={14} />
-                                      잠그기
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Eye size={14} />
-                                      공개
-                                    </>
-                                  )}
-                                </button>
+                                  </>
+                                )}
+                                {showRowTheory && showRowPractice && (
+                                  <span className="h-6 w-px shrink-0 bg-[#E5E3DD]" aria-hidden />
+                                )}
+                                {showRowPractice && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => setPreviewContent(content)}
+                                      title={`${content.title} 미리보기`}
+                                      aria-label="미리보기"
+                                      className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[#E5E3DD] bg-white text-[#8B7E74] transition-all hover:border-[#8B5E3C] hover:text-[#8B5E3C]"
+                                    >
+                                      <Search size={14} />
+                                    </button>
+                                    <button
+                                      onClick={() => handleTogglePublishContent(content)}
+                                      className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+                                        isPublished
+                                          ? 'bg-[#FDECEC] text-[#B42318] hover:bg-[#FAD4D1]'
+                                          : 'bg-[#8B5E3C] text-white hover:bg-[#724D31]'
+                                      }`}
+                                    >
+                                      {isPublished ? (
+                                        <>
+                                          <EyeOff size={14} />
+                                          잠그기
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Eye size={14} />
+                                          공개
+                                        </>
+                                      )}
+                                    </button>
+                                  </>
+                                )}
                               </div>
                             </div>
 
-                            {onSaveContent && isSlideInputOpen && !hasSlide && (
+                            {showRowTheory && onSaveContent && isSlideInputOpen && !hasSlide && (
                               <form
                                 onSubmit={(event) => {
                                   event.preventDefault();
@@ -3584,6 +3642,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                   feePerHour: feePerHour.value,
                   hoursPerSession: hoursPerSession.value,
                   annotationLanguages,
+                  showTheory: settingsDraft.showTheory,
+                  showPractice: settingsDraft.showPractice,
                 } as Partial<Classroom>);
                 setAnnotationLanguageInput('');
                 window.alert('클래스 설정이 저장되었습니다.');
@@ -3628,6 +3688,79 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
             className="w-full rounded-2xl border-2 border-[#E5E3DD] px-4 py-2.5 text-sm font-medium text-[#4A3728] transition-all focus:border-[#8B5E3C] focus:outline-none"
             placeholder='예: "구로구청 / 디지털배움터" (시간표 연결 시 자동으로 채워질 수 있어요)'
           />
+        </div>
+
+        <div className="mb-5">
+          <div className="mb-3 flex items-center gap-2">
+            <Presentation size={16} className="text-[#8B5E3C]" />
+            <h3 className="text-sm font-bold text-[#4A3728]">수업 구성 (이론 · 실습)</h3>
+            <DashboardInfoTooltip
+              content="이 반이 다루는 영역이에요. 켜 둔 것만 대시보드 '수업 진행·학생 공개'에 보입니다. 예: '앱 기초/활용'처럼 이론만 하는 반은 실습을 꺼 두세요."
+              label="수업 구성 설명 보기"
+            />
+          </div>
+          <div className="space-y-2">
+            {[
+              {
+                key: 'showTheory' as const,
+                icon: Presentation,
+                label: '이론',
+                desc: '이론 슬라이드 (강사 화면 전용)',
+              },
+              {
+                key: 'showPractice' as const,
+                icon: ListChecks,
+                label: '실습',
+                desc: '학생 화면에 공개하는 실습 블록',
+              },
+            ].map((item) => {
+              const ItemIcon = item.icon;
+              const enabled = settingsDraft[item.key];
+              return (
+                <div
+                  key={item.key}
+                  className={`flex items-center justify-between gap-3 rounded-2xl border-2 px-4 py-3 transition-colors ${
+                    enabled ? 'border-[#EBD9C1] bg-[#FFF9F0]' : 'border-[#E5E3DD] bg-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`flex h-9 w-9 items-center justify-center rounded-xl transition-colors ${
+                        enabled ? 'bg-[#F3E8DB] text-[#8B5E3C]' : 'bg-[#F3F2EE] text-[#A89F94]'
+                      }`}
+                    >
+                      <ItemIcon size={16} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-[#4A3728]">{item.label}</p>
+                      <p className="text-xs text-[#8B7E74]">{item.desc}</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={enabled}
+                    aria-label={`${item.label} ${enabled ? '끄기' : '켜기'}`}
+                    onClick={() =>
+                      setSettingsDraft({ ...settingsDraft, [item.key]: !enabled })
+                    }
+                    className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
+                      enabled ? 'bg-[#8B5E3C]' : 'bg-[#D8D2C8]'
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${
+                        enabled ? 'left-6' : 'left-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-xs text-[#A89F94]">
+            변경 후 위의 <span className="font-bold">저장</span>을 눌러야 반영됩니다.
+          </p>
         </div>
 
         <div className="mb-5">

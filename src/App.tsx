@@ -701,6 +701,10 @@ export default function App() {
               ? (data.sessionStates as Record<string, ClassroomSessionState>)
               : undefined,
           hidden: data.hidden === true,
+          // 이론·실습 표시 토글. 값이 없으면(레거시 반) undefined로 두어 대시보드에서 '둘 다 활성'으로 폴백한다.
+          // (여기서 빠뜨리면 설정에서 꺼도 스냅샷 정규화에서 떨어져 대시보드가 계속 둘 다 켜진 것처럼 보인다.)
+          showTheory: typeof data.showTheory === 'boolean' ? data.showTheory : undefined,
+          showPractice: typeof data.showPractice === 'boolean' ? data.showPractice : undefined,
         } satisfies Classroom;
       });
 
@@ -1472,6 +1476,9 @@ export default function App() {
         // 기본 강사비 시수당 4만원 × 회차당 2시수 = 회차당 8만원으로 시작 (설정에서 바꿀 수 있음)
         feePerHour: 40000,
         hoursPerSession: 2,
+        // 처음 만들면 이론·실습 둘 다 활성. 이론만 하는 반은 설정에서 실습을 끈다.
+        showTheory: true,
+        showPractice: true,
         createdAt: new Date().toISOString(),
       };
       await setDoc(classroomRef, classroomData);
@@ -1503,6 +1510,9 @@ export default function App() {
         // 기본 강사비 시수당 4만원 × 회차당 2시수 = 회차당 8만원으로 시작 (설정에서 바꿀 수 있음)
         feePerHour: 40000,
         hoursPerSession: 2,
+        // 처음 만들면 이론·실습 둘 다 활성. 이론만 하는 반은 설정에서 실습을 끈다.
+        showTheory: true,
+        showPractice: true,
         createdAt: new Date().toISOString(),
       };
       await setDoc(classroomRef, classroomData);

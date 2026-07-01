@@ -202,6 +202,13 @@ export interface Classroom {
    * (예전엔 학생들 language를 모아 최다 2개로 유추했으나, 이제 학생 유추를 하지 않고 여기서만 정한다.)
    */
   annotationLanguages?: string[];
+  /**
+   * 이 반이 다루는 수업 영역. 켜진 것만 대시보드 '수업 진행·학생 공개'에 보인다.
+   * 값이 없으면(레거시 반) 둘 다 켜진 것으로 본다. 새로 만들면 둘 다 true.
+   * '앱 기초/활용'처럼 이론만 하는 반은 showPractice=false로 둔다.
+   */
+  showTheory?: boolean;
+  showPractice?: boolean;
 }
 
 /** calendar.damuna.org `classes` 컬렉션의 참고 시간표 요약 (읽기 전용) */

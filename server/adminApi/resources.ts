@@ -83,6 +83,16 @@ export const RESOURCE_SPECS: Record<ResourceName, ResourceSpec> = {
         description:
           '이론 슬라이드·실습에 병기할 번역 언어 목록 (문자열 배열, 0개~여러 개. 예: ["러시아어","베트남어"]). 강사가 직접 지정하며, 학생 language로 유추하지 않는다. 비면 병기 없이 쉬운 한국어+그림만 쓴다.',
       },
+      showTheory: {
+        type: 'boolean',
+        description:
+          '이론 영역을 대시보드 "수업 진행·학생 공개"에 표시할지. 없으면 활성으로 본다. 이론만 하는 반은 showPractice를 false로.',
+      },
+      showPractice: {
+        type: 'boolean',
+        description:
+          '실습(학생 공개) 영역을 대시보드에 표시할지. 없으면 활성으로 본다. "앱 기초/활용"처럼 이론만 하는 반은 false.',
+      },
     },
     defaults: ({ nowIso }) => ({ createdAt: nowIso }),
   },
