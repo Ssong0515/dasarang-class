@@ -81,8 +81,8 @@ const labelForIso = (iso: string): string =>
   VOICE_LANG_OPTIONS.find((option) => option.iso === iso)?.label ?? iso;
 
 // 긴 발화를 자막 크기로 끊어 보내기 위한 임계값. 교사가 쉼표 없이 길게 말해도 아래 조건이면 강제로 끊어 확정·전송하고 이어서 다시 인식한다.
-const MAX_INTERIM_CHARS = 90; // 확정 안 된 미리보기가 이 글자 수를 넘으면 끊는다.
-const MAX_INTERIM_MS = 8000; // 또는 확정 없이 이 시간(ms) 동안 이어지면 끊는다.
+const MAX_INTERIM_CHARS = 60; // 확정 안 된 미리보기가 이 글자 수를 넘으면 끊는다.
+const MAX_INTERIM_MS = 6000; // 또는 확정 없이 이 시간(ms) 동안 이어지면 끊는다.
 const FLUSH_CHECK_MS = 1500; // 시간 기반 끊기 점검 주기.
 
 export interface TeacherBroadcastButtonProps {
