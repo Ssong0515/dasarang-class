@@ -383,8 +383,9 @@ export const buildResponsiveSrcDoc = (html: string) => {
     return '';
   }
 
-  // 학생이 실습 안의 🌐 번역 버튼을 헷갈려해서 일단 숨긴다. 다시 켜려면 true로.
-  const ENABLE_INLINE_TRANSLATE = false;
+  // 실습 안 🌐 번역 버튼(이주민 학생용 병기 번역)은 노출한다. 페이지 상단 UI 언어 선택기는 대신 숨긴다.
+  // 끄려면 false로.
+  const ENABLE_INLINE_TRANSLATE = true;
   const translateTag = ENABLE_INLINE_TRANSLATE ? iframeTranslateScriptTag : '';
 
   if (/<html[\s>]/i.test(trimmedHtml) || /<body[\s>]/i.test(trimmedHtml) || /<!doctype/i.test(trimmedHtml)) {

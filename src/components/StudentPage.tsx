@@ -486,6 +486,10 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   // Set to true to restore the classroom selection home screen
   const SHOW_CLASSROOM_SELECTION = false;
 
+  // 페이지 상단 UI 언어 선택기(한국어 ▾)를 숨긴다. 학생 혼동 방지 — 번역은 실습 안 🌐 번역 버튼으로 한다.
+  // 다시 보이려면 true로.
+  const SHOW_PAGE_LANGUAGE_SELECTOR = false;
+
   const homeT = translations[lang];
   const detailT = translations.KO;
   const currentT = activeClassroomId ? detailT : homeT;
@@ -755,7 +759,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
             </div>
 
             <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
-              {!activeClassroomId && (
+              {SHOW_PAGE_LANGUAGE_SELECTOR && !activeClassroomId && (
                 <div className="relative">
                   <button
                     onClick={() => setIsLangOpen((current) => !current)}
