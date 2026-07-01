@@ -23,6 +23,64 @@ interface TranslatorFactory {
   }) => Promise<TranslatorInstance>;
 }
 
+// 개별 언어 번역이 (첫 사용 모델 다운로드 등으로) 오래 걸려도 방송 저장 자체가 막히지 않도록 상한을 둔다.
+// 시간을 넘기면 그 언어만 한국어 원문으로 폴백하고 문서는 즉시 저장된다.
+const TRANSLATE_TIMEOUT_MS = 8000;
+
+const withTimeout = <T,>(promise: Promise<T>, ms: number, fallback: T): Promise<T> =>
+  new Promise<T>((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        resolve(fallback);
+      }
+    }, ms);
+    promise
+      .then((value) => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          resolve(value);
+        }
+      })
+      .catch(() => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          resolve(fallback);
+        }
+      });
+  });
+
+/**
+ * 대상 언어들의 ko→언어 번역 모델을 미리 내려받도록 예열한다(방송 시작 시 호출).
+ * 첫 발화가 모델 다운로드로 지연되지 않게 백그라운드에서 미리 준비만 하고, 실패는 조용히 무시한다.
+ */
+export async function warmUpTranslators(targetCodes: string[]): Promise<void> {
+  const codes = Array.from(
+    new Set(targetCodes.filter((code) => typeof code === 'string' && code && code !== 'ko'))
+  );
+  if (codes.length === 0) return;
+  if (typeof self === 'undefined' || !('Translator' in self)) return;
+
+  const Translator = (self as unknown as { Translator: TranslatorFactory }).Translator;
+  await Promise.all(
+    codes.map(async (code) => {
+      try {
+        const availability = await Translator.availability({
+          sourceLanguage: 'ko',
+          targetLanguage: code,
+        });
+        if (availability === 'unavailable') return;
+        await Translator.create({ sourceLanguage: 'ko', targetLanguage: code }); // 모델 다운로드 트리거(캐시됨)
+      } catch {
+        /* 무시 */
+      }
+    })
+  );
+}
+
 /**
  * 한국어 텍스트를 targetCodes의 각 언어(예 'ru','zh','vi','ur','tl','en')로 번역해 `{ [code]: 번역텍스트 }`로 모아 돌려준다.
  * - targetCodes가 비어 있으면(출석 언어 0개) Translator API를 호출하지 않고 즉시 빈 객체를 돌려준다.
@@ -60,24 +118,28 @@ export async function translateFromKorean(
         result[code] = source;
         return;
       }
-      try {
-        const availability = await Translator.availability({
-          sourceLanguage: 'ko',
-          targetLanguage: code,
-        });
-        if (availability === 'unavailable') {
-          result[code] = source;
-          return;
-        }
-        const translator = await Translator.create({
-          sourceLanguage: 'ko',
-          targetLanguage: code,
-        });
-        const out = await translator.translate(source);
-        result[code] = typeof out === 'string' && out.trim().length > 0 ? out : source;
-      } catch {
-        result[code] = source;
-      }
+      // 언어별 번역을 시간 상한 안에서 시도하고, 넘기거나 실패하면 한국어 원문으로 폴백한다.
+      result[code] = await withTimeout(
+        (async () => {
+          try {
+            const availability = await Translator.availability({
+              sourceLanguage: 'ko',
+              targetLanguage: code,
+            });
+            if (availability === 'unavailable') return source;
+            const translator = await Translator.create({
+              sourceLanguage: 'ko',
+              targetLanguage: code,
+            });
+            const out = await translator.translate(source);
+            return typeof out === 'string' && out.trim().length > 0 ? out : source;
+          } catch {
+            return source;
+          }
+        })(),
+        TRANSLATE_TIMEOUT_MS,
+        source
+      );
     })
   );
 

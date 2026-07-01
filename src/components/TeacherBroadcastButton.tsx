@@ -4,7 +4,7 @@ import { db, collection, addDoc, handleFirestoreError, OperationType } from '../
 import { TEACHER_BROADCAST_MESSAGES_COLLECTION } from '../utils/classroomDomain';
 // LANG_MAX_AGE_MS(180분)는 학생 언어 세션 TTL과 반드시 같은 값이어야 하므로 StudentVoiceButton에서 import해 재사용한다(이중 정의 금지).
 import { LANG_MAX_AGE_MS, VOICE_LANG_OPTIONS } from './StudentVoiceButton';
-import { translateFromKorean } from '../utils/translateFromKorean';
+import { translateFromKorean, warmUpTranslators } from '../utils/translateFromKorean';
 
 // ─── SpeechRecognition 최소 타입 선언 (StudentVoiceButton과 동일하게 좁게 정의) ──────────
 interface SpeechRecognitionAlternativeLike {
@@ -31,6 +31,7 @@ interface SpeechRecognitionLike {
   interimResults: boolean;
   continuous: boolean;
   maxAlternatives?: number;
+  onstart: (() => void) | null;
   onresult: ((event: SpeechRecognitionEventLike) => void) | null;
   onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
   onend: (() => void) | null;
@@ -47,6 +48,33 @@ const getSpeechRecognitionCtor = (): SpeechRecognitionCtor | null => {
     webkitSpeechRecognition?: SpeechRecognitionCtor;
   };
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+};
+
+// 마이크 권한을 확보한다(StudentVoiceButton.warmUpMic과 동일 패턴).
+// 중요: 이미 허용된 상태면 getUserMedia를 다시 호출하지 않는다. 인식 시작 직전에 마이크를 잡았다 놓으면
+// 방금 시작한 SpeechRecognition의 오디오 파이프라인이 끊겨 onresult가 안 오는 경합이 생긴다.
+// 반환값: 마이크를 쓸 수 있으면 true, 거부됐으면 false.
+const ensureMic = async (): Promise<boolean> => {
+  try {
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      return true; // 물어볼 방법이 없으면 그냥 진행(SpeechRecognition이 알아서 처리)
+    }
+    if (navigator.permissions?.query) {
+      try {
+        const status = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+        if (status.state === 'granted') return true; // 이미 허용됨 → 재획득하지 않음(인식 시작과 충돌 방지)
+        if (status.state === 'denied') return false;
+      } catch {
+        /* permissions API 미지원 → 아래에서 그냥 요청 */
+      }
+    }
+    // 아직 미허용(prompt) 상태일 때만 권한을 요청한다.
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach((track) => track.stop()); // 권한만 얻고 즉시 해제
+    return true;
+  } catch {
+    return false; // 사용자가 거부
+  }
 };
 
 const labelForIso = (iso: string): string =>
@@ -146,6 +174,21 @@ export const TeacherBroadcastButton: React.FC<TeacherBroadcastButtonProps> = ({
     const Ctor = getSpeechRecognitionCtor();
     if (!Ctor) return;
 
+    // 이전 인스턴스가 남아 있으면 반드시 정리한다. 안 그러면 마이크를 두 인스턴스가 동시에 잡아 어느 쪽도 인식 결과를 못 낸다.
+    const previous = recognitionRef.current;
+    if (previous) {
+      previous.onstart = null;
+      previous.onresult = null;
+      previous.onerror = null;
+      previous.onend = null;
+      try {
+        previous.abort();
+      } catch {
+        /* 무시 */
+      }
+      recognitionRef.current = null;
+    }
+
     let recognition: SpeechRecognitionLike;
     try {
       recognition = new Ctor();
@@ -156,23 +199,32 @@ export const TeacherBroadcastButton: React.FC<TeacherBroadcastButtonProps> = ({
     recognition.continuous = true;
     recognition.interimResults = true;
 
+    recognition.onstart = () => {
+      console.info('[broadcast] recognition started');
+    };
+
     recognition.onresult = (event) => {
       let interim = '';
+      let finalChunk = '';
       for (let i = event.resultIndex; i < event.results.length; i += 1) {
         const result = event.results[i];
         const transcript = result[0]?.transcript ?? '';
         if (result.isFinal) {
-          const finalText = transcript.trim();
-          if (finalText) void sendBroadcast(finalText);
+          finalChunk += transcript;
         } else {
           interim += transcript;
         }
       }
-      setInterimText(interim.trim());
+      const finalText = finalChunk.trim();
+      console.info('[broadcast] result', { final: finalText, interimLen: interim.trim().length });
+      if (finalText) void sendBroadcast(finalText);
+      // 확정 문장 + 진행 중 텍스트를 함께 미리보기로 보여준다(확정만 오는 브라우저에서도 버블이 뜨도록).
+      setInterimText((finalChunk + interim).trim());
     };
 
     recognition.onerror = (event) => {
       const code = typeof event?.error === 'string' ? event.error : '';
+      console.warn('[broadcast] recognition error:', code);
       // 권한 거부/서비스 불가는 재시작해도 소용없으니 방송을 끈다. 그 외(no-speech·network·aborted 등)는 onend에서 자동 재시작.
       if (code === 'not-allowed' || code === 'service-not-allowed') {
         permissionDeniedRef.current = true;
@@ -181,6 +233,7 @@ export const TeacherBroadcastButton: React.FC<TeacherBroadcastButtonProps> = ({
     };
 
     recognition.onend = () => {
+      console.info('[broadcast] recognition ended (broadcasting:', isBroadcastingRef.current, ')');
       // 사용자가 끈 게 아니고(=여전히 방송 중) 권한 문제도 아니면 자동 재시작.
       if (!isBroadcastingRef.current || permissionDeniedRef.current) return;
       // 최대 시간(180분) 초과 시엔 재시작하지 않고 자동 정지 안내.
@@ -200,7 +253,7 @@ export const TeacherBroadcastButton: React.FC<TeacherBroadcastButtonProps> = ({
     }
   }, [sendBroadcast, stopBroadcast]);
 
-  const startBroadcast = useCallback(() => {
+  const startBroadcast = useCallback(async () => {
     if (isBroadcastingRef.current) return;
     if (!getSpeechRecognitionCtor()) {
       setNotice({ kind: 'error', text: '이 브라우저에서는 음성 인식을 지원하지 않아요.' });
@@ -219,6 +272,19 @@ export const TeacherBroadcastButton: React.FC<TeacherBroadcastButtonProps> = ({
     setInterimText('');
     setIsBroadcasting(true);
 
+    // 마이크 권한을 먼저 확실히 확보한다(교사 창은 학생 창과 별개의 권한 컨텍스트라 여기서 프롬프트가 떠야 함).
+    // 거부되면 방송을 켜지 않는다(조용히 인식만 안 되는 상황 방지).
+    const micOk = await ensureMic();
+    if (!isBroadcastingRef.current) return; // 그 사이 사용자가 껐으면 중단
+    if (!micOk) {
+      permissionDeniedRef.current = true;
+      stopBroadcast({ kind: 'error', text: '마이크 권한이 필요해요. 브라우저에서 마이크를 허용해 주세요.' });
+      return;
+    }
+
+    // 번역 모델을 미리 예열한다(첫 발화가 ko→언어 모델 다운로드로 지연/블록되지 않게). 실패는 무시.
+    void warmUpTranslators(targetCodesRef.current);
+
     // 최대 180분 자동 정지(무음으로 재시작이 반복돼도 총 경과 시간으로 끊는다).
     autoStopTimerRef.current = setTimeout(() => {
       stopBroadcast({ kind: 'info', text: '3시간이 지나 통역 자막이 자동으로 꺼졌어요.' });
@@ -231,7 +297,7 @@ export const TeacherBroadcastButton: React.FC<TeacherBroadcastButtonProps> = ({
     if (isBroadcasting) {
       stopBroadcast(null);
     } else {
-      startBroadcast();
+      void startBroadcast();
     }
   };
 
