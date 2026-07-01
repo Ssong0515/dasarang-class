@@ -15,6 +15,7 @@ import {
 import { Classroom, LessonCategory, LessonContent, PublishedLesson } from '../types';
 import { resolveAppPath } from '../utils/appPaths';
 import { StudentContentCard } from './StudentContentPreview';
+import { StudentVoiceButton } from './StudentVoiceButton';
 import {
   getClassroomCardColors,
   getClassroomIconComponent,
@@ -1185,6 +1186,17 @@ export const StudentPage: React.FC<StudentPageProps> = ({
           </button>
         )}
       </footer>
+
+      {/* 학생 음성 → 한국어 채팅 FAB. 실제 학생 화면에서만(강사 미리보기 제외) 띄운다.
+          강사 미리보기에서 눌러 봐도 메시지가 강사 채팅에 섞이지 않도록 isAdmin일 땐 감춘다. */}
+      {!isAdmin && (
+        <StudentVoiceButton
+          classroomId={effectiveClassroom?.id}
+          classroomName={effectiveClassroom?.name}
+          date={gatingDateString}
+          endNoticeAt={activeEndNoticeAt}
+        />
+      )}
 
       {/* 수업 종료 안내 — 교사가 대시보드에서 '수업 종료'를 누르면 실시간 신호로 모든 학생 화면에 뜬다. 학생은 띄우거나 닫을 수만 있다. */}
       {isEndNoticeOpen && (

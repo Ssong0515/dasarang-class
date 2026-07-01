@@ -285,5 +285,33 @@ service cloud.firestore {
     match /studentPosts/{postId} {
       allow read, write: if isAdmin();
     }
+
+    function isValidStudentVoiceMessage(data) {
+      return data.keys().hasAll([
+               'classroomId',
+               'date',
+               'sourceLang',
+               'sourceText',
+               'koreanText',
+               'translationOk',
+               'createdAt'
+             ]) &&
+             data.classroomId is string &&
+             data.date is string &&
+             data.sourceLang is string &&
+             data.sourceText is string && data.sourceText.size() > 0 && data.sourceText.size() < 5000 &&
+             data.koreanText is string && data.koreanText.size() < 5000 &&
+             data.translationOk is bool &&
+             data.createdAt is string &&
+             (!('classroomName' in data) || data.classroomName is string);
+    }
+
+    // 외국인 학생이 말한 걸 한국어로 번역해 강사에게 보내는 실시간 채팅.
+    // 공용 학생 계정이 create, 읽기·수정·삭제는 강사(관리자)만 — 학생끼리 서로 못 읽는다.
+    match /studentVoiceMessages/{messageId} {
+      allow create: if canReadStudentPage() && isValidStudentVoiceMessage(request.resource.data);
+      allow read: if isAdmin();
+      allow update, delete: if isAdmin();
+    }
   }
 }

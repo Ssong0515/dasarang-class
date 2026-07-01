@@ -298,6 +298,23 @@ export interface DailyReview {
   updatedAt: string;
 }
 
+/**
+ * 외국인 학생이 자기 언어로 말하면 → 브라우저에서 STT로 받아 적고 → 온디바이스로 한국어 번역한 뒤
+ * 강사(관리자) 화면에 실시간 채팅으로 뜨는 한 건. 공용 학생 계정 1개를 쓰므로 학생 식별 정보는 담지 않는다
+ * (누가 말했는지는 강사가 교실에서 직접 본다).
+ */
+export interface StudentVoiceMessage {
+  id: string;
+  classroomId: string;
+  classroomName?: string;
+  date: string;         // 'YYYY-MM-DD'
+  sourceLang: string;   // STT에 쓴 BCP-47, 예: 'ru-RU'
+  sourceText: string;   // 학생 언어 그대로의 원문 전사
+  koreanText: string;   // 번역 결과; 번역 불가 시 sourceText와 동일
+  translationOk: boolean;
+  createdAt: string;    // ISO 문자열
+}
+
 export interface AccessLog {
   id: string;
   email: string;
