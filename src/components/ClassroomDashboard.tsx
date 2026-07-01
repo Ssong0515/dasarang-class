@@ -1091,6 +1091,10 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     onUpdateClassroom(classroom.id, { sessionStates: states });
     // 완료로 바꾼 순간, 강사비가 잡혀 있으면 동전 띠링 + "+강사비" 떠오르기 효과를 낸다.
     if (next === 'done') {
+      // 완료하면 그날 공개돼 있던 실습을 조용히 모두 닫는다(학생 쪽 '수업 끝' 안내 없이 공개만 해제).
+      if (onUpdatePublishedLesson && (currentPublishedLesson?.publishedContentIds?.length ?? 0) > 0) {
+        void onUpdatePublishedLesson(classroom.id, classroom.name, selectedDate, []);
+      }
       const fee = getSessionFee(classroom, states[currentSessionId]);
       if (fee > 0) {
         feeBurstIdRef.current += 1;

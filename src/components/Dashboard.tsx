@@ -103,6 +103,12 @@ const MonthlyEarningsCalendar: React.FC<{
     return { theoryReady, practiceReady };
   };
 
+  // 완료한 수업은 준비 배지 대신 메모 입력 여부를 표시한다.
+  const hasMemo = (classroomId: string, dateStr: string) => {
+    const record = recordByKey.get(`${classroomId}_${dateStr}`);
+    return Boolean(record?.memo && record.memo.trim());
+  };
+
   const todayStr = getTodayDateStr();
   const remainingCount = Math.max(earnings.scheduledCount - earnings.doneCount, 0);
   const remainingEarnings = Math.max(earnings.totalExpected - earnings.totalEarned, 0);
@@ -284,6 +290,8 @@ const MonthlyEarningsCalendar: React.FC<{
                 <div className="mt-1 flex flex-col gap-0.5">
                   {day.entries.slice(0, 3).map((entry, entryIndex) => {
                     const readiness = getReadiness(entry.classroomId, cell);
+                    const isDone = entry.status === 'done';
+                    const memoPresent = hasMemo(entry.classroomId, cell);
                     const statusLabel =
                       entry.status === 'done' ? '완료' : entry.status === 'skipped' ? '건너뜀' : '예정';
                     return (
@@ -291,9 +299,15 @@ const MonthlyEarningsCalendar: React.FC<{
                         key={entryIndex}
                         type="button"
                         onClick={() => handleEntryClick(entry.classroomId, cell)}
-                        title={`${entry.classroomName} · ${statusLabel} / 이론 ${
-                          readiness.theoryReady ? '준비됨' : '준비안됨'
-                        } · 실습 ${readiness.practiceReady ? '준비됨' : '준비안됨'} (클릭하면 클래스로 이동)`}
+                        title={
+                          isDone
+                            ? `${entry.classroomName} · 완료 / 메모 ${
+                                memoPresent ? '있음' : '없음'
+                              } (클릭하면 클래스로 이동)`
+                            : `${entry.classroomName} · ${statusLabel} / 이론 ${
+                                readiness.theoryReady ? '준비됨' : '준비안됨'
+                              } · 실습 ${readiness.practiceReady ? '준비됨' : '준비안됨'} (클릭하면 클래스로 이동)`
+                        }
                         className={`flex w-full min-w-0 items-center gap-1 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-[#F3F2EE] ${
                           entry.status === 'skipped' ? 'opacity-50' : ''
                         }`}
@@ -308,26 +322,39 @@ const MonthlyEarningsCalendar: React.FC<{
                         <span className="min-w-0 flex-1 truncate text-[10px] font-bold text-[#4A3728]">
                           {entry.classroomName}
                         </span>
-                        <span className="hidden shrink-0 items-center gap-0.5 sm:flex">
+                        {isDone ? (
                           <span
-                            className={`rounded px-1 text-[8px] font-bold ${
-                              readiness.theoryReady
+                            className={`hidden shrink-0 items-center gap-0.5 rounded px-1 text-[8px] font-bold sm:flex ${
+                              memoPresent
                                 ? 'bg-[#E0EFE4] text-[#2D7A4D]'
                                 : 'bg-[#F3F2EE] text-[#C2BAAE]'
                             }`}
                           >
-                            이
+                            <StickyNote size={9} strokeWidth={2.5} />
+                            {memoPresent ? '메모' : '없음'}
                           </span>
-                          <span
-                            className={`rounded px-1 text-[8px] font-bold ${
-                              readiness.practiceReady
-                                ? 'bg-[#E0EFE4] text-[#2D7A4D]'
-                                : 'bg-[#F3F2EE] text-[#C2BAAE]'
-                            }`}
-                          >
-                            실
+                        ) : (
+                          <span className="hidden shrink-0 items-center gap-0.5 sm:flex">
+                            <span
+                              className={`rounded px-1 text-[8px] font-bold ${
+                                readiness.theoryReady
+                                  ? 'bg-[#E0EFE4] text-[#2D7A4D]'
+                                  : 'bg-[#F3F2EE] text-[#C2BAAE]'
+                              }`}
+                            >
+                              이
+                            </span>
+                            <span
+                              className={`rounded px-1 text-[8px] font-bold ${
+                                readiness.practiceReady
+                                  ? 'bg-[#E0EFE4] text-[#2D7A4D]'
+                                  : 'bg-[#F3F2EE] text-[#C2BAAE]'
+                              }`}
+                            >
+                              실
+                            </span>
                           </span>
-                        </span>
+                        )}
                       </button>
                     );
                   })}
