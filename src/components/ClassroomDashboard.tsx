@@ -45,7 +45,6 @@ import {
   Wallet,
   Coins,
   Languages,
-  Search,
 } from 'lucide-react';
 import {
   AssignCurriculumDatesResult,
@@ -2192,7 +2191,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                                       aria-label="이론 프롬프트 보기·수정"
                                       className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[#E5E3DD] bg-white text-[#8B7E74] transition-all hover:border-[#8B5E3C] hover:text-[#8B5E3C]"
                                     >
-                                      <Edit3 size={14} />
+                                      <FileText size={14} />
                                     </button>
                                   </>
                                 )}
@@ -2252,7 +2251,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                                       aria-label="미리보기"
                                       className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[#E5E3DD] bg-white text-[#8B7E74] transition-all hover:border-[#8B5E3C] hover:text-[#8B5E3C]"
                                     >
-                                      <Search size={14} />
+                                      <Eye size={14} />
                                     </button>
                                     <button
                                       onClick={() => handleTogglePublishContent(content)}
