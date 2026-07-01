@@ -344,22 +344,35 @@ const iframeTranslateScriptTag = `
   <\/script>
 `;
 
+// 문서의 특정 오프셋 앞에 문자열을 끼워 넣는다. replace()를 쓰지 않는 이유: 주입 문자열에
+// 들어 있는 $&·$1 같은 시퀀스가 특수 치환 패턴으로 해석돼 마크업이 깨질 수 있기 때문.
+const spliceAt = (source: string, index: number, insertion: string): string =>
+  index < 0 ? source : `${source.slice(0, index)}${insertion}${source.slice(index)}`;
+
 const injectIframeMarkup = (html: string, styleTag: string, scriptTag: string) => {
   let nextHtml = html;
+  const lower = () => nextHtml.toLowerCase();
 
-  if (/<\/head>/i.test(nextHtml)) {
-    nextHtml = nextHtml.replace(/<\/head>/i, `${styleTag}</head>`);
-  } else if (/<body[^>]*>/i.test(nextHtml)) {
-    nextHtml = nextHtml.replace(/<body([^>]*)>/i, `<body$1>${styleTag}`);
+  // 스타일은 문서의 진짜 <head> 닫는 태그(=첫 </head>) 앞에 넣는다. 실습 <script>가 문자열로
+  // "</head>"를 품고 있어도 그건 문서 head 뒤라 항상 나중에 나온다.
+  const headClose = lower().indexOf('</head>');
+  if (headClose !== -1) {
+    nextHtml = spliceAt(nextHtml, headClose, styleTag);
   } else {
-    nextHtml = `${styleTag}${nextHtml}`;
+    const bodyOpen = nextHtml.match(/<body[^>]*>/i);
+    if (bodyOpen) {
+      nextHtml = spliceAt(nextHtml, bodyOpen.index! + bodyOpen[0].length, styleTag);
+    } else {
+      nextHtml = `${styleTag}${nextHtml}`;
+    }
   }
 
-  if (/<\/body>/i.test(nextHtml)) {
-    nextHtml = nextHtml.replace(/<\/body>/i, `${scriptTag}</body>`);
-  } else {
-    nextHtml = `${nextHtml}${scriptTag}`;
-  }
+  // 스크립트는 문서의 진짜 </body>(=마지막 </body>) 앞에 넣는다. 실습 <script>가 다운로드용
+  // HTML 문서를 문자열로 조립하면(예: resultDoc() → "…</body></html>") 그 문자열 속 </body>가
+  // 먼저 나오는데, 거기에 주입하면 우리 <script>가 실습 <script> 한복판에 박혀 조기 종료시키고
+  // 나머지 실습 코드가 화면에 raw 텍스트로 새어 나온다. 그래서 반드시 마지막 것을 골라야 한다.
+  const bodyClose = lower().lastIndexOf('</body>');
+  nextHtml = bodyClose !== -1 ? spliceAt(nextHtml, bodyClose, scriptTag) : `${nextHtml}${scriptTag}`;
 
   return nextHtml;
 };
