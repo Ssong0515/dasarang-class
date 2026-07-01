@@ -454,8 +454,18 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
+    // 배포 즉시 반영을 위한 캐시 전략:
+    //   - index.html: 절대 캐시 안 함(no-store). 항상 최신을 받아 새 해시 에셋을 가리키게 한다.
+    //   - /assets/**: Vite가 파일명에 콘텐츠 해시를 박으므로 영구 캐시(immutable) 안전.
+    // firebase.json의 hosting 헤더는 클래식 Firebase Hosting 전용이라 App Hosting(Express)에는
+    // 적용되지 않는다. 실제 서빙 주체인 이 서버에서 직접 헤더를 지정해야 한다.
+    const NO_CACHE = 'no-cache, no-store, must-revalidate';
+    const IMMUTABLE = 'public, max-age=31536000, immutable';
     const sendIndex = (req: express.Request, res: express.Response) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+      res.sendFile(path.join(distPath, 'index.html'), {
+        cacheControl: false,
+        headers: { 'Cache-Control': NO_CACHE },
+      });
     };
 
     if (APP_BASE_PATH !== '/') {
@@ -464,7 +474,22 @@ async function startServer() {
       });
     }
 
-    app.use(APP_BASE_PATH, express.static(distPath, { index: false, redirect: false }));
+    app.use(
+      APP_BASE_PATH,
+      express.static(distPath, {
+        index: false,
+        redirect: false,
+        setHeaders: (res, filePath) => {
+          // 해시 파일명을 쓰는 빌드 에셋만 영구 캐시. index.html과 public/의 비해시 파일
+          // (logo.svg 등)은 배포 반영을 위해 매번 재검증한다.
+          const isHashedAsset = filePath
+            .slice(distPath.length)
+            .replace(/\\/g, '/')
+            .startsWith('/assets/');
+          res.setHeader('Cache-Control', isHashedAsset ? IMMUTABLE : NO_CACHE);
+        },
+      })
+    );
 
     if (APP_BASE_PATH === '/') {
       app.get('/', sendIndex);
