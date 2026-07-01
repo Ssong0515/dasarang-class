@@ -114,6 +114,26 @@ const clearStoredLang = () => {
   }
 };
 
+// 마이크 권한을 미리 받아둔다(이미 허용돼 있으면 프롬프트 없이 통과).
+// 언어 선택 시 호출 → 첫 '누르고 말하기'가 권한 프롬프트로 끊기지 않게 한다.
+const warmUpMic = async () => {
+  try {
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) return;
+    if (navigator.permissions?.query) {
+      try {
+        const status = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+        if (status.state === 'granted') return; // 이미 허용됨 → 아무것도 안 함
+      } catch {
+        /* permissions API 미지원 → 그냥 요청 시도 */
+      }
+    }
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach((track) => track.stop()); // 권한만 얻고 즉시 해제
+  } catch {
+    /* 사용자가 거부하면 첫 녹음 때 브라우저가 다시 물음 */
+  }
+};
+
 export interface StudentVoiceButtonProps {
   classroomId?: string;
   classroomName?: string;
@@ -141,6 +161,7 @@ export const StudentVoiceButton: React.FC<StudentVoiceButtonProps> = ({
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const finalTextRef = useRef('');
   const sentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 저장된 언어가 만료됐는지 판단하고, 유효하면 채택한다.
   useEffect(() => {
@@ -171,6 +192,7 @@ export const StudentVoiceButton: React.FC<StudentVoiceButtonProps> = ({
   useEffect(() => {
     return () => {
       if (sentTimerRef.current) clearTimeout(sentTimerRef.current);
+      if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
       try {
         recognitionRef.current?.abort();
       } catch {
@@ -189,13 +211,21 @@ export const StudentVoiceButton: React.FC<StudentVoiceButtonProps> = ({
     });
     setLang(option);
     setIsPickerOpen(false);
+    void warmUpMic(); // 언어 고른 김에 마이크 권한 미리 확보 → 첫 녹음이 안 끊김
   };
 
   const finishAndSend = useCallback(async () => {
     const text = finalTextRef.current.trim();
     finalTextRef.current = '';
-    setInterimText('');
-    if (!text || !lang) return;
+    if (!text || !lang) {
+      setInterimText('');
+      return;
+    }
+
+    // 뗀 뒤에도 인식된 텍스트를 ~1.2초 유지 → 학생이 자기가 말한 걸 확인할 수 있게.
+    setInterimText(text);
+    if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
+    clearTimerRef.current = setTimeout(() => setInterimText(''), 1200);
 
     setSendState('sending');
     const { koreanText, ok } = await translateToKorean(text, lang.iso);
@@ -234,6 +264,7 @@ export const StudentVoiceButton: React.FC<StudentVoiceButtonProps> = ({
     recognition.interimResults = true;
     recognition.continuous = true;
 
+    if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
     finalTextRef.current = '';
     setInterimText('');
 
@@ -314,12 +345,8 @@ export const StudentVoiceButton: React.FC<StudentVoiceButtonProps> = ({
   }
 
   // ── 렌더: 마이크 모드 (누르고 있는 동안 녹음) ──────────────────────────────
-  const bubbleText =
-    sendState === 'sent'
-      ? '보냈어요 ✓'
-      : sendState === 'sending'
-      ? '보내는 중…'
-      : interimText;
+  // 버블은 인식된 텍스트를 그대로 보여준다(말하는 중 + 뗀 뒤 ~1.2초). 전송 확인은 버튼 초록 ✓로.
+  const bubbleText = interimText;
 
   return (
     <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2">
