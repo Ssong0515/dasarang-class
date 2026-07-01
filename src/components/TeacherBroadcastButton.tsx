@@ -80,6 +80,11 @@ const ensureMic = async (): Promise<boolean> => {
 const labelForIso = (iso: string): string =>
   VOICE_LANG_OPTIONS.find((option) => option.iso === iso)?.label ?? iso;
 
+// 긴 발화를 자막 크기로 끊어 보내기 위한 임계값. 교사가 쉼표 없이 길게 말해도 아래 조건이면 강제로 끊어 확정·전송하고 이어서 다시 인식한다.
+const MAX_INTERIM_CHARS = 90; // 확정 안 된 미리보기가 이 글자 수를 넘으면 끊는다.
+const MAX_INTERIM_MS = 8000; // 또는 확정 없이 이 시간(ms) 동안 이어지면 끊는다.
+const FLUSH_CHECK_MS = 1500; // 시간 기반 끊기 점검 주기.
+
 export interface TeacherBroadcastButtonProps {
   classroomId?: string;
   classroomName?: string;
@@ -110,6 +115,10 @@ export const TeacherBroadcastButton: React.FC<TeacherBroadcastButtonProps> = ({
   const startedAtRef = useRef(0);
   const autoStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startEndNoticeRef = useRef<string | null>(null);
+  // 긴 발화 자동 끊기용.
+  const flushingRef = useRef(false); // stop() 호출 후 중복 호출 방지 가드
+  const interimSinceRef = useRef(0); // 현재 미확정 미리보기가 시작된 시각(ms). 없으면 0.
+  const flushTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // onresult/onend 클로저가 항상 '최신' 값을 읽도록 ref에 보관(고정 스냅샷이 아니라 매번 최신값 참조).
   const ctxRef = useRef({ classroomId, classroomName, date });
@@ -147,6 +156,12 @@ export const TeacherBroadcastButton: React.FC<TeacherBroadcastButtonProps> = ({
       clearTimeout(autoStopTimerRef.current);
       autoStopTimerRef.current = null;
     }
+    if (flushTimerRef.current) {
+      clearInterval(flushTimerRef.current);
+      flushTimerRef.current = null;
+    }
+    flushingRef.current = false;
+    interimSinceRef.current = 0;
     const recognition = recognitionRef.current;
     recognitionRef.current = null;
     if (recognition) {
@@ -167,6 +182,18 @@ export const TeacherBroadcastButton: React.FC<TeacherBroadcastButtonProps> = ({
     setIsBroadcasting(false);
     setInterimText('');
     setNotice(nextNotice);
+  }, []);
+
+  // 진행 중(확정 안 된) 발화를 강제로 확정시켜 보낸다. stop() → onresult(final) 전송 → onend → 자동 재시작.
+  const flushRecognition = useCallback(() => {
+    const recognition = recognitionRef.current;
+    if (!recognition || flushingRef.current) return;
+    flushingRef.current = true;
+    try {
+      recognition.stop();
+    } catch {
+      /* onend에서 재시작 */
+    }
   }, []);
 
   // SpeechRecognition 인스턴스를 새로 만들어 시작한다. onend에서 자기 자신을 호출해 자동 재시작한다.
@@ -198,6 +225,9 @@ export const TeacherBroadcastButton: React.FC<TeacherBroadcastButtonProps> = ({
     recognition.lang = 'ko-KR';
     recognition.continuous = true;
     recognition.interimResults = true;
+    // 새 세션 시작 → 끊기 상태 초기화.
+    flushingRef.current = false;
+    interimSinceRef.current = 0;
 
     recognition.onstart = () => {
       console.info('[broadcast] recognition started');
@@ -216,10 +246,20 @@ export const TeacherBroadcastButton: React.FC<TeacherBroadcastButtonProps> = ({
         }
       }
       const finalText = finalChunk.trim();
-      console.info('[broadcast] result', { final: finalText, interimLen: interim.trim().length });
       if (finalText) void sendBroadcast(finalText);
+
+      const interimTrimmed = interim.trim();
+      // 미확정 미리보기가 시작된 시각을 추적(시간 기반 끊기용).
+      if (interimTrimmed) {
+        if (interimSinceRef.current === 0) interimSinceRef.current = Date.now();
+      } else {
+        interimSinceRef.current = 0;
+      }
       // 확정 문장 + 진행 중 텍스트를 함께 미리보기로 보여준다(확정만 오는 브라우저에서도 버블이 뜨도록).
       setInterimText((finalChunk + interim).trim());
+
+      // 확정 없이 미리보기가 너무 길어지면 강제로 끊어 보낸다.
+      if (interimTrimmed.length >= MAX_INTERIM_CHARS) flushRecognition();
     };
 
     recognition.onerror = (event) => {
@@ -251,7 +291,7 @@ export const TeacherBroadcastButton: React.FC<TeacherBroadcastButtonProps> = ({
     } catch {
       // 이미 시작된 상태의 InvalidStateError 등은 무시(다음 onend 사이클에서 회복).
     }
-  }, [sendBroadcast, stopBroadcast]);
+  }, [sendBroadcast, stopBroadcast, flushRecognition]);
 
   const startBroadcast = useCallback(async () => {
     if (isBroadcastingRef.current) return;
@@ -290,8 +330,15 @@ export const TeacherBroadcastButton: React.FC<TeacherBroadcastButtonProps> = ({
       stopBroadcast({ kind: 'info', text: '3시간이 지나 통역 자막이 자동으로 꺼졌어요.' });
     }, LANG_MAX_AGE_MS);
 
+    // 긴 발화 시간 기반 끊기: 확정 없이 오래 이어지면(끊어 읽지 않으면) 끊어 보낸다.
+    flushTimerRef.current = setInterval(() => {
+      if (interimSinceRef.current > 0 && Date.now() - interimSinceRef.current >= MAX_INTERIM_MS) {
+        flushRecognition();
+      }
+    }, FLUSH_CHECK_MS);
+
     beginRecognition();
-  }, [beginRecognition, stopBroadcast]);
+  }, [beginRecognition, stopBroadcast, flushRecognition]);
 
   const handleToggle = () => {
     if (isBroadcasting) {
@@ -316,6 +363,7 @@ export const TeacherBroadcastButton: React.FC<TeacherBroadcastButtonProps> = ({
     return () => {
       isBroadcastingRef.current = false;
       if (autoStopTimerRef.current) clearTimeout(autoStopTimerRef.current);
+      if (flushTimerRef.current) clearInterval(flushTimerRef.current);
       const recognition = recognitionRef.current;
       if (recognition) {
         recognition.onend = null;
