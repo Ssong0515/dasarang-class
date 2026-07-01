@@ -134,6 +134,24 @@ service cloud.firestore {
              data.updatedAt is string;
     }
 
+    // 수정 시에는 원 작성자가 아니어도 관리자면 편집 가능. 단 ownerUid는 기존 값 그대로 유지해야 한다.
+    function isValidDailyReviewUpdate(data, prev) {
+      return data.keys().hasAll([
+               'date',
+               'ownerUid',
+               'summary',
+               'sourceRecordIds',
+               'createdAt',
+               'updatedAt'
+             ]) &&
+             data.date is string &&
+             data.ownerUid is string && data.ownerUid == prev.ownerUid &&
+             data.summary is string && data.summary.size() > 0 && data.summary.size() < 5000 &&
+             data.sourceRecordIds is list &&
+             data.createdAt is string &&
+             data.updatedAt is string;
+    }
+
     function isValidCategory(data) {
       return data.keys().hasAll(['name', 'ownerUid']) &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
@@ -199,7 +217,7 @@ service cloud.firestore {
     match /dailyReviews/{reviewId} {
       allow read: if isAdmin();
       allow create: if isAdmin() && isValidDailyReview(request.resource.data);
-      allow update: if isAdmin() && isValidDailyReview(request.resource.data);
+      allow update: if isAdmin() && isValidDailyReviewUpdate(request.resource.data, resource.data);
       allow delete: if isAdmin();
     }
 

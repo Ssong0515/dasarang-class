@@ -1132,10 +1132,36 @@ export default function App() {
   };
 
   const handleUpdateDailyReview = async (id: string, summary: string) => {
-    await updateDoc(doc(db, DAILY_REVIEWS_COLLECTION, id), {
-      summary,
-      updatedAt: new Date().toISOString(),
-    });
+    try {
+      await updateDoc(doc(db, DAILY_REVIEWS_COLLECTION, id), {
+        summary,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `${DAILY_REVIEWS_COLLECTION}/${id}`);
+    }
+  };
+
+  // 하루 전체 평 신규 작성 (문서 id = 날짜). ownerUid는 작성한 관리자로 기록.
+  const handleCreateDailyReview = async (
+    date: string,
+    summary: string,
+    sourceRecordIds: string[]
+  ) => {
+    if (!user) return;
+    const now = new Date().toISOString();
+    try {
+      await setDoc(doc(db, DAILY_REVIEWS_COLLECTION, date), {
+        date,
+        ownerUid: user.uid,
+        summary,
+        sourceRecordIds,
+        createdAt: now,
+        updatedAt: now,
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, `${DAILY_REVIEWS_COLLECTION}/${date}`);
+    }
   };
 
   const upsertLocalClassroomDateRecord = (record: ClassroomDateRecord) => {
@@ -1905,6 +1931,7 @@ export default function App() {
               onAddMemo={handleAddMemo}
               onDeleteMemo={handleDeleteMemo}
               onUpdateDailyReview={handleUpdateDailyReview}
+              onCreateDailyReview={handleCreateDailyReview}
             />
           )}
           {activeTab === 'classroom-management' && activeClassroom && (
