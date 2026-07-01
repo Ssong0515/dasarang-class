@@ -8,6 +8,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { StudentPage } from './components/StudentPage';
 import { StudentAccessManager } from './components/StudentAccessManager';
 import { StudentShowcaseManager } from './components/StudentShowcaseManager';
+import { TeacherVoiceChat } from './components/TeacherVoiceChat';
 import {
   AssignCurriculumDatesResult,
   CalendarClassSummary,
@@ -23,6 +24,7 @@ import {
   Student,
   StudentAccess,
   StudentPost,
+  StudentVoiceMessage,
   LessonCategory,
   LessonContent,
 } from './types';
@@ -73,6 +75,7 @@ import {
   DAILY_REVIEWS_COLLECTION,
   CLASSROOM_DATE_RECORDS_COLLECTION,
   PUBLISHED_LESSONS_COLLECTION,
+  STUDENT_VOICE_MESSAGES_COLLECTION,
   comparePreferredClassroomDateRecord,
   getClassroomDateRecordId,
   getPublishedLessonId,
@@ -286,6 +289,7 @@ export default function App() {
   const [contents, setContents] = useState<LessonContent[]>([]);
   const [publishedLessons, setPublishedLessons] = useState<PublishedLesson[]>([]);
   const [studentPosts, setStudentPosts] = useState<StudentPost[]>([]);
+  const [voiceMessages, setVoiceMessages] = useState<StudentVoiceMessage[]>([]);
   const [activeTab, setActiveTab] = useState<AdminTab>('home');
   const [viewMode, setViewMode] = useState<'admin' | 'student'>('student');
   const [isDevSigningIn, setIsDevSigningIn] = useState(DEV_BYPASS);
@@ -955,6 +959,53 @@ export default function App() {
     );
 
     return () => unsubscribeDailyReviews();
+  }, [user, isAdmin]);
+
+  // 학생 음성 메시지 리스너 (관리자 전용 — 학생이 자기 언어로 말한 걸 한국어로 번역해 강사 채팅에 실시간 표시).
+  // date는 학생 FAB가 쓰는 것과 같은 '로컬' 날짜(StudentPage.getLocalDateString와 동일 규칙)로 질의해야 매칭된다.
+  useEffect(() => {
+    if (!user || !isAdmin) {
+      setVoiceMessages([]);
+      return;
+    }
+
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+      now.getDate()
+    ).padStart(2, '0')}`;
+
+    const voiceQuery = query(
+      collection(db, STUDENT_VOICE_MESSAGES_COLLECTION),
+      where('date', '==', today)
+    );
+    const unsubscribeVoice = onSnapshot(
+      voiceQuery,
+      (snapshot) => {
+        const voiceData = snapshot.docs.map((voiceDoc) => {
+          const data = voiceDoc.data() as Partial<StudentVoiceMessage>;
+          return {
+            id: voiceDoc.id,
+            classroomId: typeof data.classroomId === 'string' ? data.classroomId : '',
+            classroomName: typeof data.classroomName === 'string' ? data.classroomName : '',
+            date: typeof data.date === 'string' ? data.date : '',
+            sourceLang: typeof data.sourceLang === 'string' ? data.sourceLang : '',
+            sourceText: typeof data.sourceText === 'string' ? data.sourceText : '',
+            koreanText:
+              typeof data.koreanText === 'string'
+                ? data.koreanText
+                : typeof data.sourceText === 'string'
+                ? data.sourceText
+                : '',
+            translationOk: typeof data.translationOk === 'boolean' ? data.translationOk : true,
+            createdAt: typeof data.createdAt === 'string' ? data.createdAt : '',
+          } satisfies StudentVoiceMessage;
+        });
+        setVoiceMessages(voiceData);
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, STUDENT_VOICE_MESSAGES_COLLECTION)
+    );
+
+    return () => unsubscribeVoice();
   }, [user, isAdmin]);
 
   // 학생 작품 게시물 리스너 (관리자 전용 — 홈페이지 공유 관리·실시간 승인 대기 배지)
@@ -2017,6 +2068,12 @@ export default function App() {
   return (
     <ErrorBoundary>
       {renderContent()}
+      {isAdmin && (
+        <TeacherVoiceChat
+          messages={voiceMessages}
+          activeClassroomId={activeClassroomId || undefined}
+        />
+      )}
     </ErrorBoundary>
   );
 }
