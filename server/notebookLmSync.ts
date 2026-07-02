@@ -482,8 +482,14 @@ export const syncTheorySlideFromFolder = async ({
 }: SyncTheorySlideParams): Promise<TheorySlideSyncResult> => {
   const drive = getDriveClientFromAccessToken(driveAccessToken);
   await assertUsableFolder(drive, folderId);
-  const convertedFolderId = await getOrCreateFolder(drive, folderId, CONVERTED_FOLDER_NAME);
   const pptxFiles = (await listTopLevelFiles(drive, folderId)).filter(isPptxFile);
+
+  // 실제로 변환할 때만 'Converted Google Slides' 폴더를 만든다(후보만 돌려주거나 pptx가 없을 땐 안 만듦).
+  const convertMatched = async (file: SourceDriveFile): Promise<TheorySlideSyncResult> => {
+    const convertedFolderId = await getOrCreateFolder(drive, folderId, CONVERTED_FOLDER_NAME);
+    const converted = await createConvertedPresentation(drive, file, convertedFolderId);
+    return { matched: true, slideUrl: converted.slideUrl, fileId: file.id, fileName: file.name };
+  };
 
   // 호출부가 후보 중 하나를 직접 고른 경우 — 그 파일을 변환한다.
   if (fileId) {
@@ -491,8 +497,7 @@ export const syncTheorySlideFromFolder = async ({
     if (!picked) {
       throw new Error('선택한 파일을 폴더에서 찾을 수 없습니다.');
     }
-    const converted = await createConvertedPresentation(drive, picked, convertedFolderId);
-    return { matched: true, slideUrl: converted.slideUrl, fileId: picked.id, fileName: picked.name };
+    return convertMatched(picked);
   }
 
   if (pptxFiles.length === 0) {
@@ -507,9 +512,13 @@ export const syncTheorySlideFromFolder = async ({
     if (exact.length === 1) {
       chosen = exact[0];
     } else if (exact.length === 0) {
+      // 부분 매칭: 너무 짧은 공통부(예: '만들기')로 엉뚱한 파일을 자동 선택하지 않도록
+      // 두 정규화 문자열 중 짧은 쪽이 4자 이상일 때만 인정한다. 애매하면 아래에서 후보로 넘어간다.
       const partial = pptxFiles.filter((file) => {
         const name = normalizeForMatch(file.name);
-        return name.length > 0 && (name.includes(target) || target.includes(name));
+        if (name.length === 0) return false;
+        if (Math.min(name.length, target.length) < 4) return false;
+        return name.includes(target) || target.includes(name);
       });
       if (partial.length === 1) {
         chosen = partial[0];
@@ -525,6 +534,5 @@ export const syncTheorySlideFromFolder = async ({
     };
   }
 
-  const converted = await createConvertedPresentation(drive, chosen, convertedFolderId);
-  return { matched: true, slideUrl: converted.slideUrl, fileId: chosen.id, fileName: chosen.name };
+  return convertMatched(chosen);
 };

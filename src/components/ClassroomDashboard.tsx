@@ -489,6 +489,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     content: LessonContent;
     candidates: { id: string; name: string }[];
   } | null>(null);
+  // Drive 동기화 토큰 캐시 — 후보에서 다시 고를 때 OAuth 팝업이 또 뜨지 않도록 재사용한다(실패 시 비운다).
+  const theoryDriveTokenRef = useRef<string | null>(null);
   // 좁은 폭(모바일/태블릿, <lg)에서는 날짜상태·캘린더·출석·메모를 타일+팝업으로 보여준다.
   const isNarrow = useMediaQuery(NARROW_MEDIA_QUERY);
   const isVeryNarrow = useMediaQuery(VERY_NARROW_MEDIA_QUERY);
@@ -1365,7 +1367,10 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
 
   const handleClearTheoryFolder = () => {
     if (!onUpdateClassroom) return;
-    onUpdateClassroom(classroom.id, { theorySlideFolderId: '', theorySlideFolderName: '' });
+    onUpdateClassroom(classroom.id, {
+      theorySlideFolderId: deleteField(),
+      theorySlideFolderName: deleteField(),
+    } as unknown as Partial<Classroom>);
   };
 
   // 이론 행 '동기화' — 반 이론 폴더에서 콘텐츠 제목과 맞는 pptx를 찾아 구글 슬라이드로 변환 후 theorySlideUrl에 저장.
@@ -1385,11 +1390,19 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     setSyncingTheoryContentId(content.id);
     setTheorySyncError(null);
     try {
-      const token = await requestDriveSyncAccessToken(clientId, userEmail);
+      // 후보 재선택 시 OAuth 팝업이 또 뜨지 않도록 캐시된 토큰을 재사용한다.
+      let token = theoryDriveTokenRef.current;
+      if (!token) {
+        token = await requestDriveSyncAccessToken(clientId, userEmail);
+        theoryDriveTokenRef.current = token;
+      }
       const result = await onSyncTheorySlide(folderId, token, content.title, fileId);
       if (result.matched && result.slideUrl) {
         await onSaveContent({ ...content, theorySlideUrl: result.slideUrl });
         setTheorySyncPicker(null);
+      } else if (result.matched) {
+        // 변환됐다는데 URL이 안 옴 — 방어적 처리(후보 없음 메시지로 오해되지 않도록).
+        setTheorySyncError('슬라이드 변환 결과를 받지 못했어요. 잠시 후 다시 시도해주세요.');
       } else {
         const candidates = result.candidates ?? [];
         if (candidates.length === 0) {
@@ -1399,6 +1412,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
         }
       }
     } catch (error) {
+      // 토큰 만료 등으로 실패했을 수 있으니 캐시를 비워 다음 시도에 새 토큰을 받게 한다.
+      theoryDriveTokenRef.current = null;
       setTheorySyncError(error instanceof Error ? error.message : '이론 슬라이드 동기화에 실패했습니다.');
     } finally {
       setSyncingTheoryContentId(null);
