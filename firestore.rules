@@ -52,7 +52,9 @@ service cloud.firestore {
              (!('color' in data) || data.color is string) &&
              (!('createdAt' in data) || data.createdAt is string) &&
              (!('driveFolderId' in data) || data.driveFolderId is string) &&
-             (!('driveFolderName' in data) || data.driveFolderName is string);
+             (!('driveFolderName' in data) || data.driveFolderName is string) &&
+             (!('theorySlideFolderId' in data) || data.theorySlideFolderId is string) &&
+             (!('theorySlideFolderName' in data) || data.theorySlideFolderName is string);
     }
 
     function isValidLesson(data) {

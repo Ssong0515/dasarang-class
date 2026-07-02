@@ -85,6 +85,16 @@ export interface NotebookLmFolderSyncResult {
   items: NotebookLmSyncItem[];
 }
 
+/** 이론 행 단건 동기화 결과. matched면 slideUrl을 그 콘텐츠 theorySlideUrl로 저장, 아니면 candidates에서 직접 고른다. */
+export interface TheorySlideSyncResult {
+  ok?: boolean;
+  matched: boolean;
+  slideUrl?: string;
+  fileId?: string;
+  fileName?: string;
+  candidates?: { id: string; name: string }[];
+}
+
 /** 이론 수업 슬라이드 한 개 (구글 슬라이드/드라이브 임베드 URL 또는 NotebookLM 등 외부 링크). */
 export interface TheorySlide {
   /** 임베드 URL(슬라이드/드라이브) 또는 원본 링크(NotebookLM 등). */
@@ -177,6 +187,9 @@ export interface Classroom {
   createdAt?: string;
   driveFolderId?: string;
   driveFolderName?: string;
+  /** 이 반 이론 슬라이드(NotebookLM pptx)를 넣어두는 Google Drive 폴더. 이론 행의 '동기화'가 여기서 제목과 맞는 pptx를 찾아 구글 슬라이드로 변환한다. (driveFolderId=학생 작업물용과 별개) */
+  theorySlideFolderId?: string;
+  theorySlideFolderName?: string;
   curriculumId?: string | null;
   /** calendar.damuna.org의 `classes` 문서 ID. FM 참고 시간표로 연결됨. */
   calendarClassId?: string | null;

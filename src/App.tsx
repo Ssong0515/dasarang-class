@@ -21,6 +21,7 @@ import {
   DailyReview,
   Memo,
   NotebookLmFolderSyncResult,
+  TheorySlideSyncResult,
   PublishedLesson,
   TeacherScreenShare,
   Student,
@@ -504,6 +505,21 @@ export default function App() {
       driveAccessToken,
     });
 
+  // 이론 행 단건 동기화 — 반 이론 폴더에서 제목과 맞는 pptx를 구글 슬라이드로 변환해 slideUrl을 돌려받는다.
+  // fileId를 주면(후보에서 직접 고른 경우) 그 파일을 변환한다.
+  const handleSyncTheorySlide = (
+    folderId: string,
+    driveAccessToken: string,
+    title: string,
+    fileId?: string
+  ) =>
+    postAdminRequest<TheorySlideSyncResult>('api/notebooklm/sync-theory-slide', {
+      folderId,
+      driveAccessToken,
+      title,
+      ...(fileId ? { fileId } : {}),
+    });
+
   const handleAddStudentAccess = async (rawEmail: string, memo: string) => {
     if (!user || !isAdmin) return;
 
@@ -740,6 +756,8 @@ export default function App() {
           createdAt: typeof data.createdAt === 'string' ? data.createdAt : undefined,
           driveFolderId: typeof data.driveFolderId === 'string' ? data.driveFolderId : undefined,
           driveFolderName: typeof data.driveFolderName === 'string' ? data.driveFolderName : undefined,
+          theorySlideFolderId: typeof data.theorySlideFolderId === 'string' ? data.theorySlideFolderId : undefined,
+          theorySlideFolderName: typeof data.theorySlideFolderName === 'string' ? data.theorySlideFolderName : undefined,
           curriculumId: typeof data.curriculumId === 'string' ? data.curriculumId : undefined,
           description: typeof data.description === 'string' ? data.description : undefined,
           organization: typeof data.organization === 'string' ? data.organization : undefined,
@@ -2145,6 +2163,7 @@ export default function App() {
               onSaveContent={handleSaveContent}
               onUpdatePublishedLesson={handleUpdatePublishedLesson}
               onEndLesson={handleEndLesson}
+              onSyncTheorySlide={handleSyncTheorySlide}
               teacherScreenShares={teacherScreenShares}
               onStartScreenShare={handleStartScreenShare}
               onStopScreenShare={handleStopScreenShare}

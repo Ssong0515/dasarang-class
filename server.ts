@@ -10,6 +10,8 @@ import { getStudentWorkFile, uploadStudentWork } from './server/googleDriveUploa
 import {
   syncNotebookLmPptxFolder,
   validateNotebookLmSyncPayload,
+  syncTheorySlideFromFolder,
+  validateTheorySlidePayload,
 } from './server/notebookLmSync';
 import { createAdminApiRouter } from './server/adminApi/router';
 import { handleMcpDeleteRequest, handleMcpGetRequest, handleMcpPostRequest } from './server/adminApi/mcp';
@@ -435,6 +437,19 @@ async function startServer() {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'NotebookLM folder sync failed.';
       const statusCode = /required|not a folder/i.test(message) ? 400 : 500;
+      res.status(statusCode).json({ error: message });
+    }
+  });
+
+  // 이론 행 단건 동기화 — 반 이론 폴더에서 제목과 맞는 pptx 하나를 구글 슬라이드로 변환해 slideUrl만 돌려준다.
+  app.post(withBasePath(APP_BASE_PATH, '/api/notebooklm/sync-theory-slide'), requireAdmin, async (req, res) => {
+    try {
+      const payload = validateTheorySlidePayload(req.body);
+      const result = await syncTheorySlideFromFolder(payload);
+      res.json({ ok: true, ...result });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Theory slide sync failed.';
+      const statusCode = /required|not a folder|찾을 수 없/i.test(message) ? 400 : 500;
       res.status(statusCode).json({ error: message });
     }
   });
