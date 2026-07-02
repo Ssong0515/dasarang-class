@@ -337,5 +337,30 @@ service cloud.firestore {
       allow create, update: if isAdmin() && isValidTeacherBroadcastMessage(request.resource.data);
       allow delete: if isAdmin();
     }
+
+    function isValidTeacherScreenShare(data) {
+      return data.keys().hasAll([
+               'classroomId',
+               'date',
+               'contentId',
+               'ownerUid',
+               'updatedAt'
+             ]) &&
+             data.classroomId is string &&
+             data.date is string &&
+             data.contentId is string && data.contentId.size() > 0 &&
+             data.ownerUid is string &&
+             data.updatedAt is string &&
+             (!('classroomName' in data) || data.classroomName is string) &&
+             (data.ownerUid == request.auth.uid || isAdmin());
+    }
+
+    // 교사가 "학생 화면에 띄우기(발표)"로 지정한 콘텐츠 하나 — 학생 전원 화면에 크게 띄운다.
+    // 강사(관리자)만 create/update/delete, 학생(공용 계정)은 read만(반 구분은 클라이언트 쿼리로 — publishedLessons와 같은 방식).
+    match /teacherScreenShares/{docId} {
+      allow read: if canReadStudentPage();
+      allow create, update: if isAdmin() && isValidTeacherScreenShare(request.resource.data);
+      allow delete: if isAdmin();
+    }
   }
 }

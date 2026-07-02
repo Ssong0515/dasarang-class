@@ -22,6 +22,7 @@ import {
   Memo,
   NotebookLmFolderSyncResult,
   PublishedLesson,
+  TeacherScreenShare,
   Student,
   StudentAccess,
   StudentPost,
@@ -78,9 +79,11 @@ import {
   CLASSROOM_DATE_RECORDS_COLLECTION,
   PUBLISHED_LESSONS_COLLECTION,
   STUDENT_VOICE_MESSAGES_COLLECTION,
+  TEACHER_SCREEN_SHARES_COLLECTION,
   comparePreferredClassroomDateRecord,
   getClassroomDateRecordId,
   getPublishedLessonId,
+  getTeacherScreenShareId,
   sortClassroomDateRecords,
 } from './utils/classroomDomain';
 import {
@@ -298,6 +301,7 @@ export default function App() {
   const [categories, setCategories] = useState<LessonCategory[]>([]);
   const [contents, setContents] = useState<LessonContent[]>([]);
   const [publishedLessons, setPublishedLessons] = useState<PublishedLesson[]>([]);
+  const [teacherScreenShares, setTeacherScreenShares] = useState<TeacherScreenShare[]>([]);
   const [studentPosts, setStudentPosts] = useState<StudentPost[]>([]);
   const [voiceMessages, setVoiceMessages] = useState<StudentVoiceMessage[]>([]);
   const [activeTab, setActiveTab] = useState<AdminTab>('home');
@@ -718,6 +722,7 @@ export default function App() {
       setCategories([]);
       setContents([]);
       setPublishedLessons([]);
+      setTeacherScreenShares([]);
       return;
     }
 
@@ -976,6 +981,30 @@ export default function App() {
       (error) => handleFirestoreError(error, OperationType.LIST, PUBLISHED_LESSONS_COLLECTION)
     );
 
+    // Teacher Screen Shares Listener — 강사가 '학생 화면에 띄우기(발표)'로 지정한 콘텐츠. 학생 화면 오버레이가 이걸 구독한다.
+    const teacherScreenSharesQuery = query(collection(db, TEACHER_SCREEN_SHARES_COLLECTION));
+    const unsubscribeTeacherScreenShares = onSnapshot(
+      teacherScreenSharesQuery,
+      (snapshot) => {
+        const shareData = snapshot.docs
+          .map((shareDoc) => {
+            const data = shareDoc.data() as Partial<TeacherScreenShare>;
+            return {
+              id: shareDoc.id,
+              classroomId: typeof data.classroomId === 'string' ? data.classroomId : '',
+              classroomName: typeof data.classroomName === 'string' ? data.classroomName : '',
+              date: typeof data.date === 'string' ? data.date : '',
+              contentId: typeof data.contentId === 'string' ? data.contentId : '',
+              ownerUid: data.ownerUid ?? '',
+              updatedAt: data.updatedAt ?? '',
+            } satisfies TeacherScreenShare;
+          })
+          .filter((share) => share.contentId.length > 0);
+        setTeacherScreenShares(shareData);
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, TEACHER_SCREEN_SHARES_COLLECTION)
+    );
+
     return () => {
       unsubscribeClassrooms();
       unsubscribeStudents();
@@ -984,6 +1013,7 @@ export default function App() {
       unsubscribeCategories();
       unsubscribeContents();
       unsubscribePublishedLessons();
+      unsubscribeTeacherScreenShares();
     };
   }, [user, isAdmin, canAccessStudentPage]);
 
@@ -1839,8 +1869,49 @@ export default function App() {
         endNoticeAt: new Date().toISOString(),
       };
       await setDoc(doc(db, PUBLISHED_LESSONS_COLLECTION, lessonId), nextLesson);
+      // 수업을 끝내면 '학생 화면에 띄우기(발표)'도 함께 내린다 — 종료 후에도 발표 오버레이가 남지 않도록.
+      const shareRef = doc(db, TEACHER_SCREEN_SHARES_COLLECTION, getTeacherScreenShareId(classroomId, date));
+      await deleteDoc(shareRef).catch(() => undefined);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `${PUBLISHED_LESSONS_COLLECTION}/${lessonId}`);
+    }
+  };
+
+  // 강사가 실습/슬라이드 하나를 '학생 화면에 띄우기(발표)' — 학생 전원 화면에 실시간으로 크게 뜬다. 한 반+날짜당 하나만.
+  const handleStartScreenShare = async (
+    classroomId: string,
+    classroomName: string,
+    date: string,
+    contentId: string
+  ) => {
+    if (!user) return;
+
+    const shareId = getTeacherScreenShareId(classroomId, date);
+    try {
+      const nextShare: TeacherScreenShare = {
+        id: shareId,
+        classroomId,
+        classroomName,
+        date,
+        contentId,
+        ownerUid: user.uid,
+        updatedAt: new Date().toISOString(),
+      };
+      await setDoc(doc(db, TEACHER_SCREEN_SHARES_COLLECTION, shareId), nextShare);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `${TEACHER_SCREEN_SHARES_COLLECTION}/${shareId}`);
+    }
+  };
+
+  // 발표 내리기 — 문서를 지워 학생 화면 오버레이가 깔끔히 사라지게 한다.
+  const handleStopScreenShare = async (classroomId: string, date: string) => {
+    if (!user) return;
+
+    const shareId = getTeacherScreenShareId(classroomId, date);
+    try {
+      await deleteDoc(doc(db, TEACHER_SCREEN_SHARES_COLLECTION, shareId));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `${TEACHER_SCREEN_SHARES_COLLECTION}/${shareId}`);
     }
   };
 
@@ -1963,6 +2034,7 @@ export default function App() {
           categories={categories}
           contents={contents}
           publishedLessons={publishedLessons}
+          teacherScreenShares={teacherScreenShares}
         />
       );
     }
@@ -2024,6 +2096,7 @@ export default function App() {
               categories={categories}
               contents={contents}
               publishedLessons={publishedLessons}
+              teacherScreenShares={teacherScreenShares}
             />
           ) : (
             <>
@@ -2072,6 +2145,9 @@ export default function App() {
               onSaveContent={handleSaveContent}
               onUpdatePublishedLesson={handleUpdatePublishedLesson}
               onEndLesson={handleEndLesson}
+              teacherScreenShares={teacherScreenShares}
+              onStartScreenShare={handleStartScreenShare}
+              onStopScreenShare={handleStopScreenShare}
               onUpdateClassroom={handleUpdateClassroom}
               onDeleteClassroom={handleDeleteClassroom}
               onListCalendarClasses={handleListCalendarClasses}
