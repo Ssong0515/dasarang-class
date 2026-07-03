@@ -88,7 +88,7 @@
 
       각 장은 교사가 그 한 장만 보고도 설명할 수 있을 만큼 구체적으로 만들어 주세요.
       ```
-      theoryPrompts 배열은 **1개**로 만든다: `[{label:"이론 19장 · {회차주제}", prompt:"<위 19장 프롬프트 전문>"}]`.
+      theoryPrompts 배열은 **1개**로 만들고, **`contentIds`에 이 덱에 속한 실습 id들을 개념 순서대로** 넣는다(★ 대시보드가 이걸로 "이론 1개 + 그 실습들"을 한 묶음으로 보여준다 — 빼먹으면 그룹이 안 묶인다): `[{label:"이론 19장 · {회차주제}", prompt:"<위 19장 프롬프트 전문>", contentIds:[c에서 수집한 실습 id들, 개념 순서 그대로]}]`.
    e) 그 반·그 날짜기록을 먼저 읽어 기존 contentIds 확보 후 upsert_lesson_record(classroomId, date, curriculumId, curriculumSessionId=session.id, contentIds=기존∪신규id(**신규는 개념 순서 그대로 뒤에 이어붙임**), theoryPrompts=d의 배열). contentIds는 반드시 합집합(기존 보존). theoryPrompts는 **교체**(union 아님, 회차당 1개). → 강사 대시보드 '이론 수업'에 프롬프트(복사 버튼)로 뜬다.
 4) (선택) mutate_curriculum_sessions(update)로 그 회차 plan contentIds도 합집합 동기화. status 변경 금지.
 

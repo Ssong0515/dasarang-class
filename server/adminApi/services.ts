@@ -271,7 +271,7 @@ export interface UpsertLessonRecordInput {
   attendance?: AttendanceRecord[];
   curriculumId?: string;
   curriculumSessionId?: string;
-  theoryPrompts?: Array<{ label?: string; prompt: string }> | string;
+  theoryPrompts?: Array<{ label?: string; prompt: string; contentIds?: string[] }> | string;
 }
 
 const VALID_ATTENDANCE_STATUSES = new Set(['Present', 'Absent', 'Late']);
@@ -378,12 +378,21 @@ export const upsertLessonRecord = async (input: UpsertLessonRecordInput) => {
     if (!Array.isArray(prompts)) {
       throw new AdminApiError(400, 'theoryPrompts는 배열이어야 합니다.');
     }
-    // 시수별 NotebookLM 이론 프롬프트. 빈 prompt는 버리고, 빈 label 키는 빼서 Firestore undefined를 피한다.
-    updates.theoryPrompts = (prompts as Array<{ label?: unknown; prompt?: unknown }>)
+    // NotebookLM 이론 프롬프트(이론 덱 1개 = 항목 1개). 빈 prompt는 버리고, 빈 키는 빼서 Firestore undefined를 피한다.
+    // contentIds = 이 이론(덱)에 묶인 실습 콘텐츠 id들(인터리브 수업의 "이론 1 : 실습 N" 묶음 — 대시보드가 그룹으로 표시).
+    updates.theoryPrompts = (
+      prompts as Array<{ label?: unknown; prompt?: unknown; contentIds?: unknown }>
+    )
       .map((entry) => {
         const label = typeof entry?.label === 'string' ? entry.label.trim() : '';
         const prompt = typeof entry?.prompt === 'string' ? entry.prompt : '';
-        return label ? { label, prompt } : { prompt };
+        const contentIds = Array.isArray(entry?.contentIds)
+          ? (entry.contentIds as unknown[]).filter((id): id is string => typeof id === 'string')
+          : undefined;
+        const normalized: { label?: string; prompt: string; contentIds?: string[] } = { prompt };
+        if (label) normalized.label = label;
+        if (contentIds && contentIds.length > 0) normalized.contentIds = contentIds;
+        return normalized;
       })
       .filter((entry) => entry.prompt.trim());
   }

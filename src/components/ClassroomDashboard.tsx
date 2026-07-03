@@ -1142,8 +1142,26 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
         : []
     : [];
 
-  // 이 날짜 이론 슬라이드용 NotebookLM 입력 프롬프트 (시수별, 새벽 루틴이 자동 생성·읽기 전용).
+  // 이 날짜 이론 슬라이드용 NotebookLM 입력 프롬프트 (새벽 루틴이 자동 생성·읽기 전용).
   const effectiveTheoryPrompts: TheoryPrompt[] = currentDateRecord?.theoryPrompts ?? [];
+
+  // 인터리브 수업(2026-07-03): 프롬프트에 contentIds가 있으면 "이론 1개 + 그 실습들" 그룹으로 묶어 보여준다.
+  // contents 순서 = prompt.contentIds 순서(= 개념/수업 진행 순서). 어느 이론에도 안 묶인 실습은 따로 나열하고,
+  // 매핑이 하나도 없으면(구버전 기록) 기존처럼 실습 행에 이론을 index 1:1로 매칭해 보여준다.
+  const theoryGroups = effectiveTheoryPrompts.map((prompt, promptIndex) => ({
+    prompt,
+    promptIndex,
+    contents: (prompt.contentIds ?? [])
+      .map((id) => recordedPracticeContents.find((content) => content.id === id))
+      .filter((content): content is LessonContent => Boolean(content)),
+  }));
+  const hasTheoryGrouping = theoryGroups.some((group) => group.contents.length > 0);
+  const groupedContentIdSet = new Set(
+    theoryGroups.flatMap((group) => group.contents.map((content) => content.id))
+  );
+  const ungroupedPracticeContents = recordedPracticeContents.filter(
+    (content) => !groupedContentIdSet.has(content.id)
+  );
 
   // 프롬프트를 클립보드에 복사. clipboard API가 없으면 textarea+execCommand로 폴백.
   const handleCopyTheoryPrompt = (text: string, index: number) => {
@@ -1688,6 +1706,69 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     const theorySlidesVisible = showTheorySection && recordedSlideContents.length > 0;
     const contentListVisible =
       (showTheorySection || showPracticeSection) && recordedPracticeContents.length > 0;
+    // 인터리브 그룹 모드: 프롬프트에 실습 매핑(contentIds)이 있고 이론 영역이 켜진 반에서만.
+    // (이론을 끈 반은 그룹 헤더가 의미 없으니 기존 평면 목록으로 폴백)
+    const useGroupedLayout = contentListVisible && showTheorySection && hasTheoryGrouping;
+
+    // 그룹 모드 실습 행 — 실습 컨트롤(미리보기·공개)만. 이론 컨트롤은 그룹 헤더가 담당한다.
+    const renderGroupedPracticeRow = (content: LessonContent) => {
+      const isPublished = publishedContentIdSet.has(content.id);
+      return (
+        <div
+          key={content.id}
+          className={`rounded-2xl border px-4 py-3 transition-all ${
+            isPublished && showPracticeSection
+              ? 'border-[#BFE3CC] bg-[#F2FBF3]'
+              : 'border-[#E5E3DD] bg-white'
+          }`}
+        >
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-2">
+              {showPracticeSection &&
+                (isPublished ? (
+                  <Eye size={16} className="shrink-0 text-[#2D7A4D]" />
+                ) : (
+                  <Lock size={16} className="shrink-0 text-[#8B7E74]" />
+                ))}
+              <span className="truncate text-sm font-bold text-[#4A3728]">{content.title}</span>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setPreviewContent(content)}
+                title={`${content.title} 미리보기`}
+                aria-label="미리보기"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[#E5E3DD] bg-white text-[#8B7E74] transition-all hover:border-[#8B5E3C] hover:text-[#8B5E3C]"
+              >
+                <Eye size={14} />
+              </button>
+              {showPracticeSection && (
+                <button
+                  onClick={() => handleTogglePublishContent(content)}
+                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+                    isPublished
+                      ? 'bg-[#FDECEC] text-[#B42318] hover:bg-[#FAD4D1]'
+                      : 'bg-[#8B5E3C] text-white hover:bg-[#724D31]'
+                  }`}
+                >
+                  {isPublished ? (
+                    <>
+                      <EyeOff size={14} />
+                      잠그기
+                    </>
+                  ) : (
+                    <>
+                      <Eye size={14} />
+                      공개
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    };
 
     return (
       <motion.div
@@ -2118,7 +2199,170 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                   </div>
                 )}
 
-                {contentListVisible ? (
+                {useGroupedLayout ? (
+                  <div>
+                    <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#8B7E74]">
+                      이론 · 실습 (수업 진행 순서)
+                      {showPracticeSection && (
+                        <span className="rounded-full bg-[#EEF7F0] px-2 py-0.5 text-[10px] text-[#2D7A4D]">
+                          {publishedPracticeCount}/{recordedPracticeContents.length} 공개됨
+                        </span>
+                      )}
+                    </p>
+                    <div className="space-y-4">
+                      {theoryGroups.map(({ prompt, promptIndex, contents }) => {
+                        const isCopied = copiedPromptIndex === promptIndex;
+                        const promptSlideUrl = prompt.slideUrl?.trim() ?? '';
+                        const hasSlide = promptSlideUrl.length > 0;
+                        const isSlideInputOpen = slideInputPromptIndex === promptIndex;
+                        const groupPublishedCount = contents.filter((content) =>
+                          publishedContentIdSet.has(content.id)
+                        ).length;
+                        return (
+                          <div
+                            key={`theory-group-${promptIndex}`}
+                            className="rounded-2xl border border-[#E5E3DD] bg-[#FBFAF8] p-3"
+                          >
+                            {/* 이론 헤더 — 이 덱(프롬프트·자료 링크)과 아래 실습들이 한 묶음 */}
+                            <div className="flex flex-col gap-2 px-1 pb-1 sm:flex-row sm:items-center sm:justify-between">
+                              <div className="flex min-w-0 items-center gap-2">
+                                <Presentation size={15} className="shrink-0 text-[#8B5E3C]" />
+                                <span className="truncate text-sm font-bold text-[#4A3728]">
+                                  {prompt.label?.trim() || `${promptIndex + 1}번째 이론수업`}
+                                </span>
+                                {showPracticeSection && contents.length > 0 && (
+                                  <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-[#8B7E74]">
+                                    실습 {groupPublishedCount}/{contents.length}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex shrink-0 items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyTheoryPrompt(prompt.prompt, promptIndex)}
+                                  title={isCopied ? '복사됨' : '이론 프롬프트 복사'}
+                                  aria-label="이론 프롬프트 복사"
+                                  className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[#E5E3DD] bg-white text-[#4A3728] transition-all hover:border-[#8B5E3C]"
+                                >
+                                  {isCopied ? <Check size={14} className="text-[#3A7D44]" /> : <Copy size={14} />}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenPromptEditor(promptIndex)}
+                                  title="이론 프롬프트 보기·수정"
+                                  aria-label="이론 프롬프트 보기·수정"
+                                  className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[#E5E3DD] bg-white text-[#8B7E74] transition-all hover:border-[#8B5E3C] hover:text-[#8B5E3C]"
+                                >
+                                  <FileText size={14} />
+                                </button>
+                                {hasSlide ? (
+                                  <>
+                                    <a
+                                      href={toSlidePresentUrl(promptSlideUrl)}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      title="이론 수업 자료 열기"
+                                      aria-label="이론 수업 자료 열기"
+                                      className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[#CFE0FF] bg-[#EAF2FF] text-[#2F5EA8] transition-all hover:bg-[#D6E6FF]"
+                                    >
+                                      <ExternalLink size={14} />
+                                    </a>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleClearTheoryPromptSlide(promptIndex)}
+                                      title="이론 자료 링크 제거"
+                                      aria-label="이론 자료 링크 제거"
+                                      className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[#E5E3DD] bg-white text-[#B7AFA4] transition-all hover:border-[#D9534F] hover:text-[#D9534F]"
+                                    >
+                                      <X size={14} />
+                                    </button>
+                                  </>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSlideInputPromptIndex(isSlideInputOpen ? null : promptIndex);
+                                      setSlideInputValue('');
+                                    }}
+                                    title="이론 자료 링크 추가"
+                                    aria-label="이론 자료 링크 추가"
+                                    className={`inline-flex h-8 w-8 items-center justify-center rounded-xl border transition-all ${
+                                      isSlideInputOpen
+                                        ? 'border-[#8B5E3C] bg-[#FFF5E9] text-[#8B5E3C]'
+                                        : 'border-[#E5E3DD] bg-white text-[#8B7E74] hover:border-[#8B5E3C] hover:text-[#8B5E3C]'
+                                    }`}
+                                  >
+                                    <Plus size={14} />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            {isSlideInputOpen && !hasSlide && (
+                              <form
+                                onSubmit={(event) => {
+                                  event.preventDefault();
+                                  if (!slideInputValue.trim()) return;
+                                  handleSetTheoryPromptSlide(promptIndex, slideInputValue);
+                                }}
+                                className="mb-2 flex items-center gap-2 px-1"
+                              >
+                                <input
+                                  type="text"
+                                  autoFocus
+                                  value={slideInputValue}
+                                  onChange={(event) => setSlideInputValue(event.target.value)}
+                                  placeholder="이론 슬라이드/자료 링크 붙여넣기"
+                                  className="min-w-0 flex-1 rounded-xl border border-[#E5E3DD] bg-white px-3 py-2 text-xs text-[#4A3728] outline-none transition-all focus:border-[#8B5E3C] focus:ring-2 focus:ring-[#8B5E3C]"
+                                />
+                                <button
+                                  type="submit"
+                                  disabled={!slideInputValue.trim()}
+                                  className="inline-flex shrink-0 items-center rounded-xl bg-[#8B5E3C] px-3 py-2 text-xs font-bold text-white transition-all hover:bg-[#724D31] disabled:cursor-not-allowed disabled:bg-[#B8AA9A]"
+                                >
+                                  확인
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSlideInputPromptIndex(null);
+                                    setSlideInputValue('');
+                                  }}
+                                  className="inline-flex shrink-0 items-center rounded-xl border border-[#E5E3DD] bg-white px-3 py-2 text-xs font-bold text-[#8B7E74] transition-all hover:text-[#4A3728]"
+                                >
+                                  취소
+                                </button>
+                              </form>
+                            )}
+
+                            {/* 이 이론에 묶인 실습들 (개념/진행 순서) */}
+                            <div className="space-y-2">
+                              {contents.map((content) => renderGroupedPracticeRow(content))}
+                              {contents.length === 0 && (
+                                <p className="rounded-xl border border-dashed border-[#E5E3DD] bg-white px-3 py-2 text-xs text-[#8B7E74]">
+                                  이 이론에 연결된 실습이 없습니다.
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {ungroupedPracticeContents.length > 0 && (
+                        <div>
+                          <p className="mb-2 px-1 text-[11px] font-bold text-[#8B7E74]">
+                            이론과 묶이지 않은 실습
+                          </p>
+                          <div className="space-y-2">
+                            {ungroupedPracticeContents.map((content) => renderGroupedPracticeRow(content))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+
+                {contentListVisible && !useGroupedLayout ? (
                   <div>
                     <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#8B7E74]">
                       {showPracticeSection ? '실습 (학생 화면)' : '이론 자료'}

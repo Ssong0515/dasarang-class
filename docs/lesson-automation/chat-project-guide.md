@@ -61,7 +61,7 @@
 2. **부분 수정이 기본**: 글자·버튼·버그 한두 군데면 `edit_content_html(contents, <기억한 id>, [{ find, replace }])` — 전체 HTML을 다시 보내지 말 것. find는 현재 html에 그대로(공백·따옴표 포함) 있어야 하고 유일해야 한다(여러 번이면 맥락을 더 넣거나 `replaceAll: true`). description도 바꾸려면 이어서 `update_resource(contents, <id>, { description })`.
    - **전체 재작성**(레이아웃 갈아엎기 등)일 때만 `update_resource(contents, <기억한 id>, { html: <수정본>, description })` — 부분 병합. 어느 쪽이든 id가 같아 날짜기록·회차 연결은 자동 유지(날짜기록이 id를 가리킴).
 3. 보고: 어떤 id를 무슨 과정/회차/시수로 갱신했는지 + **previewUrl**(강사가 새로고침해 결과 확인). **publishedLessons 안 건드림**(학생 비공개 유지).
-4. 새로 만든 경우만: `create_practice_content` 후, 그 커리큘럼을 쓰는 **각 반**의 그 날짜기록에 `upsert_lesson_record`로 contentIds **합집합** 추가(`curriculumId`·`curriculumSessionId` 연결).
+4. 새로 만든 경우만: `create_practice_content` 후, 그 커리큘럼을 쓰는 **각 반**의 그 날짜기록에 `upsert_lesson_record`로 contentIds **합집합** 추가(`curriculumId`·`curriculumSessionId` 연결). 이때 **theoryPrompts의 해당 이론 항목 `contentIds`에도 새 실습 id를 개념 순서 자리에 넣어** 다시 저장한다(theoryPrompts는 전체 교체이므로 기존 배열을 읽어 수정 후 통째로) — 대시보드의 "이론+실습 묶음"이 이 매핑으로 표시된다.
 
 ---
 

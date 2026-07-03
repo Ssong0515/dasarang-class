@@ -206,21 +206,28 @@ const sanitizeTheorySlidesForStorage = (slides: unknown): { url: string; label?:
 // 루틴(MCP)이 써넣는 읽기 전용 필드라 클라이언트는 만들지 않지만, 통째 setDoc 저장 시 보존하기 위해 정규화해 다시 쓴다.
 const sanitizeTheoryPromptsForStorage = (
   prompts: unknown
-): { label?: string; prompt: string; slideUrl?: string }[] => {
+): { label?: string; prompt: string; slideUrl?: string; contentIds?: string[] }[] => {
   if (!Array.isArray(prompts)) return [];
   return prompts
     .map((entry) => {
       const label = typeof entry?.label === 'string' ? entry.label.trim() : '';
       const prompt = typeof entry?.prompt === 'string' ? entry.prompt : '';
-      // slideUrl은 강사가 시수 행에서 붙인 자료 링크. ''(해제)도 보존해야 구버전 theorySlides 폴백을 이긴다.
+      // slideUrl은 강사가 이론 행에서 붙인 자료 링크. ''(해제)도 보존해야 구버전 theorySlides 폴백을 이긴다.
       const slideUrl = typeof entry?.slideUrl === 'string' ? entry.slideUrl.trim() : undefined;
-      return { label, prompt, slideUrl };
+      // contentIds는 이 이론(덱)에 묶인 실습 id들(인터리브 묶음 표시용). 빼먹으면 저장 시 그룹이 풀린다.
+      const contentIds = Array.isArray(entry?.contentIds)
+        ? (entry.contentIds as unknown[]).filter((id): id is string => typeof id === 'string')
+        : undefined;
+      return { label, prompt, slideUrl, contentIds };
     })
     .filter((entry) => entry.prompt.trim())
     .map((entry) => {
-      const next: { label?: string; prompt: string; slideUrl?: string } = { prompt: entry.prompt };
+      const next: { label?: string; prompt: string; slideUrl?: string; contentIds?: string[] } = {
+        prompt: entry.prompt,
+      };
       if (entry.label) next.label = entry.label;
       if (entry.slideUrl !== undefined) next.slideUrl = entry.slideUrl;
+      if (entry.contentIds !== undefined) next.contentIds = entry.contentIds;
       return next;
     });
 };
@@ -836,16 +843,27 @@ export default function App() {
               ? {
                   theoryPrompts: data.theoryPrompts
                     .filter((entry) => entry && typeof entry.prompt === 'string' && entry.prompt.trim())
-                    .map((entry): { prompt: string; label?: string; slideUrl?: string } => {
-                      const normalized: { prompt: string; label?: string; slideUrl?: string } = {
+                    .map((entry): { prompt: string; label?: string; slideUrl?: string; contentIds?: string[] } => {
+                      const normalized: {
+                        prompt: string;
+                        label?: string;
+                        slideUrl?: string;
+                        contentIds?: string[];
+                      } = {
                         prompt: entry.prompt,
                       };
                       if (typeof entry.label === 'string' && entry.label.trim()) {
                         normalized.label = entry.label.trim();
                       }
-                      // 시수에 붙인 이론 자료 링크. 빼먹으면 스냅샷·새로고침마다 사라진다('' 해제 상태도 보존).
+                      // 이론에 붙인 자료 링크. 빼먹으면 스냅샷·새로고침마다 사라진다('' 해제 상태도 보존).
                       if (typeof entry.slideUrl === 'string') {
                         normalized.slideUrl = entry.slideUrl.trim();
+                      }
+                      // 이 이론(덱)에 묶인 실습 id들(인터리브 묶음). 빼먹으면 새로고침마다 그룹이 풀린다.
+                      if (Array.isArray(entry.contentIds)) {
+                        normalized.contentIds = (entry.contentIds as unknown[]).filter(
+                          (id): id is string => typeof id === 'string'
+                        );
                       }
                       return normalized;
                     }),

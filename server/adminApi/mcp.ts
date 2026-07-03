@@ -119,7 +119,7 @@ const buildMcpServer = () => {
 
   server.tool(
     'upsert_lesson_record',
-    '특정 반의 특정 날짜 수업 기록(메모/출석/배정 콘텐츠) 생성·수정. 문서 id는 {classroomId}_{date}로 고정되며 calendar.damuna.org에 자동 동기화된다. theoryPrompts로 시수별 NotebookLM 이론 슬라이드 프롬프트도 저장할 수 있다(강사 대시보드 표시용, 줄 때마다 전체 교체).',
+    '특정 반의 특정 날짜 수업 기록(메모/출석/배정 콘텐츠) 생성·수정. 문서 id는 {classroomId}_{date}로 고정되며 calendar.damuna.org에 자동 동기화된다. theoryPrompts로 NotebookLM 이론 슬라이드 프롬프트도 저장할 수 있다(강사 대시보드 표시용, 줄 때마다 전체 교체). 각 프롬프트의 contentIds에 그 이론(덱)에 속한 실습 콘텐츠 id들을 넣으면 대시보드가 "이론 1개 + 그 실습들"로 묶어 보여준다(인터리브 수업).',
     {
       classroomId: z.string(),
       date: z.string().describe('YYYY-MM-DD'),
@@ -140,14 +140,20 @@ const buildMcpServer = () => {
         .union([
           z.array(
             z.object({
-              label: z.string().optional().describe('시수 라벨 (예: "1시수 · 앞 40분 기초")'),
+              label: z.string().optional().describe('표시 라벨 (예: "이론 19장 · 파일과 저장")'),
               prompt: z.string().describe('NotebookLM 입력 칸에 붙여넣을 프롬프트 본문'),
+              contentIds: z
+                .array(z.string())
+                .optional()
+                .describe(
+                  '이 이론(덱)에 속한 실습 콘텐츠 id들(수업 진행 순서 = 개념 순서). 대시보드가 "이론 1개 + 그 실습들" 그룹으로 표시한다.'
+                ),
             })
           ),
           z.string().describe('위 배열의 JSON 문자열도 허용 — 중첩 배열을 문자열로 직렬화하는 클라이언트 대비'),
         ])
         .optional()
-        .describe('시수별 이론 슬라이드 프롬프트(시수 순서대로; 배열 또는 그 JSON 문자열). 줄 때마다 그 날짜의 theoryPrompts 전체를 교체한다.'),
+        .describe('이론 슬라이드 프롬프트 배열(이론 덱 1개 = 항목 1개; 배열 또는 그 JSON 문자열). 줄 때마다 그 날짜의 theoryPrompts 전체를 교체한다.'),
     },
     async (input) => run(() => upsertLessonRecord(input as UpsertLessonRecordInput))
   );
