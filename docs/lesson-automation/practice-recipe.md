@@ -1,7 +1,7 @@
 # 실습 인터랙티브 HTML 생성 레시피 (자동화용)
 
 > **입력**: 회차 `details` 1건. **출력**: **개념마다** 자체 완결 인터랙티브 HTML 1개(회차당 보통 3~6개).
-> **★ 2026-07-03 인터리브 개편**: 수업은 이론 덱(회차당 19장 1개)을 켜 둔 채 "이론 1~3장 → 그 개념의 실습 → 다음 개념 1~3장 → 실습 …"으로 진행한다(1교시/2교시 분리 없음). 그래서 실습은 **시수당 1개(20분)가 아니라 개념당 1개(약 8~10분)** — 개념 목록은 `details`의 시수별 '주요 활동' 항목들을 순서대로 합쳐 만든다(적정 3~6개, 많으면 묶고 적으면 나눔). **개념 순서 = 날짜기록 contentIds 순서 = 이론 덱 「✅ 개념 끝 → 🛠 실습」 배지 순서**. 이론 쪽 정본은 [`notebooklm-guidelines.md`](./notebooklm-guidelines.md) §4.
+> **★ 2026-07-03 인터리브 개편**: 수업은 이론 덱(회차당 19장 1개)을 켜 둔 채 "이론 1~3장 → 그 개념의 실습 → 다음 개념 1~3장 → 실습 …"으로 진행한다(1교시/2교시 분리 없음). 그래서 실습은 **시수당 1개(20분)가 아니라 개념당 1개(약 8~10분)** — 개념 목록은 `details`의 시수별 '주요 활동' 항목들을 순서대로 합쳐 만든다(적정 3~6개, 많으면 묶고 적으면 나눔). **개념 순서 = 날짜기록 contentIds 순서 = 이론 덱 「✅ 개념 끝 → 🛠 실습」 배지 순서**. 이론 19장 구성 정본은 [`cloud-routine-setup.md`](./cloud-routine-setup.md) 5단계(디자인·형식·언어는 [`notebooklm-guidelines.md`](./notebooklm-guidelines.md) §1·§2).
 > 이 문서가 곧 **생성 프롬프트(시스템 지침)** 다. 클라우드 루틴(C)과 강사 수동 생성 양쪽이 이걸 따른다.
 > 디자인 언어는 이론(NotebookLM) [`notebooklm-guidelines.md`](./notebooklm-guidelines.md)와 공유해 이론↔실습 톤을 맞춘다.
 > **품질 기준선(2026-06-23 상향)**: [`sample-practice-desktop-mission.html`](./sample-practice-desktop-mission.html)(2회차 3시수)·[`sample-practice-folder-builder.html`](./sample-practice-folder-builder.html)(2회차 4시수). 시각 우선·콤보/뱃지·변별/함정·5단계(보스 포함)·적응형의 **새 표준**이다. (기존 `sample-practice-mouse-mission.html`/`promise-card`는 더 단순한 1회차 초기 버전 = 상향 대상.)
