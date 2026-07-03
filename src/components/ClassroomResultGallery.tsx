@@ -95,8 +95,9 @@ function useDriveBlobUrl(
   return { url, state };
 }
 
-/** 그리드 카드의 썸네일 — 이미지는 실제 미리보기, 그 외는 아이콘. */
-const ResultThumbnail: React.FC<{
+/** 그리드 카드의 썸네일 — 이미지는 실제 미리보기, 그 외는 아이콘.
+ *  (StudentShowcaseManager에서도 재사용 — 승인 전 비공개 파일도 관리자 프록시로 미리보기) */
+export const ResultThumbnail: React.FC<{
   post: StudentPost;
   getAuthToken: () => Promise<string | null>;
 }> = ({ post, getAuthToken }) => {

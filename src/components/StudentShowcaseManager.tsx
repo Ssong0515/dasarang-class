@@ -5,8 +5,6 @@ import {
   EyeOff,
   Share2,
   ExternalLink,
-  ImageIcon,
-  FileText,
   Copy,
   Check,
   Trash2,
@@ -14,10 +12,13 @@ import {
 import { StudentPost, StudentPostStatus } from '../types';
 import { resolveAppPath } from '../utils/appPaths';
 import { InfoTooltip } from './InfoTooltip';
+import { ResultThumbnail } from './ClassroomResultGallery';
 
 interface StudentShowcaseManagerProps {
   posts: StudentPost[];
   onReview: (id: string, action: 'approve' | 'hide' | 'delete') => Promise<void>;
+  /** 승인 전(비공개) Drive 파일 썸네일을 관리자 프록시로 받기 위한 ID 토큰 공급자 */
+  getAuthToken: () => Promise<string | null>;
 }
 
 const STATUS_TABS: { key: StudentPostStatus; label: string }[] = [
@@ -41,6 +42,7 @@ const formatDate = (iso?: string) => {
 export const StudentShowcaseManager: React.FC<StudentShowcaseManagerProps> = ({
   posts,
   onReview,
+  getAuthToken,
 }) => {
   const [activeStatus, setActiveStatus] = useState<StudentPostStatus>('pending');
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -196,18 +198,9 @@ export const StudentShowcaseManager: React.FC<StudentShowcaseManagerProps> = ({
                   key={post.id}
                   className="flex gap-4 rounded-[24px] border border-[#F3F2EE] bg-white p-4 shadow-sm"
                 >
+                  {/* 승인 전 비공개 파일도 관리자 프록시로 실제 미리보기를 띄운다(결과물 갤러리와 동일 로직) */}
                   <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[#FBFBFA] text-[#A2906F]">
-                    {post.imageUrl ? (
-                      <img
-                        src={post.imageUrl}
-                        alt={post.title}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (post.mimeType || '').startsWith('image/') ? (
-                      <ImageIcon size={24} />
-                    ) : (
-                      <FileText size={24} />
-                    )}
+                    <ResultThumbnail post={post} getAuthToken={getAuthToken} />
                   </div>
 
                   <div className="flex min-w-0 flex-1 flex-col">

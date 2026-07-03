@@ -2096,7 +2096,11 @@ export default function App() {
             />
           )}
           {activeTab === 'student-showcase' && (
-            <StudentShowcaseManager posts={studentPosts} onReview={handleReviewStudentPost} />
+            <StudentShowcaseManager
+              posts={studentPosts}
+              onReview={handleReviewStudentPost}
+              getAuthToken={getUserIdToken}
+            />
           )}
             </>
           )}
