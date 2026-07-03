@@ -280,8 +280,8 @@ const buildMcpServer = () => {
 
   server.tool(
     'review_student_post',
-    '학생 작품 게시물 승인/숨김. approve하면 Drive 파일이 링크 공개로 바뀌고 damuna.org 학생 작품 페이지에 노출된다.',
-    { id: z.string(), action: z.enum(['approve', 'hide']) },
+    '학생 작품 게시물 승인/숨김/제거. approve하면 Drive 파일이 링크 공개로 바뀌고 damuna.org 학생 작품 페이지에 노출된다. delete는 Drive 파일과 게시물을 완전히 삭제한다(복구 불가).',
+    { id: z.string(), action: z.enum(['approve', 'hide', 'delete']) },
     async ({ id, action }) => run(() => reviewStudentPost(id, action))
   );
 

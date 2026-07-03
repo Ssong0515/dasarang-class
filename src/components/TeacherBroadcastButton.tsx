@@ -77,8 +77,10 @@ const ensureMic = async (): Promise<boolean> => {
   }
 };
 
-const labelForIso = (iso: string): string =>
-  VOICE_LANG_OPTIONS.find((option) => option.iso === iso)?.label ?? iso;
+// 방송 번역 대상 — 출석 기록·학생 프로필과 무관하게 항상 '지원 언어 전부 + 한국어'.
+// 학생이 어떤 언어를 골라도(또는 출석 체크 전이라도) 즉시 그 언어 자막이 나오게 한다.
+// 온디바이스 번역이라 비용이 없고, 언어별 8초 타임아웃 폴백이 있어 발화당 병렬 번역 부담도 작다.
+const BROADCAST_TARGET_CODES = ['ko', ...VOICE_LANG_OPTIONS.map((option) => option.iso)];
 
 // 긴 발화를 자막 크기로 끊어 보내기 위한 임계값. 교사가 쉼표 없이 길게 말해도 아래 조건이면 강제로 끊어 확정·전송하고 이어서 다시 인식한다.
 const MAX_INTERIM_CHARS = 60; // 확정 안 된 미리보기가 이 글자 수를 넘으면 끊는다.
@@ -89,8 +91,6 @@ export interface TeacherBroadcastButtonProps {
   classroomId?: string;
   classroomName?: string;
   date: string;
-  /** 지금 출석(결석/제외 아님)한 학생들의 언어 iso 코드. 방송 중 실시간으로 바뀌면 다음 발화부터 반영된다. */
-  targetLangCodes: string[];
   endNoticeAt?: string | null;
 }
 
@@ -100,7 +100,6 @@ export const TeacherBroadcastButton: React.FC<TeacherBroadcastButtonProps> = ({
   classroomId,
   classroomName,
   date,
-  targetLangCodes,
   endNoticeAt,
 }) => {
   const speechSupported = getSpeechRecognitionCtor() !== null;
@@ -123,8 +122,6 @@ export const TeacherBroadcastButton: React.FC<TeacherBroadcastButtonProps> = ({
   // onresult/onend 클로저가 항상 '최신' 값을 읽도록 ref에 보관(고정 스냅샷이 아니라 매번 최신값 참조).
   const ctxRef = useRef({ classroomId, classroomName, date });
   ctxRef.current = { classroomId, classroomName, date };
-  const targetCodesRef = useRef(targetLangCodes);
-  targetCodesRef.current = targetLangCodes;
   const latestEndNoticeRef = useRef<string | null>(endNoticeAt ?? null);
   latestEndNoticeRef.current = endNoticeAt ?? null;
 
@@ -135,7 +132,7 @@ export const TeacherBroadcastButton: React.FC<TeacherBroadcastButtonProps> = ({
     const ctx = ctxRef.current;
     if (!ctx.classroomId) return;
 
-    const translations = await translateFromKorean(text, targetCodesRef.current);
+    const translations = await translateFromKorean(text, BROADCAST_TARGET_CODES);
     try {
       await addDoc(collection(db, TEACHER_BROADCAST_MESSAGES_COLLECTION), {
         classroomId: ctx.classroomId,
@@ -146,7 +143,13 @@ export const TeacherBroadcastButton: React.FC<TeacherBroadcastButtonProps> = ({
         createdAt: new Date().toISOString(),
       });
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, TEACHER_BROADCAST_MESSAGES_COLLECTION);
+      // handleFirestoreError는 로깅 후 다시 throw한다 — 여기서 삼켜서, 공개 토글 등과 겹쳐 한 마디 저장이
+      // 실패해도 처리 안 된 에러로 화면을 깨거나 방송 전체를 끊지 않게 한다(그 한 마디만 유실).
+      try {
+        handleFirestoreError(error, OperationType.CREATE, TEACHER_BROADCAST_MESSAGES_COLLECTION);
+      } catch {
+        /* 로깅만 하고 방송은 계속 */
+      }
     }
   }, []);
 
@@ -323,7 +326,7 @@ export const TeacherBroadcastButton: React.FC<TeacherBroadcastButtonProps> = ({
     }
 
     // 번역 모델을 미리 예열한다(첫 발화가 ko→언어 모델 다운로드로 지연/블록되지 않게). 실패는 무시.
-    void warmUpTranslators(targetCodesRef.current);
+    void warmUpTranslators(BROADCAST_TARGET_CODES);
 
     // 최대 180분 자동 정지(무음으로 재시작이 반복돼도 총 경과 시간으로 끊는다).
     autoStopTimerRef.current = setTimeout(() => {
@@ -378,76 +381,69 @@ export const TeacherBroadcastButton: React.FC<TeacherBroadcastButtonProps> = ({
     };
   }, []);
 
-  // ── 렌더: 미지원 브라우저 ────────────────────────────────────────────────
+  // ── 렌더: 미지원 브라우저 — 채팅 FAB 위 같은 자리에 비활성 아이콘만 ─────────
   if (!speechSupported) {
     return (
-      <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2">
-        <div className="flex items-center gap-2 rounded-full bg-[#E5E3DD] px-4 py-2 text-xs font-semibold text-[#8B7E74] shadow ring-1 ring-[#E5E3DD]">
-          <MicOff className="h-4 w-4" />
-          이 브라우저에서는 음성 인식을 지원하지 않아요
-        </div>
+      <div className="fixed bottom-20 right-4 z-40">
+        <button
+          type="button"
+          disabled
+          title="이 브라우저에서는 음성 인식을 지원하지 않아요"
+          className="flex h-14 w-14 cursor-not-allowed items-center justify-center rounded-full bg-[#E5E3DD] text-[#A89F94] shadow-lg"
+        >
+          <MicOff className="h-6 w-6" />
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-2">
-      {/* 인식 중인 말 미리보기(교사 확인용) */}
-      {isBroadcasting && interimText && (
-        <div
-          className="max-w-[80vw] rounded-2xl bg-white/95 px-4 py-2 text-sm text-[#4A3728] shadow-lg ring-1 ring-[#EADBC8]"
-          dir="auto"
-        >
-          {interimText}
+    <>
+      {/* STT 미리보기·안내 문구는 기존대로 하단 중앙에 표시 */}
+      {(isBroadcasting && interimText) || (notice && !isBroadcasting) ? (
+        <div className="pointer-events-none fixed bottom-4 left-1/2 z-40 flex -translate-x-1/2 flex-col items-center gap-2">
+          {/* 인식 중인 말 미리보기(교사 확인용) */}
+          {isBroadcasting && interimText && (
+            <div
+              className="max-w-[80vw] rounded-2xl bg-white/95 px-4 py-2 text-sm text-[#4A3728] shadow-lg ring-1 ring-[#EADBC8]"
+              dir="auto"
+            >
+              {interimText}
+            </div>
+          )}
+          {/* 안내(권한 오류·자동 정지·수업 종료) — 꺼진 상태에서만 표시 */}
+          {notice && !isBroadcasting && (
+            <div
+              className={`max-w-[80vw] rounded-full px-4 py-1.5 text-xs font-semibold shadow ring-1 ${
+                notice.kind === 'error'
+                  ? 'bg-red-50 text-red-600 ring-red-100'
+                  : 'bg-[#FFF5E9] text-[#8B5E3C] ring-[#EADBC8]'
+              }`}
+            >
+              {notice.text}
+            </div>
+          )}
         </div>
-      )}
+      ) : null}
 
-      {/* 안내(권한 오류·자동 정지·수업 종료) — 꺼진 상태에서만 표시 */}
-      {notice && !isBroadcasting && (
-        <div
-          className={`max-w-[80vw] rounded-full px-4 py-1.5 text-xs font-semibold shadow ring-1 ${
-            notice.kind === 'error'
-              ? 'bg-red-50 text-red-600 ring-red-100'
-              : 'bg-[#FFF5E9] text-[#8B5E3C] ring-[#EADBC8]'
+      {/* 방송 토글 — 학생 채팅 FAB(bottom-4 right-4) 바로 위, 같은 크기의 아이콘 버튼.
+          채팅 패널(z-50)이 열리면 그 뒤로 가려지도록 z-40. */}
+      <div className="fixed bottom-20 right-4 z-40">
+        <button
+          type="button"
+          onClick={handleToggle}
+          aria-pressed={isBroadcasting}
+          aria-label={isBroadcasting ? '통역 자막 끄기' : '통역 자막 켜기'}
+          title={isBroadcasting ? '통역 자막 끄기' : '통역 자막 시작'}
+          className={`flex h-14 w-14 items-center justify-center rounded-full text-white shadow-lg transition-all ${
+            isBroadcasting
+              ? 'animate-pulse bg-red-500'
+              : 'bg-[#8B5E3C] hover:scale-105'
           }`}
         >
-          {notice.text}
-        </div>
-      )}
-
-      <button
-        type="button"
-        onClick={handleToggle}
-        aria-pressed={isBroadcasting}
-        aria-label={isBroadcasting ? '통역 자막 끄기' : '통역 자막 켜기'}
-        className={`flex items-center gap-2 rounded-full px-5 py-3 text-sm font-bold shadow-lg ring-1 transition-all ${
-          isBroadcasting
-            ? 'animate-pulse bg-red-500 text-white ring-red-300'
-            : 'bg-[#8B5E3C] text-white ring-[#7A5030] hover:scale-105'
-        }`}
-      >
-        {isBroadcasting ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-        <span>{isBroadcasting ? '통역 자막 끄기' : '통역 자막 시작'}</span>
-        {isBroadcasting && (
-          <span className="ml-1 flex items-center gap-1">
-            {targetLangCodes.length === 0 ? (
-              <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-semibold">
-                번역 대상 없음
-              </span>
-            ) : (
-              targetLangCodes.map((code) => (
-                <span
-                  key={code}
-                  className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-semibold"
-                  dir="auto"
-                >
-                  {labelForIso(code)}
-                </span>
-              ))
-            )}
-          </span>
-        )}
-      </button>
-    </div>
+          <Mic className="h-6 w-6" />
+        </button>
+      </div>
+    </>
   );
 };

@@ -348,14 +348,15 @@ async function startServer() {
     }
   });
 
-  // 관리자 UI에서 학생 게시물 승인(홈페이지 공유)/숨김. 승인 시 Drive 파일 공개 전환은 서버만 가능.
+  // 관리자 UI에서 학생 게시물 승인(홈페이지 공유)/숨김/제거. 승인 시 Drive 파일 공개 전환,
+  // 제거 시 Drive 파일 삭제는 서버만 가능.
   app.post(
     withBasePath(APP_BASE_PATH, '/api/student-posts/:id/review'),
     requireAdmin,
     async (req, res) => {
       const { action } = (req.body || {}) as { action?: string };
-      if (action !== 'approve' && action !== 'hide') {
-        res.status(400).json({ error: "action은 'approve' 또는 'hide'여야 합니다." });
+      if (action !== 'approve' && action !== 'hide' && action !== 'delete') {
+        res.status(400).json({ error: "action은 'approve'·'hide'·'delete' 중 하나여야 합니다." });
         return;
       }
       try {

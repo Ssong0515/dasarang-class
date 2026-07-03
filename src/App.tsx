@@ -65,7 +65,6 @@ import {
   sanitizeAttendanceRecordsForStorage,
 } from './utils/attendance';
 import { normalizeClassroomDateRecordContentIds } from './utils/classroomDateRecordContent';
-import { mapStudentLanguageToIso } from './utils/studentLanguage';
 import {
   CLASSROOM_COLOR_OPTIONS,
   DEFAULT_CLASSROOM_COLOR,
@@ -358,32 +357,8 @@ export default function App() {
   );
 
   // 교사 통역 방송용 파생값. 방송은 실시간 학생용이므로 항상 '실제 오늘'(로컬) 기준으로 쓴다(미리보기 날짜와 무관).
+  // 번역 대상 언어는 출석과 무관하게 TeacherBroadcastButton이 항상 '지원 언어 전부 + 한국어'로 처리한다.
   const broadcastTodayString = getLocalDateString(new Date());
-  // 오늘 활성 반의 '출석(결석/제외 아님) 학생' 언어만 모아 번역 대상 iso 코드로 만든다.
-  // classroomDateRecords·students onSnapshot 위에 얹혀 있어 늦은 등교 등 출석 변화가 다음 발화부터 자동 반영된다.
-  const broadcastTargetLangCodes = useMemo(() => {
-    if (!activeClassroomId) return [] as string[];
-    const recordId = getClassroomDateRecordId(activeClassroomId, broadcastTodayString);
-    const record =
-      classroomDateRecords.find((candidate) => candidate.id === recordId) ??
-      classroomDateRecords.find(
-        (candidate) =>
-          candidate.classroomId === activeClassroomId && candidate.date === broadcastTodayString
-      );
-    if (!record) return [] as string[];
-    const attendingIds = new Set(
-      record.attendance
-        .filter((entry) => entry.status !== 'Absent' && !entry.isExcluded)
-        .map((entry) => entry.studentId)
-    );
-    const codes = new Set<string>();
-    for (const student of students) {
-      if (!attendingIds.has(student.id)) continue;
-      const iso = mapStudentLanguageToIso(student.language);
-      if (iso) codes.add(iso);
-    }
-    return Array.from(codes);
-  }, [activeClassroomId, broadcastTodayString, classroomDateRecords, students]);
 
   // 활성 반 오늘 문서의 endNoticeAt — '수업 종료'를 누르면(이 값이 갱신되면) 방송이 자동으로 꺼지도록 방송 버튼에 내려준다.
   const broadcastEndNoticeAt = useMemo(() => {
@@ -480,8 +455,9 @@ export default function App() {
     return items || [];
   };
 
-  // 학생 작품 승인(홈페이지 공유)/숨김. 실제 반영은 studentPosts 리스너가 실시간으로 갱신.
-  const handleReviewStudentPost = async (id: string, action: 'approve' | 'hide') => {
+  // 학생 작품 승인(홈페이지 공유)/숨김/제거. 실제 반영은 studentPosts 리스너가 실시간으로 갱신.
+  // 제거(delete)는 서버가 Drive 파일까지 지워 저장 공간을 되돌린다.
+  const handleReviewStudentPost = async (id: string, action: 'approve' | 'hide' | 'delete') => {
     await postAdminRequest(`api/student-posts/${id}/review`, { action });
   };
 
@@ -2145,7 +2121,6 @@ export default function App() {
           classroomId={activeClassroom.id}
           classroomName={activeClassroom.name}
           date={broadcastTodayString}
-          targetLangCodes={broadcastTargetLangCodes}
           endNoticeAt={broadcastEndNoticeAt}
         />
       )}

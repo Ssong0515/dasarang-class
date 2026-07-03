@@ -9,6 +9,7 @@ import {
   FileText,
   Copy,
   Check,
+  Trash2,
 } from 'lucide-react';
 import { StudentPost, StudentPostStatus } from '../types';
 import { resolveAppPath } from '../utils/appPaths';
@@ -16,7 +17,7 @@ import { InfoTooltip } from './InfoTooltip';
 
 interface StudentShowcaseManagerProps {
   posts: StudentPost[];
-  onReview: (id: string, action: 'approve' | 'hide') => Promise<void>;
+  onReview: (id: string, action: 'approve' | 'hide' | 'delete') => Promise<void>;
 }
 
 const STATUS_TABS: { key: StudentPostStatus; label: string }[] = [
@@ -78,7 +79,7 @@ export const StudentShowcaseManager: React.FC<StudentShowcaseManagerProps> = ({
     [posts, activeStatus]
   );
 
-  const handleAction = async (id: string, action: 'approve' | 'hide') => {
+  const handleAction = async (id: string, action: 'approve' | 'hide' | 'delete') => {
     if (busyId) return;
     setBusyId(id);
     setError(null);
@@ -89,6 +90,19 @@ export const StudentShowcaseManager: React.FC<StudentShowcaseManagerProps> = ({
     } finally {
       setBusyId(null);
     }
+  };
+
+  // 제거는 숨김(보관)과 달리 업로드 파일까지 지워 복구가 안 되므로 반드시 한 번 확인받는다.
+  const handleDelete = (post: StudentPost) => {
+    const label = post.title || '이 작품';
+    if (
+      !window.confirm(
+        `'${label}'을(를) 완전히 제거할까요?\n업로드된 파일도 함께 삭제되며 되돌릴 수 없어요.\n(보관만 하려면 '숨김'을 쓰세요)`
+      )
+    ) {
+      return;
+    }
+    void handleAction(post.id, 'delete');
   };
 
   return (
@@ -263,6 +277,16 @@ export const StudentShowcaseManager: React.FC<StudentShowcaseManagerProps> = ({
                           {post.status === 'approved' ? '공개 취소' : '숨김'}
                         </button>
                       )}
+
+                      {/* 제거 — 숨김(보관)과 달리 Drive 파일까지 지워 공간을 되돌린다. 복구 불가. */}
+                      <button
+                        onClick={() => handleDelete(post)}
+                        disabled={isBusy}
+                        className="flex items-center gap-1.5 rounded-xl border border-red-100 px-3 py-1.5 text-xs font-bold text-red-500 transition-all hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isBusy ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                        제거
+                      </button>
                     </div>
                   </div>
                 </div>

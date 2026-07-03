@@ -22,6 +22,25 @@ export const VOICE_LANG_OPTIONS: VoiceLangOption[] = [
   { label: 'English', stt: 'en-US', iso: 'en' },
 ];
 
+// ── 푸시투토크 안전장치 상수 ─────────────────────────────────────────────────
+// 이보다 짧게 누르면 '누른 채 말하기'를 모르는 것으로 보고 사용법 힌트를 띄운다.
+const MIN_HOLD_MS = 600;
+// stop()이 시작 경합으로 씹혔을 때(짧은 클릭 직후) 강제 종료까지 기다리는 시간.
+const STOP_FAILSAFE_MS = 1000;
+// 어떤 경우에도 녹음이 이 시간을 넘기면 자동으로 끝내 보낸다 — '계속 켜짐' 상태의 최종 복구선.
+const MAX_RECORD_MS = 30 * 1000;
+
+// 짧게 탭만 한 학생에게 자기 언어로 '꾹 누른 채 말하고, 다 말하면 떼기'를 알려주는 힌트.
+const HOLD_HINTS: Record<string, string> = {
+  ru: 'Нажми и держи 🎤 говори, потом отпусти',
+  zh: '按住不放 🎤 说完再松开',
+  vi: 'Nhấn giữ 🎤 nói xong mới thả tay',
+  ur: '🎤 دبائے رکھیں اور بولیں، پھر چھوڑیں',
+  tl: 'Pindutin nang matagal 🎤 magsalita, saka bitawan',
+  en: 'Press and hold 🎤 speak, then let go',
+};
+const holdHintFor = (iso: string): string => HOLD_HINTS[iso] ?? HOLD_HINTS.en;
+
 const VOICE_LANG_STORAGE_KEY = 'dsr_voice_lang';
 // 학생 언어 세션 TTL(180분). 교사 방송(TeacherBroadcastButton)의 최대 자동 정지 시간과 같은 값을 써야 하므로
 // 상수를 이중으로 정의하지 않고 여기서 export해 공유한다.
@@ -32,7 +51,7 @@ interface StoredVoiceLang {
   stt: string;
   label: string;
   setAt: string; // ISO
-  classKey: string; // `${classroomId}_${date}`
+  classKey: string; // `today_${date}` — 날짜 단위 세션 키(반 무관)
 }
 
 // ─── SpeechRecognition 최소 타입 선언 (lib.dom에 표준화 전이라 좁게 정의) ─────────────
@@ -57,6 +76,7 @@ interface SpeechRecognitionLike {
   interimResults: boolean;
   continuous: boolean;
   maxAlternatives?: number;
+  onstart: (() => void) | null;
   onresult: ((event: SpeechRecognitionEventLike) => void) | null;
   onerror: ((event: unknown) => void) | null;
   onend: (() => void) | null;
@@ -151,7 +171,9 @@ export const StudentVoiceButton: React.FC<StudentVoiceButtonProps> = ({
   date,
   endNoticeAt,
 }) => {
-  const classKey = `${classroomId ?? ''}_${date}`;
+  // 언어 선택은 '오늘' 단위로 유지한다. classroomId를 키에 넣으면 학생이 수업 공개 전에
+  // 언어를 골랐다가 공개 순간 반이 특정되면서(undefined→반ID) 선택이 리셋되는 문제가 생긴다.
+  const classKey = `today_${date}`;
   const speechSupported = getSpeechRecognitionCtor() !== null;
 
   const [lang, setLang] = useState<VoiceLangOption | null>(null);
@@ -164,6 +186,11 @@ export const StudentVoiceButton: React.FC<StudentVoiceButtonProps> = ({
   const finalTextRef = useRef('');
   const sentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 푸시투토크 안전장치: 누른 시각(짧은 탭 감지), 정지 요청 플래그(start/stop 경합 방지), 힌트 표시.
+  const pressStartedAtRef = useRef(0);
+  const stopRequestedRef = useRef(false);
+  const holdHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [holdHint, setHoldHint] = useState(false);
 
   // 저장된 언어가 만료됐는지 판단하고, 유효하면 채택한다.
   useEffect(() => {
@@ -195,6 +222,7 @@ export const StudentVoiceButton: React.FC<StudentVoiceButtonProps> = ({
     return () => {
       if (sentTimerRef.current) clearTimeout(sentTimerRef.current);
       if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
+      if (holdHintTimerRef.current) clearTimeout(holdHintTimerRef.current);
       try {
         recognitionRef.current?.abort();
       } catch {
@@ -252,9 +280,25 @@ export const StudentVoiceButton: React.FC<StudentVoiceButtonProps> = ({
   }, [classroomId, classroomName, date, lang]);
 
   const startRecording = useCallback(() => {
-    if (!lang || isRecording) return;
+    if (!lang) return;
     const Ctor = getSpeechRecognitionCtor();
     if (!Ctor) return;
+
+    // 이전 인스턴스가 남아 있으면(더블클릭·연타로 stop이 씹힌 경우) 반드시 정리하고 시작한다.
+    // 정리 없이 새로 만들면 마이크를 두 인스턴스가 잡아 어느 쪽도 멈출 수 없는 '계속 켜짐' 상태가 된다.
+    const previous = recognitionRef.current;
+    if (previous) {
+      previous.onstart = null;
+      previous.onresult = null;
+      previous.onerror = null;
+      previous.onend = null;
+      try {
+        previous.abort();
+      } catch {
+        /* 무시 */
+      }
+      recognitionRef.current = null;
+    }
 
     let recognition: SpeechRecognitionLike;
     try {
@@ -269,7 +313,36 @@ export const StudentVoiceButton: React.FC<StudentVoiceButtonProps> = ({
     if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
     finalTextRef.current = '';
     setInterimText('');
+    stopRequestedRef.current = false;
 
+    // 어떤 경우에도 무한 녹음으로 남지 않게 상한을 둔다(멈춤 실패 시 최종 복구선).
+    const maxTimer = setTimeout(() => {
+      stopRequestedRef.current = true;
+      try {
+        recognition.stop();
+      } catch {
+        /* 무시 */
+      }
+      setTimeout(() => {
+        try {
+          recognition.abort();
+        } catch {
+          /* 무시 */
+        }
+      }, STOP_FAILSAFE_MS);
+    }, MAX_RECORD_MS);
+
+    recognition.onstart = () => {
+      // 인식 서비스가 붙기 전에 이미 손을 뗐다면(아주 짧은 클릭) 시작되자마자 멈춘다.
+      // start() 직후의 stop()은 씹힐 수 있어서, 여기서 한 번 더 멈춰야 '계속 켜짐'이 안 생긴다.
+      if (stopRequestedRef.current) {
+        try {
+          recognition.stop();
+        } catch {
+          /* 무시 */
+        }
+      }
+    };
     recognition.onresult = (event: SpeechRecognitionEventLike) => {
       let interim = '';
       for (let i = event.resultIndex; i < event.results.length; i += 1) {
@@ -287,6 +360,10 @@ export const StudentVoiceButton: React.FC<StudentVoiceButtonProps> = ({
       // no-op: onend에서 정리·전송한다.
     };
     recognition.onend = () => {
+      clearTimeout(maxTimer);
+      // 연타로 이미 새 세션이 시작됐다면 이 종료 이벤트는 무시한다.
+      // 여기서 ref를 무조건 지우면 새 세션의 핸들이 사라져 멈출 방법이 없어진다(기존 버그).
+      if (recognitionRef.current !== recognition) return;
       setIsRecording(false);
       recognitionRef.current = null;
       void finishAndSend();
@@ -297,18 +374,30 @@ export const StudentVoiceButton: React.FC<StudentVoiceButtonProps> = ({
       recognition.start();
       setIsRecording(true);
     } catch {
+      clearTimeout(maxTimer);
       recognitionRef.current = null;
     }
-  }, [lang, isRecording, finishAndSend]);
+  }, [lang, finishAndSend]);
 
   const stopRecording = useCallback(() => {
     const recognition = recognitionRef.current;
     if (!recognition) return;
+    stopRequestedRef.current = true;
     try {
       recognition.stop(); // onend에서 finishAndSend 호출
     } catch {
       /* 무시 */
     }
+    // stop()이 시작 경합으로 씹혀도 잠시 뒤 abort로 강제 종료한다(abort도 onend를 발생시킨다).
+    setTimeout(() => {
+      if (recognitionRef.current === recognition) {
+        try {
+          recognition.abort();
+        } catch {
+          /* 무시 */
+        }
+      }
+    }, STOP_FAILSAFE_MS);
   }, []);
 
   // ── 렌더: 미지원 브라우저 ────────────────────────────────────────────────
@@ -327,20 +416,38 @@ export const StudentVoiceButton: React.FC<StudentVoiceButtonProps> = ({
     );
   }
 
-  // ── 렌더: 언어 미선택 → 프롬프트 + 피커 ────────────────────────────────────
+  // ── 렌더: 언어 미선택 → 시각적 강조로 선택 유도 ─────────────────────────────
+  // 학생들 언어가 제각각이라 텍스트 안내 대신 누구나 알아보는 신호만 쓴다:
+  // 퍼지는 핑 링 + 굵은 금색 링 + 위에서 통통 튀는 👇 이모지. 피커를 열면 강조는 사라진다.
   if (!lang) {
     return (
       <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2">
         {isPickerOpen && (
           <LangPicker onChoose={chooseLang} onClose={() => setIsPickerOpen(false)} />
         )}
+        {!isPickerOpen && (
+          <div
+            aria-hidden
+            className="pointer-events-none flex w-16 animate-bounce justify-center text-4xl drop-shadow"
+          >
+            👇
+          </div>
+        )}
         <button
           type="button"
           onClick={() => setIsPickerOpen((open) => !open)}
-          className="flex items-center gap-2 rounded-full bg-[#FFF5E9] px-4 py-3 text-sm font-semibold text-[#8B5E3C] shadow-lg ring-1 ring-[#EADBC8] transition-transform hover:scale-105"
+          aria-label="언어 선택 · Choose language"
+          className="relative flex h-16 w-16 items-center justify-center rounded-full bg-[#8B5E3C] text-white shadow-lg transition-transform hover:scale-105"
         >
-          <Globe className="h-5 w-5" />
-          <span>Choose language · 언어 선택</span>
+          {!isPickerOpen && (
+            <>
+              {/* 바깥으로 퍼지는 물결 — '여기 눌러' 신호 */}
+              <span className="absolute inset-0 animate-ping rounded-full bg-[#8B5E3C] opacity-40" />
+              {/* 숨쉬는 금색 링 — 정적 상태에서도 눈에 띄게 */}
+              <span className="absolute -inset-1.5 animate-pulse rounded-full ring-4 ring-[#F0B24A]/80" />
+            </>
+          )}
+          <Globe className="relative h-7 w-7" />
         </button>
       </div>
     );
@@ -360,6 +467,16 @@ export const StudentVoiceButton: React.FC<StudentVoiceButtonProps> = ({
           dir="auto"
         >
           {bubbleText}
+        </div>
+      )}
+
+      {/* 짧은 탭 사용법 힌트 — 학생이 고른 언어로 '꾹 누른 채 말하기' 안내 */}
+      {holdHint && !isRecording && !bubbleText && lang && (
+        <div
+          className="max-w-[240px] animate-bounce rounded-2xl bg-[#4A3728] px-4 py-2 text-sm font-bold text-white shadow-lg"
+          dir="auto"
+        >
+          {holdHintFor(lang.iso)}
         </div>
       )}
 
@@ -385,9 +502,18 @@ export const StudentVoiceButton: React.FC<StudentVoiceButtonProps> = ({
             } catch {
               /* 캡처 미지원 환경은 무시 */
             }
+            pressStartedAtRef.current = Date.now();
             startRecording();
           }}
-          onPointerUp={stopRecording}
+          onPointerUp={() => {
+            stopRecording();
+            // 짧게 탭만 했다면(누른 채 말하기를 모르는 것) 학생 언어로 사용법 힌트를 띄운다.
+            if (Date.now() - pressStartedAtRef.current < MIN_HOLD_MS) {
+              setHoldHint(true);
+              if (holdHintTimerRef.current) clearTimeout(holdHintTimerRef.current);
+              holdHintTimerRef.current = setTimeout(() => setHoldHint(false), 3500);
+            }
+          }}
           onPointerCancel={stopRecording}
           onContextMenu={(e) => e.preventDefault()}
           aria-label="누르고 있는 동안 말하기"

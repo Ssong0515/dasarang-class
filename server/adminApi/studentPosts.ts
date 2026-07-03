@@ -52,7 +52,9 @@ const THUMBNAIL_MIME_PREFIXES = ['image/', 'application/pdf'];
 const supportsThumbnail = (mimeType: string) =>
   THUMBNAIL_MIME_PREFIXES.some((prefix) => mimeType.startsWith(prefix));
 
-export const reviewStudentPost = async (id: string, action: 'approve' | 'hide') => {
+export type StudentPostReviewAction = 'approve' | 'hide' | 'delete';
+
+export const reviewStudentPost = async (id: string, action: StudentPostReviewAction) => {
   const db = getAdminDb();
   const ref = db.collection(POSTS_COLLECTION).doc(id);
   const doc = await ref.get();
@@ -64,6 +66,25 @@ export const reviewStudentPost = async (id: string, action: 'approve' | 'hide') 
   if (action === 'hide') {
     await ref.set({ status: 'hidden' }, { merge: true });
     return { id, status: 'hidden' as const };
+  }
+
+  // 제거: 숨김(보관)과 달리 Drive 파일까지 지워 저장 공간을 되돌리고, 게시물 문서도 완전히 삭제한다.
+  if (action === 'delete') {
+    const driveFileId = String(post.driveFileId || '');
+    if (driveFileId) {
+      try {
+        await getDriveClient().files.delete({ fileId: driveFileId, supportsAllDrives: true });
+      } catch (error) {
+        // 이미 지워진 파일(404)이면 게시물 정리만 계속한다. 그 외 실패는 파일이 남아
+        // 공간을 계속 차지하므로 에러로 알려 재시도할 수 있게 한다.
+        const code = (error as { code?: number })?.code;
+        if (code !== 404) {
+          throw new AdminApiError(502, 'Drive 파일 삭제에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+        }
+      }
+    }
+    await ref.delete();
+    return { id, status: 'deleted' as const };
   }
 
   // 승인: Drive 파일을 링크 공개로 전환하고 썸네일 URL 저장

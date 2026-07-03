@@ -387,7 +387,7 @@ export const buildOpenApiDocument = () => {
       '/api/gpt/student-posts/{id}/review': {
         post: {
           operationId: 'reviewStudentPost',
-          summary: '학생 게시물 승인/숨김 (승인 시 damuna.org에 공개)',
+          summary: '학생 게시물 승인/숨김/제거 (승인 시 damuna.org에 공개, 제거 시 Drive 파일까지 완전 삭제)',
           parameters: [idParam],
           requestBody: {
             required: true,
@@ -397,7 +397,7 @@ export const buildOpenApiDocument = () => {
                   type: 'object',
                   required: ['action'],
                   properties: {
-                    action: { type: 'string', enum: ['approve', 'hide'] },
+                    action: { type: 'string', enum: ['approve', 'hide', 'delete'] },
                   },
                 },
               },

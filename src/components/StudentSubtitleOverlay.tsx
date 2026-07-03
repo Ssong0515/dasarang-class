@@ -71,19 +71,20 @@ export const StudentSubtitleOverlay: React.FC<StudentSubtitleOverlayProps> = ({
   const lastSeenIdRef = useRef<string | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 교사 방송 구독 — 내 반 + 오늘 날짜. 등호 필터 2개뿐이라 복합 색인 없이 동작한다(정렬은 클라이언트에서).
+  // 교사 방송 구독 — 오늘 날짜 기준. 반을 특정할 수 있으면(공개 실습에서 역추적된 경우) 내 반만 구독하고,
+  // 특정할 수 없으면(오늘 공개된 실습 없음) 날짜만으로 구독해 실습 공개 여부와 무관하게 자막이 나오게 한다.
+  // 등호 필터 1~2개뿐이라 복합 색인 없이 동작한다(정렬은 클라이언트에서).
   useEffect(() => {
-    if (!classroomId) {
-      setCurrent(null);
-      setVisible(false);
-      return;
-    }
-
-    const broadcastQuery = query(
-      collection(db, TEACHER_BROADCAST_MESSAGES_COLLECTION),
-      where('classroomId', '==', classroomId),
-      where('date', '==', date)
-    );
+    const broadcastQuery = classroomId
+      ? query(
+          collection(db, TEACHER_BROADCAST_MESSAGES_COLLECTION),
+          where('classroomId', '==', classroomId),
+          where('date', '==', date)
+        )
+      : query(
+          collection(db, TEACHER_BROADCAST_MESSAGES_COLLECTION),
+          where('date', '==', date)
+        );
 
     const unsubscribe = onSnapshot(
       broadcastQuery,
@@ -131,17 +132,18 @@ export const StudentSubtitleOverlay: React.FC<StudentSubtitleOverlayProps> = ({
     }
   }, [endNoticeAt]);
 
+  // 상단 중앙에 띄운다 — 학생이 보는 실습 콘텐츠는 화면 중앙~하단이라 위쪽이 가장 덜 가린다.
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-24 z-40 flex justify-center px-4">
+    <div className="pointer-events-none fixed inset-x-0 top-4 z-40 flex justify-center px-4">
       <AnimatePresence>
         {visible && current && (
           <motion.div
             key={current.id}
-            initial={{ opacity: 0, y: 12 }}
+            initial={{ opacity: 0, y: -12 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 12 }}
+            exit={{ opacity: 0, y: -12 }}
             transition={{ duration: 0.25 }}
-            className="max-w-3xl rounded-2xl bg-black/80 px-6 py-4 text-center text-lg font-bold leading-snug text-white shadow-2xl sm:text-2xl"
+            className="max-w-3xl rounded-2xl bg-black/75 px-5 py-3 text-center text-base font-bold leading-snug text-white shadow-2xl sm:text-xl"
             dir="auto"
           >
             {current.text}

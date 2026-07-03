@@ -225,8 +225,8 @@ export const createAdminApiRouter = () => {
   router.post('/student-posts/:id/review', async (req, res) => {
     try {
       const action = (req.body || {}).action;
-      if (action !== 'approve' && action !== 'hide') {
-        throw new AdminApiError(400, "action은 'approve' 또는 'hide'여야 합니다.");
+      if (action !== 'approve' && action !== 'hide' && action !== 'delete') {
+        throw new AdminApiError(400, "action은 'approve'·'hide'·'delete' 중 하나여야 합니다.");
       }
       res.json(await reviewStudentPost(req.params.id, action));
     } catch (error) {
