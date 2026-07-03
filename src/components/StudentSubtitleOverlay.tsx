@@ -56,35 +56,22 @@ const normalizeBroadcastDoc = (id: string, data: Partial<TeacherBroadcastMessage
 });
 
 export interface StudentSubtitleOverlayProps {
-  classroomId?: string;
   date: string;
-  endNoticeAt?: string | null;
 }
 
-export const StudentSubtitleOverlay: React.FC<StudentSubtitleOverlayProps> = ({
-  classroomId,
-  date,
-  endNoticeAt,
-}) => {
+export const StudentSubtitleOverlay: React.FC<StudentSubtitleOverlayProps> = ({ date }) => {
   const [current, setCurrent] = useState<{ id: string; text: string } | null>(null);
   const [visible, setVisible] = useState(false);
   const lastSeenIdRef = useRef<string | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 교사 방송 구독 — 오늘 날짜 기준. 반을 특정할 수 있으면(공개 실습에서 역추적된 경우) 내 반만 구독하고,
-  // 특정할 수 없으면(오늘 공개된 실습 없음) 날짜만으로 구독해 실습 공개 여부와 무관하게 자막이 나오게 한다.
-  // 등호 필터 1~2개뿐이라 복합 색인 없이 동작한다(정렬은 클라이언트에서).
+  // 교사 방송 구독 — 오늘 날짜 전체. 반 선택·수업 공개 여부와 무관하게 강사가 켜면 바로 자막이 뜬다.
+  // 등호 필터 1개뿐이라 복합 색인 없이 동작한다(정렬은 클라이언트에서).
   useEffect(() => {
-    const broadcastQuery = classroomId
-      ? query(
-          collection(db, TEACHER_BROADCAST_MESSAGES_COLLECTION),
-          where('classroomId', '==', classroomId),
-          where('date', '==', date)
-        )
-      : query(
-          collection(db, TEACHER_BROADCAST_MESSAGES_COLLECTION),
-          where('date', '==', date)
-        );
+    const broadcastQuery = query(
+      collection(db, TEACHER_BROADCAST_MESSAGES_COLLECTION),
+      where('date', '==', date)
+    );
 
     const unsubscribe = onSnapshot(
       broadcastQuery,
@@ -121,16 +108,7 @@ export const StudentSubtitleOverlay: React.FC<StudentSubtitleOverlayProps> = ({
       unsubscribe();
       if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     };
-  }, [classroomId, date]);
-
-  // 수업 종료 신호(endNoticeAt)가 오면 자막을 정리한다(방송도 함께 꺼짐).
-  useEffect(() => {
-    if (endNoticeAt) {
-      setVisible(false);
-      setCurrent(null);
-      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    }
-  }, [endNoticeAt]);
+  }, [date]);
 
   // 상단 중앙에 띄운다 — 학생이 보는 실습 콘텐츠는 화면 중앙~하단이라 위쪽이 가장 덜 가린다.
   return (

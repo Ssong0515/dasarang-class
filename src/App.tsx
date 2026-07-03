@@ -371,23 +371,6 @@ export default function App() {
   // 교사 통역 방송용 파생값. 방송은 실시간 학생용이므로 항상 '실제 오늘'(로컬) 기준으로 쓴다(미리보기 날짜와 무관).
   // 번역 대상 언어는 출석과 무관하게 TeacherBroadcastButton이 항상 '지원 언어 전부 + 한국어'로 처리한다.
   const broadcastTodayString = getLocalDateString(new Date());
-
-  // 활성 반 오늘 문서의 endNoticeAt — '수업 종료'를 누르면(이 값이 갱신되면) 방송이 자동으로 꺼지도록 방송 버튼에 내려준다.
-  const broadcastEndNoticeAt = useMemo(() => {
-    if (!activeClassroomId) return null;
-    return (
-      publishedLessons
-        .filter(
-          (lesson) =>
-            lesson.classroomId === activeClassroomId &&
-            lesson.date === broadcastTodayString &&
-            lesson.endNoticeAt
-        )
-        .map((lesson) => lesson.endNoticeAt as string)
-        .sort()
-        .pop() ?? null
-    );
-  }, [activeClassroomId, broadcastTodayString, publishedLessons]);
   const getUserIdToken = useCallback(async () => {
     if (!user) return null;
     return user.getIdToken();
@@ -2232,13 +2215,13 @@ export default function App() {
           activeClassroomId={activeClassroomId || undefined}
         />
       )}
-      {/* 교사 실시간 통역 자막 방송 토글 — 활성 반이 있을 때만(방송 대상·출석 언어를 특정할 수 있으므로) 띄운다. */}
-      {user && isAdmin && activeClassroom && (
+      {/* 교사 실시간 통역 자막 방송 토글 — 로그인한 강사에게 항상 띄운다.
+          반 선택·수업 활성화·공개 여부와 무관하게 켜면 바로 모든 학생 화면에 자막이 나간다. */}
+      {user && isAdmin && (
         <TeacherBroadcastButton
-          classroomId={activeClassroom.id}
-          classroomName={activeClassroom.name}
+          classroomId={activeClassroom?.id}
+          classroomName={activeClassroom?.name}
           date={broadcastTodayString}
-          endNoticeAt={broadcastEndNoticeAt}
         />
       )}
     </ErrorBoundary>

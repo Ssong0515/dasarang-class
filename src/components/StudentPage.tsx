@@ -1233,14 +1233,9 @@ export const StudentPage: React.FC<StudentPageProps> = ({
         />
       )}
 
-      {/* 교사 통역 자막 방송 수신 — 실제 학생 화면에서만(강사 미리보기 제외). 내 반+오늘의 최신 방송을 내 언어 자막으로 하단에 띄운다. */}
-      {!isAdmin && (
-        <StudentSubtitleOverlay
-          classroomId={effectiveClassroom?.id}
-          date={gatingDateString}
-          endNoticeAt={activeEndNoticeAt}
-        />
-      )}
+      {/* 교사 통역 자막 방송 수신 — 실제 학생 화면에서만(강사 미리보기 제외).
+          반·수업 공개 여부와 무관하게 오늘의 최신 방송을 내 언어 자막으로 하단에 띄운다. */}
+      {!isAdmin && <StudentSubtitleOverlay date={gatingDateString} />}
 
       {/* 교사 발표(화면 띄우기) — 강사가 실습/슬라이드 하나를 학생 전원 화면에 실시간으로 크게 띄운다.
           기존 SlideEmbed(구글 슬라이드)·StudentContentCard(HTML)를 그대로 재사용해 렌더한다. 학생은 잠시 닫고 다시 볼 수 있다. */}
