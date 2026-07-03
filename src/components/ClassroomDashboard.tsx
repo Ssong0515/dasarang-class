@@ -35,6 +35,8 @@ import {
   Eye,
   EyeOff,
   Presentation,
+  MonitorPlay,
+  MonitorOff,
   Lock,
   Unlock,
   RefreshCw,
@@ -58,6 +60,8 @@ import {
   LessonContent,
   Classroom,
   PublishedLesson,
+  TeacherScreenShare,
+  TheorySlideSyncResult,
   Student,
   StudentPost,
   TheorySlide,
@@ -86,7 +90,7 @@ import {
 import { isAttendanceExcluded } from '../utils/attendance';
 import { deleteField } from '../firebase';
 import { formatWon, getPerSessionFee, getSessionFee } from '../utils/fee';
-import { openDriveSlidePicker } from '../utils/drivePicker';
+import { openDriveSlidePicker, openDriveFolderPicker, requestDriveSyncAccessToken } from '../utils/drivePicker';
 import { SlideEmbed, StudentContentPreviewFrame } from './StudentContentPreview';
 import { SessionDetailModal } from './SessionDetailModal';
 import { ClassroomResultGallery } from './ClassroomResultGallery';
@@ -123,6 +127,19 @@ interface ClassroomDashboardProps {
   ) => Promise<void>;
   /** 수업 종료: 학생 화면을 잠그고 '오늘 수업 끝!' 안내를 모든 학생 화면에 띄운다. */
   onEndLesson?: (classroomId: string, classroomName: string, date: string) => Promise<void>;
+  /** 지금 '학생 화면에 띄우기(발표)' 중인 콘텐츠 상태(반+날짜). */
+  teacherScreenShares?: TeacherScreenShare[];
+  /** 실습/슬라이드 하나를 학생 전원 화면에 크게 띄운다(발표 시작·교체). */
+  onStartScreenShare?: (classroomId: string, classroomName: string, date: string, contentId: string) => Promise<void>;
+  /** 발표 내리기 — 학생 화면 오버레이를 없앤다. */
+  onStopScreenShare?: (classroomId: string, date: string) => Promise<void>;
+  /** 이론 행 동기화 — 반 이론 폴더에서 제목과 맞는 pptx를 구글 슬라이드로 변환해 slideUrl을 돌려준다. */
+  onSyncTheorySlide?: (
+    folderId: string,
+    driveAccessToken: string,
+    title: string,
+    fileId?: string
+  ) => Promise<TheorySlideSyncResult>;
   onUpdateClassroom?: (classroomId: string, data: Partial<Classroom>) => void;
   onDeleteClassroom?: (classroomId: string) => void;
   onListCalendarClasses?: () => Promise<CalendarClassSummary[]>;
@@ -427,6 +444,10 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   onSaveContent,
   onUpdatePublishedLesson,
   onEndLesson,
+  teacherScreenShares,
+  onStartScreenShare,
+  onStopScreenShare,
+  onSyncTheorySlide,
   onUpdateClassroom,
   onDeleteClassroom,
   onListCalendarClasses,
@@ -459,6 +480,17 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   // 이론 프롬프트(시수) 행에서 자료 링크를 인라인으로 입력 중인 index와 입력값.
   const [slideInputPromptIndex, setSlideInputPromptIndex] = useState<number | null>(null);
   const [slideInputValue, setSlideInputValue] = useState('');
+  // 이론 폴더 지정(설정 탭) 진행 중 여부.
+  const [isPickingTheoryFolder, setIsPickingTheoryFolder] = useState(false);
+  // 이론 행 pptx 동기화: 지금 동기화 중인 콘텐츠 id, 에러 메시지, 그리고 매칭 실패 시 직접 고를 후보 상태.
+  const [syncingTheoryContentId, setSyncingTheoryContentId] = useState<string | null>(null);
+  const [theorySyncError, setTheorySyncError] = useState<string | null>(null);
+  const [theorySyncPicker, setTheorySyncPicker] = useState<{
+    content: LessonContent;
+    candidates: { id: string; name: string }[];
+  } | null>(null);
+  // Drive 동기화 토큰 캐시 — 후보에서 다시 고를 때 OAuth 팝업이 또 뜨지 않도록 재사용한다(실패 시 비운다).
+  const theoryDriveTokenRef = useRef<string | null>(null);
   // 좁은 폭(모바일/태블릿, <lg)에서는 날짜상태·캘린더·출석·메모를 타일+팝업으로 보여준다.
   const isNarrow = useMediaQuery(NARROW_MEDIA_QUERY);
   const isVeryNarrow = useMediaQuery(VERY_NARROW_MEDIA_QUERY);
@@ -627,6 +659,27 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     () => new Set(currentPublishedLesson?.publishedContentIds || []),
     [currentPublishedLesson]
   );
+  // 지금 이 반+날짜에 '학생 화면에 띄우기(발표)' 중인 콘텐츠 (없으면 undefined)
+  const currentScreenShare = useMemo(
+    () =>
+      (teacherScreenShares || []).find(
+        (share) => share.classroomId === classroom.id && share.date === selectedDate
+      ),
+    [teacherScreenShares, classroom.id, selectedDate]
+  );
+  const presentingContentId = currentScreenShare?.contentId ?? null;
+
+  // 실습 하나를 학생 화면에 띄우거나(발표 시작·교체) 내린다(같은 걸 다시 누르면 내림).
+  const handleToggleScreenShare = (content: LessonContent) => {
+    if (!onStartScreenShare || !onStopScreenShare) {
+      return;
+    }
+    if (presentingContentId === content.id) {
+      void onStopScreenShare(classroom.id, selectedDate);
+    } else {
+      void onStartScreenShare(classroom.id, classroom.name, selectedDate, content.id);
+    }
+  };
   // 수업기록에 담긴 콘텐츠를 강사용 슬라이드(PPT)와 학생용 실습(HTML)으로 분류한다.
   // 슬라이드는 강사 화면 전용이라 공개 대상이 아니고, HTML 실습만 학생에게 공개한다.
   const recordedSlideContents = currentDateRecordedContents.filter((content) =>
@@ -1305,6 +1358,83 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       }
     } finally {
       setIsPickingTheorySlide(false);
+    }
+  };
+
+  // 반 이론 슬라이드 폴더 지정(설정 탭) — Drive 폴더 피커로 골라 classroom에 저장.
+  const handlePickTheoryFolder = async () => {
+    const clientId = import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID;
+    const apiKey = import.meta.env.VITE_GOOGLE_PICKER_API_KEY;
+    if (!clientId || !onUpdateClassroom) return;
+    setIsPickingTheoryFolder(true);
+    setTheorySyncError(null);
+    try {
+      const folder = await openDriveFolderPicker(apiKey, clientId, userEmail);
+      if (folder) {
+        onUpdateClassroom(classroom.id, {
+          theorySlideFolderId: folder.id,
+          theorySlideFolderName: folder.name,
+        });
+      }
+    } catch (error) {
+      setTheorySyncError(error instanceof Error ? error.message : 'Drive 폴더 선택에 실패했습니다.');
+    } finally {
+      setIsPickingTheoryFolder(false);
+    }
+  };
+
+  const handleClearTheoryFolder = () => {
+    if (!onUpdateClassroom) return;
+    onUpdateClassroom(classroom.id, {
+      theorySlideFolderId: deleteField(),
+      theorySlideFolderName: deleteField(),
+    } as unknown as Partial<Classroom>);
+  };
+
+  // 이론 행 '동기화' — 반 이론 폴더에서 콘텐츠 제목과 맞는 pptx를 찾아 구글 슬라이드로 변환 후 theorySlideUrl에 저장.
+  // 매칭이 애매하면(못 찾음/여러 개) 후보 목록을 띄워 직접 고르게 한다(fileId로 재요청).
+  const runTheorySync = async (content: LessonContent, fileId?: string) => {
+    if (!onSyncTheorySlide || !onSaveContent) return;
+    const folderId = classroom.theorySlideFolderId?.trim();
+    if (!folderId) {
+      setTheorySyncError('먼저 설정 탭에서 이 반의 이론 슬라이드 폴더를 지정하세요.');
+      return;
+    }
+    const clientId = import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID;
+    if (!clientId) {
+      setTheorySyncError('Google OAuth Client ID가 설정되어 있지 않습니다.');
+      return;
+    }
+    setSyncingTheoryContentId(content.id);
+    setTheorySyncError(null);
+    try {
+      // 후보 재선택 시 OAuth 팝업이 또 뜨지 않도록 캐시된 토큰을 재사용한다.
+      let token = theoryDriveTokenRef.current;
+      if (!token) {
+        token = await requestDriveSyncAccessToken(clientId, userEmail);
+        theoryDriveTokenRef.current = token;
+      }
+      const result = await onSyncTheorySlide(folderId, token, content.title, fileId);
+      if (result.matched && result.slideUrl) {
+        await onSaveContent({ ...content, theorySlideUrl: result.slideUrl });
+        setTheorySyncPicker(null);
+      } else if (result.matched) {
+        // 변환됐다는데 URL이 안 옴 — 방어적 처리(후보 없음 메시지로 오해되지 않도록).
+        setTheorySyncError('슬라이드 변환 결과를 받지 못했어요. 잠시 후 다시 시도해주세요.');
+      } else {
+        const candidates = result.candidates ?? [];
+        if (candidates.length === 0) {
+          setTheorySyncError('폴더에 pptx가 없습니다. NotebookLM에서 내보낸 pptx를 이 반 폴더에 넣어주세요.');
+        } else {
+          setTheorySyncPicker({ content, candidates });
+        }
+      }
+    } catch (error) {
+      // 토큰 만료 등으로 실패했을 수 있으니 캐시를 비워 다음 시도에 새 토큰을 받게 한다.
+      theoryDriveTokenRef.current = null;
+      setTheorySyncError(error instanceof Error ? error.message : '이론 슬라이드 동기화에 실패했습니다.');
+    } finally {
+      setSyncingTheoryContentId(null);
     }
   };
 
@@ -2179,23 +2309,54 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 {theorySlidesVisible && (
                   <div className="mb-4">
                     <p className="mb-2 text-xs font-bold uppercase tracking-wider text-[#8B7E74]">
-                      이론 슬라이드 (강사 화면 전용)
+                      이론 슬라이드 (강사 화면 · 학생 화면에 띄우기)
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      {recordedSlideContents.map((content) => (
-                        <a
-                          key={content.id}
-                          href={content.slideUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1.5 rounded-full border border-[#E5E3DD] bg-white px-4 py-2.5 text-sm font-bold text-[#4A3728] shadow-sm transition-all hover:border-[#8B5E3C]"
-                        >
-                          <Presentation size={14} className="text-[#8B5E3C]" />
-                          {content.title}
-                          <ExternalLink size={12} className="text-[#8B7E74]" />
-                        </a>
-                      ))}
+                      {recordedSlideContents.map((content) => {
+                        const isPresenting = presentingContentId === content.id;
+                        return (
+                          <div
+                            key={content.id}
+                            className={`inline-flex items-center gap-1 rounded-full border py-1 pl-3 pr-1 shadow-sm transition-all ${
+                              isPresenting ? 'border-[#8B5E3C] bg-[#FFF5E9]' : 'border-[#E5E3DD] bg-white'
+                            }`}
+                          >
+                            <a
+                              href={content.slideUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1.5 text-sm font-bold text-[#4A3728] transition-colors hover:text-[#8B5E3C]"
+                            >
+                              <Presentation size={14} className="text-[#8B5E3C]" />
+                              {content.title}
+                              <ExternalLink size={12} className="text-[#8B7E74]" />
+                            </a>
+                            {onStartScreenShare && onStopScreenShare && (
+                              <button
+                                type="button"
+                                onClick={() => handleToggleScreenShare(content)}
+                                title={isPresenting ? '학생 화면에서 내리기' : '학생 화면에 띄우기'}
+                                aria-label={isPresenting ? '학생 화면에서 내리기' : '학생 화면에 띄우기'}
+                                className={`ml-1 inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-bold transition-all ${
+                                  isPresenting
+                                    ? 'bg-[#8B5E3C] text-white hover:bg-[#724D31]'
+                                    : 'bg-[#F3F2EE] text-[#8B7E74] hover:bg-[#E8E5DE] hover:text-[#4A3728]'
+                                }`}
+                              >
+                                {isPresenting ? <MonitorOff size={13} /> : <MonitorPlay size={13} />}
+                                {isPresenting ? '내리기' : '띄우기'}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
+                    {recordedSlideContents.some((content) => content.id === presentingContentId) && (
+                      <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-[#8B5E3C]">
+                        <MonitorPlay size={12} />
+                        지금 이 슬라이드를 학생 화면에 실시간으로 띄우는 중이에요.
+                      </p>
+                    )}
                   </div>
                 )}
 
@@ -2464,22 +2625,40 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                                       </button>
                                     </>
                                   ) : (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setSlideInputPromptIndex(isSlideInputOpen ? null : index);
-                                        setSlideInputValue('');
-                                      }}
-                                      title="이론 자료 링크 추가"
-                                      aria-label="이론 자료 링크 추가"
-                                      className={`inline-flex h-8 w-8 items-center justify-center rounded-xl border transition-all ${
-                                        isSlideInputOpen
-                                          ? 'border-[#8B5E3C] bg-[#FFF5E9] text-[#8B5E3C]'
-                                          : 'border-[#E5E3DD] bg-white text-[#8B7E74] hover:border-[#8B5E3C] hover:text-[#8B5E3C]'
-                                      }`}
-                                    >
-                                      <Plus size={14} />
-                                    </button>
+                                    <>
+                                      {onSyncTheorySlide && (
+                                        <button
+                                          type="button"
+                                          onClick={() => void runTheorySync(content)}
+                                          disabled={syncingTheoryContentId === content.id}
+                                          title="이론 폴더에서 맞는 pptx 동기화 (구글 슬라이드 변환)"
+                                          aria-label="이론 슬라이드 동기화"
+                                          className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[#CFE0FF] bg-[#EAF2FF] text-[#2F5EA8] transition-all hover:bg-[#D6E6FF] disabled:opacity-50"
+                                        >
+                                          {syncingTheoryContentId === content.id ? (
+                                            <Loader2 size={14} className="animate-spin" />
+                                          ) : (
+                                            <RefreshCw size={14} />
+                                          )}
+                                        </button>
+                                      )}
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setSlideInputPromptIndex(isSlideInputOpen ? null : index);
+                                          setSlideInputValue('');
+                                        }}
+                                        title="이론 자료 링크 직접 입력"
+                                        aria-label="이론 자료 링크 직접 입력"
+                                        className={`inline-flex h-8 w-8 items-center justify-center rounded-xl border transition-all ${
+                                          isSlideInputOpen
+                                            ? 'border-[#8B5E3C] bg-[#FFF5E9] text-[#8B5E3C]'
+                                            : 'border-[#E5E3DD] bg-white text-[#8B7E74] hover:border-[#8B5E3C] hover:text-[#8B5E3C]'
+                                        }`}
+                                      >
+                                        <Plus size={14} />
+                                      </button>
+                                    </>
                                   ))}
                                   </>
                                 )}
@@ -2497,6 +2676,21 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                                     >
                                       <Eye size={14} />
                                     </button>
+                                    {onStartScreenShare && onStopScreenShare && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleToggleScreenShare(content)}
+                                        title={presentingContentId === content.id ? '학생 화면에서 내리기' : '학생 화면에 띄우기(발표)'}
+                                        aria-label={presentingContentId === content.id ? '학생 화면에서 내리기' : '학생 화면에 띄우기'}
+                                        className={`inline-flex h-8 w-8 items-center justify-center rounded-xl border transition-all ${
+                                          presentingContentId === content.id
+                                            ? 'border-[#8B5E3C] bg-[#8B5E3C] text-white hover:bg-[#724D31]'
+                                            : 'border-[#E5E3DD] bg-white text-[#8B7E74] hover:border-[#8B5E3C] hover:text-[#8B5E3C]'
+                                        }`}
+                                      >
+                                        {presentingContentId === content.id ? <MonitorOff size={14} /> : <MonitorPlay size={14} />}
+                                      </button>
+                                    )}
                                     <button
                                       onClick={() => handleTogglePublishContent(content)}
                                       className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
@@ -4084,6 +4278,51 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
 
         <div className="mb-5">
           <div className="mb-3 flex items-center gap-2">
+            <FolderOpen size={16} className="text-[#8B5E3C]" />
+            <h3 className="text-sm font-bold text-[#4A3728]">이론 슬라이드 폴더 (NotebookLM pptx)</h3>
+            <DashboardInfoTooltip
+              content="이 반의 이론 슬라이드(pptx)를 넣어두는 Google Drive 폴더예요. NotebookLM에서 만든 pptx를 이 폴더에 넣고 이론 행의 동기화 아이콘을 누르면, 제목과 맞는 pptx를 찾아 구글 슬라이드로 자동 변환해 붙여줍니다. (학생 작품 업로드 폴더와는 별개)"
+              label="이론 슬라이드 폴더 설명 보기"
+            />
+          </div>
+          {classroom.theorySlideFolderId ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full bg-[#EAF2FF] px-3 py-1.5 text-sm font-bold text-[#2F5EA8]">
+                <FolderOpen size={14} className="shrink-0" />
+                <span className="truncate">{classroom.theorySlideFolderName || '지정된 폴더'}</span>
+              </span>
+              <button
+                type="button"
+                onClick={handlePickTheoryFolder}
+                disabled={isPickingTheoryFolder || !onUpdateClassroom}
+                className="rounded-xl border border-[#E5E3DD] bg-white px-3 py-1.5 text-xs font-bold text-[#4A3728] transition-all hover:border-[#8B5E3C] disabled:opacity-50"
+              >
+                {isPickingTheoryFolder ? '선택 중...' : '폴더 변경'}
+              </button>
+              <button
+                type="button"
+                onClick={handleClearTheoryFolder}
+                disabled={!onUpdateClassroom}
+                className="rounded-xl border border-[#E5E3DD] bg-white px-3 py-1.5 text-xs font-bold text-[#B7AFA4] transition-all hover:border-[#D9534F] hover:text-[#D9534F] disabled:opacity-50"
+              >
+                연결 해제
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handlePickTheoryFolder}
+              disabled={isPickingTheoryFolder || !onUpdateClassroom}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-[#CFE0FF] bg-[#EAF2FF] px-4 py-2 text-sm font-bold text-[#2F5EA8] transition-all hover:bg-[#D6E6FF] disabled:opacity-50"
+            >
+              <FolderOpen size={14} />
+              {isPickingTheoryFolder ? 'Drive 폴더 선택 중...' : 'Drive 폴더 선택'}
+            </button>
+          )}
+        </div>
+
+        <div className="mb-5">
+          <div className="mb-3 flex items-center gap-2">
             <Languages size={16} className="text-[#8B5E3C]" />
             <h3 className="text-sm font-bold text-[#4A3728]">병기 번역 언어</h3>
             <DashboardInfoTooltip
@@ -4391,6 +4630,63 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
         </AnimatePresence>
       </div>
       <SessionDetailModal session={detailSession} onClose={() => setDetailSession(null)} />
+
+      {/* 이론 슬라이드 동기화: 제목으로 못 좁혔을 때 폴더의 pptx 중 직접 고르는 모달 */}
+      {theorySyncPicker && (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setTheorySyncPicker(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-[24px] bg-white p-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-1 flex items-center gap-2">
+              <RefreshCw size={16} className="text-[#2F5EA8]" />
+              <h3 className="text-base font-bold text-[#4A3728]">pptx 선택</h3>
+            </div>
+            <p className="mb-4 text-xs text-[#8B7E74]">
+              「{theorySyncPicker.content.title}」에 맞는 파일을 자동으로 못 찾았어요. 폴더에서 직접 골라주세요.
+            </p>
+            <div className="max-h-[50vh] space-y-1.5 overflow-y-auto">
+              {theorySyncPicker.candidates.map((candidate) => (
+                <button
+                  key={candidate.id}
+                  type="button"
+                  disabled={syncingTheoryContentId === theorySyncPicker.content.id}
+                  onClick={() => void runTheorySync(theorySyncPicker.content, candidate.id)}
+                  className="flex w-full items-center gap-2 rounded-xl border border-[#E5E3DD] bg-white px-3 py-2.5 text-left text-sm font-medium text-[#4A3728] transition-all hover:border-[#8B5E3C] hover:bg-[#FFF8EF] disabled:opacity-50"
+                >
+                  <Presentation size={14} className="shrink-0 text-[#8B5E3C]" />
+                  <span className="truncate">{candidate.name}</span>
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setTheorySyncPicker(null)}
+              className="mt-4 w-full rounded-xl border border-[#E5E3DD] bg-white py-2 text-sm font-bold text-[#8B7E74] transition-all hover:border-[#8B5E3C]"
+            >
+              닫기
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 이론 동기화 에러 토스트 — 탭과 무관하게 뜬다 */}
+      {theorySyncError && (
+        <div className="fixed bottom-6 left-1/2 z-[120] flex max-w-[90vw] -translate-x-1/2 items-center gap-3 rounded-2xl bg-[#B42318] px-4 py-3 text-sm font-medium text-white shadow-xl">
+          <span className="min-w-0">{theorySyncError}</span>
+          <button
+            type="button"
+            onClick={() => setTheorySyncError(null)}
+            aria-label="닫기"
+            className="shrink-0 rounded-lg p-1 transition-colors hover:bg-white/20"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       {/* 수업기록 콘텐츠 빠른 미리보기 */}
       {previewContent && (

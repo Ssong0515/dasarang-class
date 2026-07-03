@@ -7,12 +7,17 @@ export const DAILY_REVIEWS_COLLECTION = 'dailyReviews';
 export const PUBLISHED_LESSONS_COLLECTION = 'publishedLessons';
 export const STUDENT_VOICE_MESSAGES_COLLECTION = 'studentVoiceMessages';
 export const TEACHER_BROADCAST_MESSAGES_COLLECTION = 'teacherBroadcastMessages';
+export const TEACHER_SCREEN_SHARES_COLLECTION = 'teacherScreenShares';
 
 export const getClassroomDateRecordId = (classroomId: string, date: string) =>
   `${classroomId.trim()}_${date.trim()}`;
 
 /** publishedLessons 문서 id — classroomDateRecord와 동일한 규칙(반+날짜)을 따른다. */
 export const getPublishedLessonId = (classroomId: string, date: string) =>
+  `${classroomId.trim()}_${date.trim()}`;
+
+/** teacherScreenShares 문서 id — publishedLessons와 동일 규칙(반+날짜). */
+export const getTeacherScreenShareId = (classroomId: string, date: string) =>
   `${classroomId.trim()}_${date.trim()}`;
 
 export const getClassroomDateRecordTimestamp = (

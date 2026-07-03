@@ -85,6 +85,16 @@ export interface NotebookLmFolderSyncResult {
   items: NotebookLmSyncItem[];
 }
 
+/** 이론 행 단건 동기화 결과. matched면 slideUrl을 그 콘텐츠 theorySlideUrl로 저장, 아니면 candidates에서 직접 고른다. */
+export interface TheorySlideSyncResult {
+  ok?: boolean;
+  matched: boolean;
+  slideUrl?: string;
+  fileId?: string;
+  fileName?: string;
+  candidates?: { id: string; name: string }[];
+}
+
 /** 이론 수업 슬라이드 한 개 (구글 슬라이드/드라이브 임베드 URL 또는 NotebookLM 등 외부 링크). */
 export interface TheorySlide {
   /** 임베드 URL(슬라이드/드라이브) 또는 원본 링크(NotebookLM 등). */
@@ -179,6 +189,9 @@ export interface Classroom {
   createdAt?: string;
   driveFolderId?: string;
   driveFolderName?: string;
+  /** 이 반 이론 슬라이드(NotebookLM pptx)를 넣어두는 Google Drive 폴더. 이론 행의 '동기화'가 여기서 제목과 맞는 pptx를 찾아 구글 슬라이드로 변환한다. (driveFolderId=학생 작업물용과 별개) */
+  theorySlideFolderId?: string;
+  theorySlideFolderName?: string;
   curriculumId?: string | null;
   /** calendar.damuna.org의 `classes` 문서 ID. FM 참고 시간표로 연결됨. */
   calendarClassId?: string | null;
@@ -338,6 +351,23 @@ export interface TeacherBroadcastMessage {
   /** 그 시점 출석 언어만 번역해 담는다. 예: { ru: '...', vi: '...' }. 번역 불가 언어는 한국어 원문으로 폴백될 수 있다. */
   translations: Record<string, string>;
   createdAt: string;     // ISO 문자열
+}
+
+/**
+ * 교사가 "학생 화면에 띄우기(발표)"를 누른 실시간 상태. 지금 학생 전원 화면에 크게 띄울 실습/슬라이드 콘텐츠 하나를 가리킨다.
+ * publishedLessons(학생이 직접 골라 푸는 공개)와 달리, 교사가 강제로 한 콘텐츠를 모두의 화면 앞에 띄우는 용도.
+ * 문서 id는 `${classroomId}_${date}` (publishedLessons와 동일 규칙). 발표를 내리면 문서를 지운다.
+ * 공용 학생 계정 1개를 쓰므로 학생 식별 정보는 담지 않는다.
+ */
+export interface TeacherScreenShare {
+  id: string;                 // `${classroomId}_${date}`
+  classroomId: string;
+  classroomName?: string;
+  date: string;               // 'YYYY-MM-DD'
+  /** 지금 학생 화면에 띄우는 콘텐츠 id. 발표 중이 아니면 문서가 없다. */
+  contentId: string;
+  ownerUid: string;
+  updatedAt: string;          // ISO 문자열. 바뀔 때마다 학생 오버레이가 다시 뜬다.
 }
 
 export interface AccessLog {

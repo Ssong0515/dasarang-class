@@ -420,3 +420,119 @@ export const syncNotebookLmPptxFolder = async ({
     items,
   };
 };
+
+// ── 이론 행 단건 동기화 ───────────────────────────────────────────────
+// 반 이론 폴더에서 '이 콘텐츠 제목과 맞는' pptx 하나만 찾아 구글 슬라이드로 변환한다.
+// 폴더 전체를 콘텐츠로 만드는 syncNotebookLmPptxFolder와 달리, 콘텐츠 doc은 만들지 않고
+// 변환된 slideUrl만 돌려준다(호출부가 해당 콘텐츠의 theorySlideUrl로 저장). 매칭이 애매하면
+// 후보 목록을 돌려 호출부가 직접 고르게 한다(fileId로 재요청).
+
+export interface TheorySlideSyncResult {
+  matched: boolean;
+  slideUrl?: string;
+  fileId?: string;
+  fileName?: string;
+  candidates?: { id: string; name: string }[];
+}
+
+interface SyncTheorySlideParams {
+  folderId: string;
+  driveAccessToken: string;
+  title?: string;
+  fileId?: string;
+}
+
+export const validateTheorySlidePayload = (body: unknown): SyncTheorySlideParams => {
+  const payload = body as {
+    folderId?: unknown;
+    driveAccessToken?: unknown;
+    title?: unknown;
+    fileId?: unknown;
+  };
+  const folderId = typeof payload?.folderId === 'string' ? payload.folderId.trim() : '';
+  const driveAccessToken =
+    typeof payload?.driveAccessToken === 'string' ? payload.driveAccessToken.trim() : '';
+  const title = typeof payload?.title === 'string' ? payload.title.trim() : '';
+  const fileId = typeof payload?.fileId === 'string' ? payload.fileId.trim() : '';
+
+  if (!folderId) {
+    throw new Error('folderId is required.');
+  }
+  if (!driveAccessToken) {
+    throw new Error('driveAccessToken is required.');
+  }
+
+  return { folderId, driveAccessToken, title, fileId };
+};
+
+// 제목/파일명을 느슨하게 비교하기 위한 정규화(공백·기호·확장자·'회차/시수' 토큰 제거, 소문자화).
+const normalizeForMatch = (raw: string) =>
+  raw
+    .replace(/\.(pptx|pdf|key|ppt)$/i, '')
+    .toLowerCase()
+    .replace(/회차|차시|시수|교시/g, '')
+    .replace(/[\s_\-().]/g, '')
+    .trim();
+
+export const syncTheorySlideFromFolder = async ({
+  folderId,
+  driveAccessToken,
+  title,
+  fileId,
+}: SyncTheorySlideParams): Promise<TheorySlideSyncResult> => {
+  const drive = getDriveClientFromAccessToken(driveAccessToken);
+  await assertUsableFolder(drive, folderId);
+  const pptxFiles = (await listTopLevelFiles(drive, folderId)).filter(isPptxFile);
+
+  // 실제로 변환할 때만 'Converted Google Slides' 폴더를 만든다(후보만 돌려주거나 pptx가 없을 땐 안 만듦).
+  const convertMatched = async (file: SourceDriveFile): Promise<TheorySlideSyncResult> => {
+    const convertedFolderId = await getOrCreateFolder(drive, folderId, CONVERTED_FOLDER_NAME);
+    const converted = await createConvertedPresentation(drive, file, convertedFolderId);
+    return { matched: true, slideUrl: converted.slideUrl, fileId: file.id, fileName: file.name };
+  };
+
+  // 호출부가 후보 중 하나를 직접 고른 경우 — 그 파일을 변환한다.
+  if (fileId) {
+    const picked = pptxFiles.find((file) => file.id === fileId);
+    if (!picked) {
+      throw new Error('선택한 파일을 폴더에서 찾을 수 없습니다.');
+    }
+    return convertMatched(picked);
+  }
+
+  if (pptxFiles.length === 0) {
+    return { matched: false, candidates: [] };
+  }
+
+  const target = normalizeForMatch(title || '');
+  let chosen: SourceDriveFile | undefined;
+
+  if (target) {
+    const exact = pptxFiles.filter((file) => normalizeForMatch(file.name) === target);
+    if (exact.length === 1) {
+      chosen = exact[0];
+    } else if (exact.length === 0) {
+      // 부분 매칭: 너무 짧은 공통부(예: '만들기')로 엉뚱한 파일을 자동 선택하지 않도록
+      // 두 정규화 문자열 중 짧은 쪽이 4자 이상일 때만 인정한다. 애매하면 아래에서 후보로 넘어간다.
+      const partial = pptxFiles.filter((file) => {
+        const name = normalizeForMatch(file.name);
+        if (name.length === 0) return false;
+        if (Math.min(name.length, target.length) < 4) return false;
+        return name.includes(target) || target.includes(name);
+      });
+      if (partial.length === 1) {
+        chosen = partial[0];
+      }
+    }
+  }
+
+  // 딱 하나로 못 좁히면(0개거나 여러 개) 후보를 돌려 직접 고르게 한다.
+  if (!chosen) {
+    return {
+      matched: false,
+      candidates: pptxFiles.map((file) => ({ id: file.id, name: file.name })),
+    };
+  }
+
+  return convertMatched(chosen);
+};
