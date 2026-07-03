@@ -3,6 +3,7 @@
 > **입력**: 회차 `details` 1건. **출력**: **개념마다** 자체 완결 인터랙티브 HTML 1개(회차당 보통 3~6개).
 > **★ 2026-07-03 인터리브 개편**: 수업은 이론 덱(회차당 19장 1개)을 켜 둔 채 "이론 1~3장 → 그 개념의 실습 → 다음 개념 1~3장 → 실습 …"으로 진행한다(1교시/2교시 분리 없음). 그래서 실습은 **시수당 1개(20분)가 아니라 개념당 1개(약 8~10분)** — 개념 목록은 `details`의 시수별 '주요 활동' 항목들을 순서대로 합쳐 만든다(적정 3~6개, 많으면 묶고 적으면 나눔). **개념 순서 = 날짜기록 contentIds 순서 = 이론 덱 「✅ 개념 끝 → 🛠 실습」 배지 순서**. 이론 19장 구성 정본은 [`cloud-routine-setup.md`](./cloud-routine-setup.md) 5단계(디자인·형식·언어는 [`notebooklm-guidelines.md`](./notebooklm-guidelines.md) §1·§2).
 > 이 문서가 곧 **생성 프롬프트(시스템 지침)** 다. 클라우드 루틴(C)과 강사 수동 생성 양쪽이 이걸 따른다.
+> **★ 반 특성(`classrooms.description`)이 이 레시피의 기본값보다 우선한다(2026-07-03)**: 강사가 반 문서 description에 적어 둔 수업 방식 지시(예: "코딩반 — 실습은 실제 타이핑 중심(IDE처럼 직접 입력), 예문·코드는 영어(hello world 등), 한/영 전환 부담 금지")가 있으면, 아래의 시각 우선·타자 최소화·칩/카드 클릭 같은 기본 원칙 대신 그 지시를 따른다. 반 특성이 없으면 이 문서 기본값대로.
 > 디자인 언어는 이론(NotebookLM) [`notebooklm-guidelines.md`](./notebooklm-guidelines.md)와 공유해 이론↔실습 톤을 맞춘다.
 > **품질 기준선(2026-06-23 상향)**: [`sample-practice-desktop-mission.html`](./sample-practice-desktop-mission.html)(2회차 3시수)·[`sample-practice-folder-builder.html`](./sample-practice-folder-builder.html)(2회차 4시수). 시각 우선·콤보/뱃지·변별/함정·5단계(보스 포함)·적응형의 **새 표준**이다. (기존 `sample-practice-mouse-mission.html`/`promise-card`는 더 단순한 1회차 초기 버전 = 상향 대상.)
 > **G·Claude 프롬프트 빌더 기준선(2026-06-25)**: [`sample-practice-claude-prompt-builder.html`](./sample-practice-claude-prompt-builder.html)(11회차 22시수 "Claude에게 쉬운 한국어 부탁하기"). 칩 클릭 → 완성된 한국어 프롬프트 → 복사 버튼의 **표준**([4.5]).
