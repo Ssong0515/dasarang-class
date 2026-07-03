@@ -48,6 +48,9 @@ export const StudentShowcaseManager: React.FC<StudentShowcaseManagerProps> = ({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // 다중 제거용 선택 상태. 탭을 바꾸면 초기화한다(다른 탭의 안 보이는 항목이 같이 지워지는 사고 방지).
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
 
   // 이 앱이 직접 서빙하는 공개 작품 페이지(같은 출처). 승인하면 여기에 바로 반영된다.
   const showcaseHref = resolveAppPath('showcase.html');
@@ -82,7 +85,7 @@ export const StudentShowcaseManager: React.FC<StudentShowcaseManagerProps> = ({
   );
 
   const handleAction = async (id: string, action: 'approve' | 'hide' | 'delete') => {
-    if (busyId) return;
+    if (busyId || bulkProgress) return;
     setBusyId(id);
     setError(null);
     try {
@@ -105,6 +108,54 @@ export const StudentShowcaseManager: React.FC<StudentShowcaseManagerProps> = ({
       return;
     }
     void handleAction(post.id, 'delete');
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectedCount = visiblePosts.filter((post) => selectedIds.has(post.id)).length;
+  const allSelected = visiblePosts.length > 0 && selectedCount === visiblePosts.length;
+
+  const toggleSelectAll = () => {
+    setSelectedIds(allSelected ? new Set() : new Set(visiblePosts.map((post) => post.id)));
+  };
+
+  // 선택한 게시물들을 순서대로 하나씩 제거한다(각각 Drive 파일 삭제가 있어 병렬 대신 순차 + 진행 표시).
+  const handleBulkDelete = async () => {
+    if (busyId || bulkProgress) return;
+    const ids = visiblePosts.filter((post) => selectedIds.has(post.id)).map((post) => post.id);
+    if (ids.length === 0) return;
+    if (
+      !window.confirm(
+        `선택한 ${ids.length}개 작품을 완전히 제거할까요?\n업로드된 파일도 함께 삭제되며 되돌릴 수 없어요.`
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    setBulkProgress({ done: 0, total: ids.length });
+    let failedCount = 0;
+    for (const id of ids) {
+      try {
+        await onReview(id, 'delete');
+      } catch {
+        failedCount += 1;
+      }
+      setBulkProgress((current) =>
+        current ? { done: current.done + 1, total: current.total } : current
+      );
+    }
+    setBulkProgress(null);
+    setSelectedIds(new Set());
+    if (failedCount > 0) {
+      setError(`${failedCount}개 작품은 제거하지 못했어요. 잠시 후 다시 시도해 주세요.`);
+    }
   };
 
   return (
@@ -151,7 +202,10 @@ export const StudentShowcaseManager: React.FC<StudentShowcaseManagerProps> = ({
             return (
               <button
                 key={tab.key}
-                onClick={() => setActiveStatus(tab.key)}
+                onClick={() => {
+                  setActiveStatus(tab.key);
+                  setSelectedIds(new Set()); // 탭 전환 시 선택 초기화
+                }}
                 className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold transition-all ${
                   isActive
                     ? 'bg-[#8B5E3C] text-white shadow-sm'
@@ -177,6 +231,41 @@ export const StudentShowcaseManager: React.FC<StudentShowcaseManagerProps> = ({
           </div>
         )}
 
+        {/* 다중 선택 툴바 — 전체 선택 + 선택 항목 일괄 제거 */}
+        {visiblePosts.length > 0 && (
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <label className="flex cursor-pointer items-center gap-2 text-sm font-bold text-[#8B7E74]">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={toggleSelectAll}
+                className="h-4 w-4 accent-[#8B5E3C]"
+              />
+              전체 선택
+              {selectedCount > 0 && <span className="text-[#8B5E3C]">({selectedCount})</span>}
+            </label>
+            {selectedCount > 0 && (
+              <button
+                onClick={() => void handleBulkDelete()}
+                disabled={!!bulkProgress || !!busyId}
+                className="flex items-center gap-1.5 rounded-xl bg-red-500 px-4 py-2 text-xs font-bold text-white transition-all hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {bulkProgress ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin" />
+                    제거 중... {bulkProgress.done}/{bulkProgress.total}
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={13} />
+                    선택 {selectedCount}개 제거
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+        )}
+
         {visiblePosts.length === 0 ? (
           <div className="rounded-[24px] border border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-6 py-16 text-center text-sm text-[#8B7E74]">
             {activeStatus === 'pending'
@@ -196,8 +285,23 @@ export const StudentShowcaseManager: React.FC<StudentShowcaseManagerProps> = ({
               return (
                 <div
                   key={post.id}
-                  className="flex gap-4 rounded-[24px] border border-[#F3F2EE] bg-white p-4 shadow-sm"
+                  className={`flex gap-4 rounded-[24px] border p-4 shadow-sm transition-colors ${
+                    selectedIds.has(post.id)
+                      ? 'border-[#8B5E3C] bg-[#FFF9F2]'
+                      : 'border-[#F3F2EE] bg-white'
+                  }`}
                 >
+                  {/* 다중 제거용 선택 체크박스 */}
+                  <label className="flex cursor-pointer items-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(post.id)}
+                      onChange={() => toggleSelect(post.id)}
+                      aria-label={`${post.title} 선택`}
+                      className="h-4 w-4 accent-[#8B5E3C]"
+                    />
+                  </label>
+
                   {/* 승인 전 비공개 파일도 관리자 프록시로 실제 미리보기를 띄운다(결과물 갤러리와 동일 로직) */}
                   <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[#FBFBFA] text-[#A2906F]">
                     <ResultThumbnail post={post} getAuthToken={getAuthToken} />
