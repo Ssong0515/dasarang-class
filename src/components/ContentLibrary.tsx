@@ -1421,6 +1421,7 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
                               title={editingContent.title?.trim() || '콘텐츠 미리보기'}
                               autoHeight={false}
                               className="h-full w-full"
+                              reviewMode
                             />
                           </div>
                         ) : null}

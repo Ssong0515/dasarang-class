@@ -377,7 +377,24 @@ const injectIframeMarkup = (html: string, styleTag: string, scriptTag: string) =
   return nextHtml;
 };
 
-export const buildResponsiveSrcDoc = (html: string) => {
+// 교사 검토 화면(대시보드·콘텐츠 라이브러리 미리보기)에서만 head에 주입되는 검토 브리지.
+// 학생 화면에는 절대 주입하지 않는다. 실습 HTML은 버튼을 직접 만들지 않고
+// window.__reviewSkip = () => { ...다음 단계로... } 한 줄만 정의하면, 프레임의 공용
+// ⏭ 버튼이 postMessage로 그 훅을 호출한다. 훅이 없는 콘텐츠에는 버튼이 안 뜬다.
+const reviewBridgeScriptTag = `<script>
+window.__DASA_REVIEW__=true;
+(function(){
+  function report(){
+    try{parent.postMessage({type:'dasa-review-skip-available',available:typeof window.__reviewSkip==='function'},'*');}catch(e){}
+  }
+  window.addEventListener('message',function(e){
+    if(e.data&&e.data.type==='dasa-review-skip'&&typeof window.__reviewSkip==='function'){try{window.__reviewSkip();}catch(err){}}
+  });
+  window.addEventListener('load',function(){report();setTimeout(report,800);});
+})();
+</script>`;
+
+export const buildResponsiveSrcDoc = (html: string, options?: { review?: boolean }) => {
   const trimmedHtml = html.trim();
   if (!trimmedHtml) {
     return '';
@@ -387,9 +404,11 @@ export const buildResponsiveSrcDoc = (html: string) => {
   // 끄려면 false로.
   const ENABLE_INLINE_TRANSLATE = true;
   const translateTag = ENABLE_INLINE_TRANSLATE ? iframeTranslateScriptTag : '';
+  // 브리지는 실습 <script>보다 먼저 실행돼야 하므로 head 쪽에 넣는다.
+  const headTags = (options?.review ? reviewBridgeScriptTag : '') + iframeResponsiveStyleTag;
 
   if (/<html[\s>]/i.test(trimmedHtml) || /<body[\s>]/i.test(trimmedHtml) || /<!doctype/i.test(trimmedHtml)) {
-    return injectIframeMarkup(trimmedHtml, iframeResponsiveStyleTag, iframeHeightScriptTag + translateTag);
+    return injectIframeMarkup(trimmedHtml, headTags, iframeHeightScriptTag + translateTag);
   }
 
   return `<!DOCTYPE html>
@@ -397,7 +416,7 @@ export const buildResponsiveSrcDoc = (html: string) => {
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        ${iframeResponsiveStyleTag}
+        ${headTags}
       </head>
       <body>
         <div class="student-content-root">${trimmedHtml}</div>
@@ -412,6 +431,8 @@ interface StudentContentPreviewFrameProps {
   title: string;
   autoHeight?: boolean;
   className?: string;
+  /** 교사 검토 화면에서 true — 검토 브리지를 주입하고, 콘텐츠가 __reviewSkip 훅을 정의하면 공용 ⏭ 버튼을 띄운다. */
+  reviewMode?: boolean;
 }
 
 export const StudentContentPreviewFrame: React.FC<StudentContentPreviewFrameProps> = ({
@@ -419,9 +440,11 @@ export const StudentContentPreviewFrame: React.FC<StudentContentPreviewFrameProp
   title,
   autoHeight = true,
   className = '',
+  reviewMode = false,
 }) => {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const srcDoc = buildResponsiveSrcDoc(html);
+  const [skipAvailable, setSkipAvailable] = useState(false);
+  const srcDoc = buildResponsiveSrcDoc(html, { review: reviewMode });
 
   useEffect(() => {
     if (!autoHeight) {
@@ -444,7 +467,31 @@ export const StudentContentPreviewFrame: React.FC<StudentContentPreviewFrameProp
     return () => window.removeEventListener('message', handleIframeHeightMessage);
   }, [autoHeight]);
 
-  return (
+  useEffect(() => {
+    if (!reviewMode) {
+      return;
+    }
+
+    const handleSkipAvailableMessage = (event: MessageEvent) => {
+      if (event.data?.type !== 'dasa-review-skip-available' || !iframeRef.current) {
+        return;
+      }
+      if (iframeRef.current.contentWindow && event.source !== iframeRef.current.contentWindow) {
+        return;
+      }
+      setSkipAvailable(Boolean(event.data.available));
+    };
+
+    window.addEventListener('message', handleSkipAvailableMessage);
+    return () => window.removeEventListener('message', handleSkipAvailableMessage);
+  }, [reviewMode]);
+
+  // srcDoc이 바뀌면(핫리로드) iframe이 새로 뜨므로 지원 여부도 다시 보고받는다.
+  useEffect(() => {
+    setSkipAvailable(false);
+  }, [srcDoc]);
+
+  const iframeElement = (
     <iframe
       ref={iframeRef}
       srcDoc={srcDoc}
@@ -473,6 +520,29 @@ export const StudentContentPreviewFrame: React.FC<StudentContentPreviewFrameProp
         }
       } : undefined}
     />
+  );
+
+  if (!reviewMode) {
+    return iframeElement;
+  }
+
+  // 검토 모드: 콘텐츠 위에 공용 컨트롤을 얹기 위해 relative 래퍼로 감싼다.
+  // 래퍼가 기존 className(폭·높이)을 이어받고 iframe이 래퍼를 가득 채운다.
+  return (
+    <div className={`relative ${className}`.trim()}>
+      {React.cloneElement(iframeElement, { className: 'h-full w-full' })}
+      {skipAvailable && (
+        <button
+          type="button"
+          onClick={() =>
+            iframeRef.current?.contentWindow?.postMessage({ type: 'dasa-review-skip' }, '*')
+          }
+          className="absolute right-2 top-2 z-10 rounded-lg bg-black/55 px-2.5 py-1.5 text-xs font-bold text-white shadow transition-all hover:bg-black/75"
+        >
+          ⏭ 건너뛰기
+        </button>
+      )}
+    </div>
   );
 };
 

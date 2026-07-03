@@ -622,6 +622,11 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     () => new Map(contents.map((content) => [content.id, content])),
     [contents]
   );
+  // 미리보기 모달은 연 시점의 스냅샷이 아니라 실시간 콘텐츠를 렌더한다 — 모달이 열린 채로
+  // 다른 세션(MCP 편집 등)에서 html이 바뀌면 onSnapshot → contents 갱신 → iframe이 즉시 다시 뜬다.
+  const livePreviewContent = previewContent
+    ? assignedContentsById.get(previewContent.id) ?? previewContent
+    : null;
   const contentsByCategory = useMemo(() => {
     const grouped = new Map<string, LessonContent[]>();
     for (const content of assignedContents) {
@@ -4689,7 +4694,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       )}
 
       {/* 수업기록 콘텐츠 빠른 미리보기 */}
-      {previewContent && (
+      {livePreviewContent && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-3 sm:p-4"
           onClick={() => setPreviewContent(null)}
@@ -4701,14 +4706,14 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
             <div className="flex items-center justify-between gap-3 border-b border-[#E5E3DD] px-4 py-3 sm:px-5 sm:py-4">
               <h3 className="flex min-w-0 items-center gap-2 text-base font-bold text-[#4A3728]">
                 <Eye size={18} className="shrink-0 text-[#8B5E3C]" />
-                <span className="truncate">{previewContent.title}</span>
+                <span className="truncate">{livePreviewContent.title}</span>
               </h3>
               <div className="flex shrink-0 items-center gap-2">
                 {onNavigateToContent && (
                   <button
                     type="button"
                     onClick={() => {
-                      const targetId = previewContent.id;
+                      const targetId = livePreviewContent.id;
                       setPreviewContent(null);
                       onNavigateToContent(targetId);
                     }}
@@ -4730,20 +4735,21 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
             </div>
 
             <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto bg-[#FBFBFA] p-3 sm:p-4">
-              {previewContent.slideUrl?.trim() ? (
+              {livePreviewContent.slideUrl?.trim() ? (
                 <div className="overflow-hidden rounded-2xl border border-[#E5E3DD] bg-white">
                   <SlideEmbed
-                    slideUrl={previewContent.slideUrl}
-                    title={previewContent.title?.trim() || '슬라이드 미리보기'}
+                    slideUrl={livePreviewContent.slideUrl}
+                    title={livePreviewContent.title?.trim() || '슬라이드 미리보기'}
                     roundedBottom
                   />
                 </div>
-              ) : previewContent.html?.trim() ? (
+              ) : livePreviewContent.html?.trim() ? (
                 <div className="overflow-hidden rounded-2xl border border-[#E5E3DD] bg-white">
                   <StudentContentPreviewFrame
-                    html={previewContent.html}
-                    title={previewContent.title?.trim() || '콘텐츠 미리보기'}
+                    html={livePreviewContent.html}
+                    title={livePreviewContent.title?.trim() || '콘텐츠 미리보기'}
                     className="w-full"
+                    reviewMode
                   />
                 </div>
               ) : (
@@ -4753,9 +4759,9 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 </div>
               )}
 
-              {previewContent.description?.trim() && (
+              {livePreviewContent.description?.trim() && (
                 <div className="mt-3 whitespace-pre-wrap rounded-2xl border border-[#E5E3DD] bg-white p-4 text-sm leading-7 text-[#4A3728]">
-                  {previewContent.description}
+                  {livePreviewContent.description}
                 </div>
               )}
             </div>
