@@ -39,6 +39,9 @@ const getLocalDateString = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
+// 수업 종료 안내는 종료 시각부터 이 시간까지만 보여준다 — 이후에 페이지를 여는 학생에겐 뜨지 않고, 떠 있던 안내도 자동으로 닫힌다.
+const END_NOTICE_MAX_AGE_MS = 10 * 60 * 1000;
+
 // 수업 종료 안내 — 여러 나라 학생이라 언어를 특정할 수 없어 몇 초마다 순환 표시한다.
 const END_NOTICE_LANGS: { code: string; label: string; dir?: 'rtl' | 'ltr'; title: string; lines: string[] }[] = [
   {
@@ -522,8 +525,21 @@ export const StudentPage: React.FC<StudentPageProps> = ({
       .sort()
       .pop() || null;
   // 종료 안내 신호가 오면 자동으로 띄우고, 학생이 이미 닫은 신호(같은 시각)면 닫아 둔다.
+  // 단, 종료 시각부터 10분이 지나면 띄우지 않는다 — 늦게 페이지를 연 학생에겐 안 뜨고, 떠 있던 안내도 시간이 되면 자동으로 닫힌다.
   useEffect(() => {
-    setIsEndNoticeOpen(Boolean(activeEndNoticeAt) && activeEndNoticeAt !== dismissedEndNoticeAt);
+    if (!activeEndNoticeAt || activeEndNoticeAt === dismissedEndNoticeAt) {
+      setIsEndNoticeOpen(false);
+      return;
+    }
+    const remainingMs =
+      END_NOTICE_MAX_AGE_MS - (Date.now() - new Date(activeEndNoticeAt).getTime());
+    if (remainingMs <= 0) {
+      setIsEndNoticeOpen(false);
+      return;
+    }
+    setIsEndNoticeOpen(true);
+    const timer = window.setTimeout(() => setIsEndNoticeOpen(false), remainingMs);
+    return () => window.clearTimeout(timer);
   }, [activeEndNoticeAt, dismissedEndNoticeAt]);
 
   const getAssignedContentIdsForClassroom = (_classroom?: Classroom) =>
