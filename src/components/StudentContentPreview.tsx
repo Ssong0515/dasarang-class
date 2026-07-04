@@ -371,10 +371,12 @@ const iframeTranslateScriptTag = `
         if (autoKey && !state.lang) selectLang(autoKey);
       }
       // 실습이 떠 있는 동안 학생이 언어를 바꾸면 부모(StudentContentPreviewFrame)가 알려준다 → 즉시 따라간다.
+      // 사전에 없는 언어(한국어 되돌리기 iso 'ko' 포함)로 바꾸면 번역을 끄고 원문으로 돌린다.
       window.addEventListener('message', function (e) {
         if (!e.data || e.data.type !== 'dsr-voice-lang') return;
         var key = langKeyForIso(e.data.iso);
         if (key && key !== state.lang) selectLang(key);
+        else if (!key && state.lang) turnOff();
       });
       // 패널이 열린 채 실습을 조작하다 가려지지 않게, 바깥을 누르면 접는다.
       document.addEventListener('click', function (e) {
