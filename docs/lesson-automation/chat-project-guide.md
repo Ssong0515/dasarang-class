@@ -67,13 +67,13 @@
 ### `수업 목록` — 현재 과정의 다가오는 수업 5개
 1. 현재 과정이 없으면 위 `과정 목록`부터(1개뿐이면 자동 선택).
 2. `get_resource(curriculums, <현재 curriculumId>)` → `sessions`. 반별 `sessionStates`에서 `status`가 done/skipped 아니고 `date >= 오늘`인 회차를 date **오름차순**, **앞 5개**.
-3. 자료 유무 판정(**반별 독립**): 그 커리큘럼을 쓰는 **각 반**의 그 날짜 `list_resource(classroomDateRecords, dateFrom=date, dateTo=date)` → `contentIds`에 실습이 있는지 + `theoryPrompts`가 있는지. ⚠️ **제목이 아니라 존재 여부**로, **반마다 따로** 본다(1반에 있어도 2반엔 없을 수 있음).
+3. 자료 유무 판정(**반별 독립**): 그 커리큘럼을 쓰는 **각 반**의 그 날짜 `list_resource(classroomDateRecords, dateFrom=date, dateTo=date)` → `contentIds`에 실습이 있는지 + `theoryPrompts`가 있는지. ⚠️ **제목이 아니라 존재 여부**로, **반마다 따로** 본다(1반에 있어도 2반엔 없을 수 있음). ★ 판정 기준은 그 날짜의 유효 구성 — 날짜기록의 `showTheory`/`showPractice`가 있으면 그 값, 없으면 반 설정(`classrooms.showTheory/showPractice`, 없으면 켜짐). 꺼진 영역은 비어 있어도 '없음'으로 세지 않는다(예: 이론만 날짜는 실습이 없어도 완비).
 4. 표: `# | 회차order | date(요일) | topic | 실습(없음/일부/완비) | 이론 프롬프트(유/무) | sessionId`.
 5. "**번호로 고르거나 '3회차'처럼 말하면 자세히 보여줘요**" 안내.
 
 ### `{회차}회차` 또는 `N번` — 한 회차 상세 + 필요한 것 생성
 선택한 회차(현재 과정 기준)를 **루틴과 같은 흐름**으로 다룬다:
-1. **무엇이 필요한지 판단**: 그 반·그 날짜 날짜기록에서 실습(contentIds)·이론(theoryPrompts) 유무 확인 → 이론만/실습만/둘 다.
+1. **무엇이 필요한지 판단**: 먼저 그 날짜의 유효 구성을 정한다 — 날짜기록의 `showTheory`/`showPractice`가 있으면 그 값, 없으면 반 설정을 따른다(강사가 특정 날짜만 이론만/실습만으로 조정할 수 있음). 그다음 켜진 영역만 대상으로 실습(contentIds)·이론(theoryPrompts) 유무 확인 → 이론만/실습만/둘 다. 꺼진 영역은 만들지 않는다(이론만 날짜면 이론 프롬프트도 배지·contentIds 없이).
 2. **전체 그림**: 그 회차 `details` 파싱 → **개념 목록** 도출(주요 활동 합쳐 3~6개 — 많으면 묶고 적으면 나눔). 표: `# | 개념 제목 | 출처 시수 | 관련 결과물`.
 3. **기존 실습 HTML**: 날짜기록 `contentIds`로 `get_resource(contents, <id>)`를 가져와 **개념 순서대로 content id + 제목 + description + previewUrl** 표시(contentIds 순서 = 개념 순서. 실물은 html 전문을 채팅에 붓지 말고 previewUrl로 본다). → 이 id들을 **작업 대상으로 기억**(아래에서 재검색 없이 사용).
 4. **실습이 없으면**: "이 회차는 아직 실습이 없어요. 만들까요?" → 승인 시 [`practice-recipe.md`]대로 **개념당 1개(약 8~10분)씩** 생성 후 등록(개념 순서 유지). (같은 커리큘럼 다른 반에 이미 있으면 새로 만들지 말고 그 content id를 연결.)

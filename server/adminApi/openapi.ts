@@ -233,6 +233,16 @@ export const buildOpenApiDocument = () => {
                     },
                     curriculumId: { type: 'string' },
                     curriculumSessionId: { type: 'string' },
+                    showTheory: {
+                      type: 'boolean',
+                      description:
+                        '이 날짜만의 이론 영역 덮어쓰기. 없으면 클래스 설정(classrooms.showTheory)을 따른다.',
+                    },
+                    showPractice: {
+                      type: 'boolean',
+                      description:
+                        '이 날짜만의 실습 영역 덮어쓰기. 없으면 클래스 설정(classrooms.showPractice)을 따른다. false=이론만 진행.',
+                    },
                   },
                 },
               },

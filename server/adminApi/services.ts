@@ -272,6 +272,9 @@ export interface UpsertLessonRecordInput {
   curriculumId?: string;
   curriculumSessionId?: string;
   theoryPrompts?: Array<{ label?: string; prompt: string; contentIds?: string[] }> | string;
+  /** 이 날짜만의 이론/실습 덮어쓰기. 없으면 클래스 설정(showTheory/showPractice)을 따른다. */
+  showTheory?: boolean;
+  showPractice?: boolean;
 }
 
 const VALID_ATTENDANCE_STATUSES = new Set(['Present', 'Absent', 'Late']);
@@ -395,6 +398,18 @@ export const upsertLessonRecord = async (input: UpsertLessonRecordInput) => {
         return normalized;
       })
       .filter((entry) => entry.prompt.trim());
+  }
+  if (input.showTheory !== undefined) {
+    if (typeof input.showTheory !== 'boolean') {
+      throw new AdminApiError(400, 'showTheory는 boolean이어야 합니다.');
+    }
+    updates.showTheory = input.showTheory;
+  }
+  if (input.showPractice !== undefined) {
+    if (typeof input.showPractice !== 'boolean') {
+      throw new AdminApiError(400, 'showPractice는 boolean이어야 합니다.');
+    }
+    updates.showPractice = input.showPractice;
   }
   if (curriculumId) {
     updates.curriculumId = curriculumId;
@@ -830,6 +845,9 @@ export const getOverview = async () => {
         studentCount: studentCounts.get(doc.id) || 0,
         /** 이 반에 강사가 지정한 병기 번역 언어(0개~여러 개) — 이론 슬라이드·실습 병기 번역에 쓴다. 비어 있으면 병기 없이 쉬운 한국어+그림만. */
         annotationLanguages: getAnnotationLanguages(data),
+        /** 이론/실습 구성 기본값(없으면 true). 날짜별로는 classroomDateRecords.showTheory/showPractice가 이 값을 덮어쓴다. */
+        showTheory: data.showTheory !== false,
+        showPractice: data.showPractice !== false,
       };
     })
     .sort((a, b) => a.order - b.order);

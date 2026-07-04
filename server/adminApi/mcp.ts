@@ -154,6 +154,14 @@ const buildMcpServer = () => {
         ])
         .optional()
         .describe('이론 슬라이드 프롬프트 배열(이론 덱 1개 = 항목 1개; 배열 또는 그 JSON 문자열). 줄 때마다 그 날짜의 theoryPrompts 전체를 교체한다.'),
+      showTheory: z
+        .boolean()
+        .optional()
+        .describe('이 날짜만의 이론 영역 덮어쓰기. 없으면 클래스 설정(classrooms.showTheory)을 따른다. false=이 날짜는 이론 없이 진행.'),
+      showPractice: z
+        .boolean()
+        .optional()
+        .describe('이 날짜만의 실습 영역 덮어쓰기. 없으면 클래스 설정(classrooms.showPractice)을 따른다. false=이 날짜는 이론만 진행(실습 생성·공개 대상 아님).'),
     },
     async (input) => run(() => upsertLessonRecord(input as UpsertLessonRecordInput))
   );

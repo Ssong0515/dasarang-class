@@ -91,12 +91,12 @@ export const RESOURCE_SPECS: Record<ResourceName, ResourceSpec> = {
       showTheory: {
         type: 'boolean',
         description:
-          '이론 영역을 대시보드 "수업 진행·학생 공개"에 표시할지. 없으면 활성으로 본다. 이론만 하는 반은 showPractice를 false로.',
+          '이론 영역 기본값 — 대시보드 "수업 진행·학생 공개"에 표시할지. 없으면 활성으로 본다. 날짜별로는 classroomDateRecords.showTheory가 이 값을 덮어쓴다.',
       },
       showPractice: {
         type: 'boolean',
         description:
-          '실습(학생 공개) 영역을 대시보드에 표시할지. 없으면 활성으로 본다. "앱 기초/활용"처럼 이론만 하는 반은 false.',
+          '실습(학생 공개) 영역 기본값. 없으면 활성으로 본다. "앱 기초/활용"처럼 이론만 하는 반은 false. 날짜별로는 classroomDateRecords.showPractice가 이 값을 덮어쓴다.',
       },
     },
     defaults: ({ nowIso }) => ({ createdAt: nowIso }),
@@ -153,6 +153,16 @@ export const RESOURCE_SPECS: Record<ResourceName, ResourceSpec> = {
       attendance: { type: 'array', description: '출석 배열 [{studentId, status: Present|Absent|Late, isExcluded?}]' },
       curriculumId: { type: 'string', description: '연결된 커리큘럼 id' },
       curriculumSessionId: { type: 'string', description: '연결된 커리큘럼 회차 id' },
+      showTheory: {
+        type: 'boolean',
+        description:
+          '이 날짜만의 이론 영역 덮어쓰기. 없으면 클래스 설정(classrooms.showTheory)을 따른다. false면 그 날짜는 이론 없이(실습만) 진행.',
+      },
+      showPractice: {
+        type: 'boolean',
+        description:
+          '이 날짜만의 실습 영역 덮어쓰기. 없으면 클래스 설정(classrooms.showPractice)을 따른다. false면 그 날짜는 이론만 진행(실습 생성·공개 대상 아님).',
+      },
     },
     immutableFields: ['classroomId', 'date'],
   },

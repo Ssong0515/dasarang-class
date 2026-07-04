@@ -891,6 +891,9 @@ export default function App() {
             ...(typeof data.curriculumSessionId === 'string' && data.curriculumSessionId.trim()
               ? { curriculumSessionId: data.curriculumSessionId.trim() }
               : {}),
+            // 날짜별 이론/실습 덮어쓰기. 빼먹으면 강사가 날짜기록을 저장(setDoc)할 때 통째로 덮어써져 사라진다.
+            ...(typeof data.showTheory === 'boolean' ? { showTheory: data.showTheory } : {}),
+            ...(typeof data.showPractice === 'boolean' ? { showPractice: data.showPractice } : {}),
             createdAt: data.createdAt ?? '',
             updatedAt: data.updatedAt ?? '',
           } satisfies ClassroomDateRecord;

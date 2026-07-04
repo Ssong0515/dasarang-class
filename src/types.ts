@@ -130,6 +130,13 @@ export interface ClassroomDateRecord {
   theorySlides?: TheorySlide[];
   /** 이 날짜 이론 슬라이드용 NotebookLM 입력 프롬프트들 (시수마다 1개, 새벽 루틴이 자동 생성, 강사 화면 전용·읽기 전용). */
   theoryPrompts?: TheoryPrompt[];
+  /**
+   * 이 날짜만의 이론/실습 구성 덮어쓰기. 값이 없으면 클래스 설정(Classroom.showTheory/showPractice)을 따른다.
+   * 특정 날짜만 이론만(실습 제거) 또는 실습만으로 진행할 때 대시보드에서 끄고 켠다.
+   * 루틴도 클래스 설정이 아니라 이 날짜별 유효값으로 이론/실습 생성 여부를 판단한다.
+   */
+  showTheory?: boolean;
+  showPractice?: boolean;
   createdAt: string;
   updatedAt: string;
   curriculumId?: string;

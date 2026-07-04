@@ -1206,6 +1206,32 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
 
   const handleToggleContent = (_content: LessonContent) => {};
 
+  // 이 날짜만의 이론/실습 구성 토글. 클래스 설정(showTheory/showPractice)은 그대로 두고
+  // 날짜기록에 덮어쓰기 값을 저장한다 — 값이 없는 날짜는 클래스 설정을 따른다.
+  // (기록이 없으면 첫 토글에 빈 기록을 만들며 저장 — 콘텐츠 토글과 같은 지연 생성)
+  const handleToggleDateArea = (area: 'theory' | 'practice') => {
+    const base = currentDateRecord ?? createDateRecord();
+    const effectiveTheory = base.showTheory ?? classroom.showTheory !== false;
+    const effectivePractice = base.showPractice ?? classroom.showPractice !== false;
+    const next = {
+      showTheory: area === 'theory' ? !effectiveTheory : effectiveTheory,
+      showPractice: area === 'practice' ? !effectivePractice : effectivePractice,
+    };
+    if (!next.showTheory && !next.showPractice) {
+      window.alert('이론·실습 중 하나는 켜져 있어야 합니다.');
+      return;
+    }
+    // 실습을 빼는 날은 학생에게 공개돼 있던 실습도 조용히 모두 잠근다.
+    if (
+      !next.showPractice &&
+      onUpdatePublishedLesson &&
+      (currentPublishedLesson?.publishedContentIds?.length ?? 0) > 0
+    ) {
+      void onUpdatePublishedLesson(classroom.id, classroom.name, selectedDate, []);
+    }
+    onSaveDateRecord({ ...base, ...next });
+  };
+
   const handleToggleDateRecordContent = (content: LessonContent) => {
     const base = currentDateRecord ?? createDateRecord();
 
@@ -1858,9 +1884,11 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     );
     const excludedAttendanceCount =
       currentDateRecord?.attendance.filter((attendance) => isAttendanceExcluded(attendance)).length || 0;
-    // 반 설정에서 켜 둔 영역만 '수업 진행·학생 공개'에 보인다. 값이 없으면(레거시 반) 켜진 것으로 본다.
-    const showTheorySection = classroom.showTheory !== false;
-    const showPracticeSection = classroom.showPractice !== false;
+    // '수업 진행·학생 공개'에 보이는 영역 = 이 날짜의 유효 구성.
+    // 날짜기록에 덮어쓰기(showTheory/showPractice)가 있으면 그 값, 없으면 클래스 설정(레거시 반은 켜짐)을 따른다.
+    const showTheorySection = currentDateRecord?.showTheory ?? classroom.showTheory !== false;
+    const showPracticeSection =
+      currentDateRecord?.showPractice ?? classroom.showPractice !== false;
     // 카드 헤더 = 선택 날짜에 배정된 커리큘럼 회차 주제. 여러 회차면 이어 붙이고, 배정 없으면 기본 문구로 폴백.
     const daySessions = plannedSessionsByDate.get(selectedDate) || [];
     const sessionTopicTitle =
@@ -2298,11 +2326,43 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                       {showTheorySection && showPracticeSection
                         ? '이론(슬라이드)은 강사 화면 전용입니다. 실습을 공개하면 학생 화면에서 즉시 잠금이 풀립니다.'
                         : showPracticeSection
-                          ? '실습을 공개하면 학생 화면에서 즉시 잠금이 풀립니다.'
-                          : '이론 슬라이드는 강사 화면 전용입니다. (이 반은 이론만 진행합니다.)'}
+                          ? '실습을 공개하면 학생 화면에서 즉시 잠금이 풀립니다. (이 날짜는 실습만 진행합니다.)'
+                          : '이론 슬라이드는 강사 화면 전용입니다. (이 날짜는 이론만 진행합니다.)'}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
+                    {/* 이 날짜만의 이론/실습 구성 — 클래스 설정과 별개로 날짜별로 빼고 다시 넣을 수 있다. */}
+                    <div
+                      className="mr-1 inline-flex items-center gap-1 rounded-xl bg-[#F3F2EE] p-1"
+                      title="이 날짜만의 수업 구성입니다. 끄면 이 날짜에서만 그 영역이 빠지고, 클래스 설정은 바뀌지 않아요."
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handleToggleDateArea('theory')}
+                        aria-pressed={showTheorySection}
+                        className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all ${
+                          showTheorySection
+                            ? 'bg-white text-[#8B5E3C] shadow-sm'
+                            : 'text-[#B7AFA4] hover:text-[#8B7E74]'
+                        }`}
+                      >
+                        {showTheorySection ? <Check size={12} /> : <X size={12} />}
+                        이론
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleDateArea('practice')}
+                        aria-pressed={showPracticeSection}
+                        className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all ${
+                          showPracticeSection
+                            ? 'bg-white text-[#8B5E3C] shadow-sm'
+                            : 'text-[#B7AFA4] hover:text-[#8B7E74]'
+                        }`}
+                      >
+                        {showPracticeSection ? <Check size={12} /> : <X size={12} />}
+                        실습
+                      </button>
+                    </div>
                     {showPracticeSection && recordedPracticeContents.length > 0 && (
                       <>
                         <button
@@ -4211,7 +4271,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
             <Presentation size={16} className="text-[#8B5E3C]" />
             <h3 className="text-sm font-bold text-[#4A3728]">수업 구성 (이론 · 실습)</h3>
             <DashboardInfoTooltip
-              content="이 반이 다루는 영역이에요. 켜 둔 것만 대시보드 '수업 진행·학생 공개'에 보입니다. 예: '앱 기초/활용'처럼 이론만 하는 반은 실습을 꺼 두세요."
+              content="이 반이 다루는 영역의 기본값이에요. 켜 둔 것만 대시보드 '수업 진행·학생 공개'에 보입니다. 예: '앱 기초/활용'처럼 이론만 하는 반은 실습을 꺼 두세요. 특정 날짜만 다르게 하려면 대시보드 '수업 진행' 카드의 이론/실습 토글로 그 날짜에서만 빼거나 다시 넣을 수 있어요."
               label="수업 구성 설명 보기"
             />
           </div>
