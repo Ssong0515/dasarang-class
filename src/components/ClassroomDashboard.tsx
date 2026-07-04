@@ -1902,7 +1902,12 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       (showTheorySection || showPracticeSection) && recordedPracticeContents.length > 0;
     // 인터리브 그룹 모드: 프롬프트에 실습 매핑(contentIds)이 있고 이론 영역이 켜진 반에서만.
     // (이론을 끈 반은 그룹 헤더가 의미 없으니 기존 평면 목록으로 폴백)
-    const useGroupedLayout = contentListVisible && showTheorySection && hasTheoryGrouping;
+    // ★ 이론만 날짜(실습 콘텐츠 0개)도 그룹 모드로 — 프롬프트가 실습 행 없이는 안 보이던 버그 방지.
+    //   실습이 있는데 매핑이 없는 구버전 기록은 기존 평면 목록(index 1:1)을 유지한다.
+    const useGroupedLayout =
+      showTheorySection &&
+      ((contentListVisible && hasTheoryGrouping) ||
+        (effectiveTheoryPrompts.length > 0 && recordedPracticeContents.length === 0));
 
     // 그룹 모드 실습 행 — 실습 컨트롤(미리보기·공개)만. 이론 컨트롤은 그룹 헤더가 담당한다.
     const renderGroupedPracticeRow = (content: LessonContent) => {
@@ -2395,7 +2400,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                   </div>
                 </div>
 
-                {!theorySlidesVisible && !contentListVisible && (
+                {!theorySlidesVisible && !contentListVisible && !useGroupedLayout && (
                   <p className="rounded-2xl border border-dashed border-[#E5E3DD] bg-white px-4 py-6 text-center text-sm text-[#8B7E74]">
                     {showPracticeSection
                       ? '아직 이 날짜에 등록된 수업 콘텐츠가 없습니다. 아래에서 콘텐츠를 추가하면 학생에게 공개할 수 있고, 수업을 마치면 ‘수업 종료’로 학생 화면을 잠글 수 있어요.'
@@ -2460,7 +2465,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 {useGroupedLayout ? (
                   <div>
                     <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#8B7E74]">
-                      이론 · 실습 (수업 진행 순서)
+                      {recordedPracticeContents.length > 0 ? '이론 · 실습 (수업 진행 순서)' : '이론 수업'}
                       {showPracticeSection && (
                         <span className="rounded-full bg-[#EEF7F0] px-2 py-0.5 text-[10px] text-[#2D7A4D]">
                           {publishedPracticeCount}/{recordedPracticeContents.length} 공개됨
@@ -2596,7 +2601,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                             {/* 이 이론에 묶인 실습들 (개념/진행 순서) */}
                             <div className="space-y-2">
                               {contents.map((content) => renderGroupedPracticeRow(content))}
-                              {contents.length === 0 && (
+                              {/* 이론만 날짜(실습 영역 꺼짐)는 실습이 없는 게 정상이라 안내를 띄우지 않는다. */}
+                              {contents.length === 0 && showPracticeSection && (
                                 <p className="rounded-xl border border-dashed border-[#E5E3DD] bg-white px-3 py-2 text-xs text-[#8B7E74]">
                                   이 이론에 연결된 실습이 없습니다.
                                 </p>
