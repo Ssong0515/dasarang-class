@@ -60,6 +60,7 @@ import {
   LessonCategory,
   LessonContent,
   Classroom,
+  ClassroomFeeItem,
   PublishedLesson,
   TeacherScreenShare,
   TheorySlideSyncResult,
@@ -90,7 +91,7 @@ import {
 } from '../utils/students';
 import { isAttendanceExcluded } from '../utils/attendance';
 import { deleteField } from '../firebase';
-import { formatWon, getPerSessionFee, getSessionFee } from '../utils/fee';
+import { formatWon, getSessionFee } from '../utils/fee';
 import { openDriveSlidePicker, openDriveFolderPicker, requestDriveSyncAccessToken } from '../utils/drivePicker';
 import { SlideEmbed, StudentContentPreviewFrame } from './StudentContentPreview';
 import { SessionDetailModal } from './SessionDetailModal';
@@ -293,6 +294,35 @@ const getRecordTimestamp = (record: Pick<ClassroomDateRecord, 'updatedAt' | 'cre
   }
 
   return 0;
+};
+
+/** 설정 탭 강사비 항목 한 줄의 입력값 (전부 문자열 — 입력 중 상태 그대로 보관). */
+interface FeeItemDraft {
+  organization: string;
+  feePerHour: string;
+  hoursPerSession: string;
+}
+
+/**
+ * 저장된 강사비를 설정 입력줄로 변환. feeItems가 있으면 그대로,
+ * 레거시 단일 필드(feePerHour/hoursPerSession)만 있는 반은 첫 줄로 이관해 보여준다
+ * (기관명은 반의 기관·단체 값을 미리 채움 — 저장하면 feeItems 형식으로 저장된다).
+ */
+const buildFeeItemsDraft = (classroom: Classroom): FeeItemDraft[] => {
+  if (classroom.feeItems && classroom.feeItems.length > 0) {
+    return classroom.feeItems.map((item) => ({
+      organization: item.organization ?? '',
+      feePerHour: item.feePerHour != null ? String(item.feePerHour) : '',
+      hoursPerSession: item.hoursPerSession != null ? String(item.hoursPerSession) : '',
+    }));
+  }
+  return [
+    {
+      organization: classroom.organization ?? '',
+      feePerHour: classroom.feePerHour != null ? String(classroom.feePerHour) : '',
+      hoursPerSession: classroom.hoursPerSession != null ? String(classroom.hoursPerSession) : '2',
+    },
+  ];
 };
 
 const DashboardInfoTooltip: React.FC<{
@@ -517,8 +547,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     icon: classroom.icon || DEFAULT_CLASSROOM_ICON,
     description: classroom.description || '',
     organization: classroom.organization || '',
-    feePerHour: classroom.feePerHour != null ? String(classroom.feePerHour) : '',
-    hoursPerSession: classroom.hoursPerSession != null ? String(classroom.hoursPerSession) : '2',
+    feeItems: buildFeeItemsDraft(classroom),
     annotationLanguages: classroom.annotationLanguages ?? [],
     // 값이 없으면(레거시 반) 활성으로 본다. 대시보드에는 켜진 영역만 보인다.
     showTheory: classroom.showTheory !== false,
@@ -747,6 +776,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
 
   // 배열은 스냅샷마다 새 참조라 deps에 그대로 넣으면 편집 중에도 리셋된다. 내용 기반 키로 비교한다.
   const annotationLanguagesKey = (classroom.annotationLanguages ?? []).join('');
+  const feeItemsKey = JSON.stringify(classroom.feeItems ?? null);
   useEffect(() => {
     setSettingsDraft({
       name: classroom.name,
@@ -754,8 +784,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       icon: classroom.icon || DEFAULT_CLASSROOM_ICON,
       description: classroom.description || '',
       organization: classroom.organization || '',
-      feePerHour: classroom.feePerHour != null ? String(classroom.feePerHour) : '',
-      hoursPerSession: classroom.hoursPerSession != null ? String(classroom.hoursPerSession) : '2',
+      feeItems: buildFeeItemsDraft(classroom),
       annotationLanguages: classroom.annotationLanguages ?? [],
       showTheory: classroom.showTheory !== false,
       showPractice: classroom.showPractice !== false,
@@ -766,6 +795,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     classroom.name,
     classroom.description,
     classroom.organization,
+    feeItemsKey,
     classroom.feePerHour,
     classroom.hoursPerSession,
     annotationLanguagesKey,
@@ -4020,12 +4050,35 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
 
   const renderSettingsTab = () => {
     const PreviewIcon = getClassroomIconComponent(settingsDraft.icon);
-    const draftFeePerHour = Number(settingsDraft.feePerHour.replace(/[,\s]/g, '')) || 0;
-    const draftHoursPerSession = Number(settingsDraft.hoursPerSession.replace(/[,\s]/g, '')) || 0;
-    const draftPerSessionFee = getPerSessionFee({
-      feePerHour: draftFeePerHour || undefined,
-      hoursPerSession: draftHoursPerSession || undefined,
-    });
+    // 입력 중인 강사비 줄들의 미리보기 — 단가가 있는 줄만 합산한다(시수 빈칸은 1로).
+    const draftFeeBreakdown = settingsDraft.feeItems
+      .map((row) => ({
+        organization: row.organization.trim(),
+        feePerHour: Number(row.feePerHour.replace(/[,\s]/g, '')) || 0,
+        hoursPerSession: Number(row.hoursPerSession.replace(/[,\s]/g, '')) || 0,
+      }))
+      .filter((item) => item.feePerHour > 0)
+      .map((item) => {
+        const hours = item.hoursPerSession > 0 ? item.hoursPerSession : 1;
+        return { ...item, hoursPerSession: hours, fee: Math.round(item.feePerHour * hours) };
+      });
+    const draftPerSessionFee = draftFeeBreakdown.reduce((sum, item) => sum + item.fee, 0);
+
+    const updateFeeItemDraft = (index: number, patch: Partial<FeeItemDraft>) =>
+      setSettingsDraft((prev) => ({
+        ...prev,
+        feeItems: prev.feeItems.map((row, i) => (i === index ? { ...row, ...patch } : row)),
+      }));
+    const addFeeItemDraft = () =>
+      setSettingsDraft((prev) => ({
+        ...prev,
+        feeItems: [...prev.feeItems, { organization: '', feePerHour: '', hoursPerSession: '2' }],
+      }));
+    const removeFeeItemDraft = (index: number) =>
+      setSettingsDraft((prev) => ({
+        ...prev,
+        feeItems: prev.feeItems.filter((_, i) => i !== index),
+      }));
 
     return (
       <motion.div
@@ -4045,25 +4098,42 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
           <button
             onClick={async () => {
               if (!onUpdateClassroom || isSavingSettings) return;
-              // 빈칸이면 저장된 단가를 삭제(deleteField)하고, 값이 있으면 숫자로 저장한다.
+              // 강사비 줄: 완전히 빈 줄은 버리고, 숫자 칸은 0 이상의 숫자만 허용한다.
               // 음수·숫자 아님이면 저장을 막고 안내한다(조용히 무시하지 않음).
-              const readFee = (
+              const parseFeeNumber = (
                 raw: string
-              ):
-                | { ok: true; value: number | ReturnType<typeof deleteField> }
-                | { ok: false } => {
+              ): { ok: true; value?: number } | { ok: false } => {
                 const trimmed = raw.trim();
-                if (!trimmed) return { ok: true, value: deleteField() };
+                if (!trimmed) return { ok: true };
                 const value = Number(trimmed.replace(/[,\s]/g, ''));
                 if (!Number.isFinite(value) || value < 0) return { ok: false };
                 return { ok: true, value };
               };
-              const feePerHour = readFee(settingsDraft.feePerHour);
-              const hoursPerSession = readFee(settingsDraft.hoursPerSession);
-              if (!feePerHour.ok || !hoursPerSession.ok) {
-                window.alert('강사비는 0 이상의 숫자만 입력할 수 있어요. (비우면 단가가 삭제됩니다)');
+              const feeItems: ClassroomFeeItem[] = [];
+              let hasInvalidFee = false;
+              for (const row of settingsDraft.feeItems) {
+                const organization = row.organization.trim();
+                const rate = parseFeeNumber(row.feePerHour);
+                const hours = parseFeeNumber(row.hoursPerSession);
+                if (!rate.ok || !hours.ok) {
+                  hasInvalidFee = true;
+                  break;
+                }
+                // 전부 빈 줄은 조용히 버린다 (줄만 추가하고 안 채운 경우).
+                if (!organization && rate.value === undefined && hours.value === undefined) continue;
+                const item: ClassroomFeeItem = {};
+                if (organization) item.organization = organization;
+                if (rate.value !== undefined) item.feePerHour = rate.value;
+                if (hours.value !== undefined) item.hoursPerSession = hours.value;
+                feeItems.push(item);
+              }
+              if (hasInvalidFee) {
+                window.alert('강사비 단가·시수는 0 이상의 숫자만 입력할 수 있어요.');
                 return;
               }
+              // 옛 코드·스크립트 호환용 레거시 단일 필드는 첫 유효 항목과 동기화한다. 항목이 없으면 모두 삭제.
+              const primaryFeeItem =
+                feeItems.find((item) => (item.feePerHour ?? 0) > 0) ?? feeItems[0];
               // 병기 언어: 입력칸에 미처 추가 못한 값도 함께 반영하고, 트림·중복 제거 후 저장.
               // 0개면 빈 배열로 저장해 "병기 없음"을 명시한다.
               const annotationLanguages = Array.from(
@@ -4084,8 +4154,9 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                   icon: settingsDraft.icon,
                   description: settingsDraft.description,
                   organization: settingsDraft.organization,
-                  feePerHour: feePerHour.value,
-                  hoursPerSession: hoursPerSession.value,
+                  feeItems: feeItems.length > 0 ? feeItems : deleteField(),
+                  feePerHour: primaryFeeItem?.feePerHour ?? deleteField(),
+                  hoursPerSession: primaryFeeItem?.hoursPerSession ?? deleteField(),
                   annotationLanguages,
                   showTheory: settingsDraft.showTheory,
                   showPractice: settingsDraft.showPractice,
@@ -4211,54 +4282,96 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
         <div className="mb-5">
           <div className="mb-3 flex items-center gap-2">
             <Wallet size={16} className="text-[#8B5E3C]" />
-            <h3 className="text-sm font-bold text-[#4A3728]">강사비 (시수 단가)</h3>
+            <h3 className="text-sm font-bold text-[#4A3728]">강사비 (기관·단체별 시수 단가)</h3>
             <DashboardInfoTooltip
-              content="시수(1교시)당 단가와 회차당 시수를 적어 두면, 수업을 '완료'로 표시할 때마다 회차당 강사비가 자동으로 적립·집계됩니다. (강사비 달력·홈 대시보드에 표시)"
+              content="강사비가 나오는 기관·단체마다 한 줄씩 단가와 회차당 시수를 적어 두면, 수업을 '완료'로 표시할 때마다 모든 줄의 합이 회차당 강사비로 적립·집계됩니다. (강사비 달력·홈 대시보드에 표시)"
               label="강사비 설명 보기"
             />
           </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-bold text-[#8B7E74]">시수 단가 (원)</span>
-              <input
-                type="number"
-                inputMode="numeric"
-                min={0}
-                step={10000}
-                value={settingsDraft.feePerHour}
-                onChange={(event) =>
-                  setSettingsDraft({ ...settingsDraft, feePerHour: event.target.value })
-                }
-                className="w-full rounded-2xl border-2 border-[#E5E3DD] px-4 py-2.5 text-sm font-bold text-[#4A3728] transition-all focus:border-[#8B5E3C] focus:outline-none"
-                placeholder="예: 40000 (만원 단위, 기본 4만원)"
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-bold text-[#8B7E74]">회차당 시수</span>
-              <input
-                type="number"
-                inputMode="numeric"
-                min={0}
-                step={1}
-                value={settingsDraft.hoursPerSession}
-                onChange={(event) =>
-                  setSettingsDraft({ ...settingsDraft, hoursPerSession: event.target.value })
-                }
-                className="w-full rounded-2xl border-2 border-[#E5E3DD] px-4 py-2.5 text-sm font-bold text-[#4A3728] transition-all focus:border-[#8B5E3C] focus:outline-none"
-                placeholder="예: 2 (기본 2시수)"
-              />
-            </label>
+          <div className="space-y-2">
+            {settingsDraft.feeItems.map((row, index) => (
+              <div
+                key={index}
+                className="flex flex-wrap items-end gap-2 rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] px-3 py-2.5"
+              >
+                <label className="min-w-[160px] flex-1">
+                  <span className="mb-1.5 block text-xs font-bold text-[#8B7E74]">기관 · 단체</span>
+                  <input
+                    type="text"
+                    value={row.organization}
+                    onChange={(event) =>
+                      updateFeeItemDraft(index, { organization: event.target.value })
+                    }
+                    className="w-full rounded-xl border-2 border-[#E5E3DD] px-3 py-2 text-sm font-medium text-[#4A3728] transition-all focus:border-[#8B5E3C] focus:outline-none"
+                    placeholder="예: 구로구청"
+                  />
+                </label>
+                <label className="w-36">
+                  <span className="mb-1.5 block text-xs font-bold text-[#8B7E74]">시수 단가 (원)</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    step={10000}
+                    value={row.feePerHour}
+                    onChange={(event) =>
+                      updateFeeItemDraft(index, { feePerHour: event.target.value })
+                    }
+                    className="w-full rounded-xl border-2 border-[#E5E3DD] px-3 py-2 text-sm font-bold text-[#4A3728] transition-all focus:border-[#8B5E3C] focus:outline-none"
+                    placeholder="예: 40000"
+                  />
+                </label>
+                <label className="w-28">
+                  <span className="mb-1.5 block text-xs font-bold text-[#8B7E74]">회차당 시수</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    step={1}
+                    value={row.hoursPerSession}
+                    onChange={(event) =>
+                      updateFeeItemDraft(index, { hoursPerSession: event.target.value })
+                    }
+                    className="w-full rounded-xl border-2 border-[#E5E3DD] px-3 py-2 text-sm font-bold text-[#4A3728] transition-all focus:border-[#8B5E3C] focus:outline-none"
+                    placeholder="예: 2"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => removeFeeItemDraft(index)}
+                  aria-label="강사비 항목 삭제"
+                  className="mb-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[#A89F94] transition-colors hover:bg-[#FBEDEA] hover:text-[#C0392B]"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={addFeeItemDraft}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-4 py-2.5 text-sm font-bold text-[#8B5E3C] transition-all hover:border-[#EBD9C1] hover:bg-[#FFF5E9]"
+            >
+              <Plus size={16} />
+              기관 · 단체 추가
+            </button>
           </div>
-          <div className="mt-4 flex items-center gap-2 rounded-2xl border border-[#E0EFE4] bg-[#F4FAF6] px-5 py-3">
-            <Coins size={18} className="shrink-0 text-[#2D7A4D]" />
+          <div className="mt-4 flex items-start gap-2 rounded-2xl border border-[#E0EFE4] bg-[#F4FAF6] px-5 py-3">
+            <Coins size={18} className="mt-0.5 shrink-0 text-[#2D7A4D]" />
             {draftPerSessionFee > 0 ? (
-              <p className="text-sm text-[#4A3728]">
-                회차(1회 수업)당 강사비{' '}
-                <span className="font-extrabold text-[#2D7A4D]">{formatWon(draftPerSessionFee)}</span>
-                <span className="text-[#8B7E74]">
-                  {' '}({formatWon(draftFeePerHour)} × {draftHoursPerSession || 1}시수)
-                </span>
-              </p>
+              <div className="text-sm text-[#4A3728]">
+                <p>
+                  회차(1회 수업)당 강사비{' '}
+                  <span className="font-extrabold text-[#2D7A4D]">{formatWon(draftPerSessionFee)}</span>
+                </p>
+                <p className="mt-0.5 text-xs text-[#8B7E74]">
+                  {draftFeeBreakdown
+                    .map(
+                      (item) =>
+                        `${item.organization || '기관 미지정'} ${formatWon(item.feePerHour)} × ${item.hoursPerSession}시수 = ${formatWon(item.fee)}`
+                    )
+                    .join('  +  ')}
+                </p>
+              </div>
             ) : (
               <p className="text-sm text-[#8B7E74]">시수 단가를 입력하면 회차당 강사비가 계산됩니다.</p>
             )}

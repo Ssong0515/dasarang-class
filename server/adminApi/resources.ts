@@ -71,6 +71,11 @@ export const RESOURCE_SPECS: Record<ResourceName, ResourceSpec> = {
         description: '클래스 특징/내용 (운영·강사용 내부 메모, 학생에게 노출 안 함). 수업 자동생성 등 내부 참고용.',
       },
       organization: { type: 'string', description: '기관/단체명 (예: "구로구청 / 디지털배움터")' },
+      feeItems: {
+        type: 'array',
+        description:
+          '강사비 항목 목록 [{organization?, feePerHour?, hoursPerSession?}]. 기관·단체마다 시수 단가(원)와 회차당 시수를 한 항목씩 두고, 회차 완료 시 항목 합이 적립된다. 있으면 레거시 feePerHour/hoursPerSession보다 우선.',
+      },
       isOpen: { type: 'boolean', description: 'UI에서 펼침 여부' },
       order: { type: 'number', description: '정렬 순서' },
       icon: { type: 'string', description: '아이콘 이름' },

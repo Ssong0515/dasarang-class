@@ -172,6 +172,19 @@ export interface ClassroomSessionState {
   hours?: number;
 }
 
+/**
+ * 강사비 항목 하나 — 어느 기관·단체에서 시수당 얼마가, 회차당 몇 시수 나오는지.
+ * 한 반의 강사비가 여러 곳에서 나올 수 있어 Classroom.feeItems에 배열로 둔다.
+ */
+export interface ClassroomFeeItem {
+  /** 지급 기관·단체명 (예: "구로구청") */
+  organization?: string;
+  /** 시수(1교시)당 단가(원) */
+  feePerHour?: number;
+  /** 회차(수업일)당 시수. 비우면 1로 본다. */
+  hoursPerSession?: number;
+}
+
 export interface Classroom {
   id: string;
   name: string;
@@ -204,11 +217,17 @@ export interface Classroom {
   /** 사이드바·홈에서 숨길지 여부 (삭제하지 않고 가리기) */
   hidden?: boolean;
   /**
-   * 시수(1교시)당 강사비 단가(원). 회차(수업일)를 '완료'로 표시하면
-   * `feePerHour × hoursPerSession`만큼 강사비가 적립된 것으로 집계한다.
+   * 강사비 항목 목록 (기관·단체별 단가·시수). 회차를 '완료'로 표시하면
+   * 항목별 `feePerHour × hoursPerSession`의 합만큼 적립된 것으로 집계한다.
+   * 있으면 아래 레거시 feePerHour/hoursPerSession보다 우선한다.
+   */
+  feeItems?: ClassroomFeeItem[];
+  /**
+   * [레거시] 시수(1교시)당 강사비 단가(원). feeItems가 없는 반의 폴백.
+   * 설정 저장 시 feeItems 첫 항목과 동기화해 옛 코드·스크립트도 계속 동작하게 한다.
    */
   feePerHour?: number;
-  /** 한 회차(수업일)당 시수. feePerHour와 곱해 회차당 강사비를 계산한다. 비우면 1로 본다. */
+  /** [레거시] 한 회차(수업일)당 시수. feeItems가 없는 반의 폴백. 비우면 1로 본다. */
   hoursPerSession?: number;
   /**
    * 이 반 이론 슬라이드·실습에 병기할 번역 언어 목록 (강사가 클래스 설정에서 직접 추가, 0개~여러 개).

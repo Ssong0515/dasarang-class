@@ -1,4 +1,4 @@
-import { Classroom, ClassroomSessionState, CurriculumSessionStatus } from '../types';
+import { Classroom, ClassroomFeeItem, ClassroomSessionState, CurriculumSessionStatus } from '../types';
 
 /**
  * 강사비(수업료) 집계 유틸.
@@ -6,18 +6,48 @@ import { Classroom, ClassroomSessionState, CurriculumSessionStatus } from '../ty
  * 핵심 모델: 강사비는 한 반의 회차(수업일)를 '완료(done)'로 표시할 때 적립된 것으로 본다.
  * 회차의 날짜·진행상태는 전부 반별 `Classroom.sessionStates[sessionId] = { date, status }`에 저장되므로,
  * 커리큘럼 원본 없이 sessionStates만으로 "언제 얼마를 벌었는지/벌 예정인지"를 계산할 수 있다.
+ *
+ * 강사비 출처는 여러 기관·단체일 수 있어 `Classroom.feeItems` 배열이 우선이고,
+ * 없으면 레거시 단일 필드(feePerHour/hoursPerSession)로 폴백한다.
  */
 
-/** 한 회차(수업일)당 강사비(원) = 시수 단가 × 회차당 시수. 단가가 없으면 0. */
-export const getPerSessionFee = (
-  classroom: Pick<Classroom, 'feePerHour' | 'hoursPerSession'>
-): number => {
-  const rate = Number(classroom.feePerHour);
-  if (!Number.isFinite(rate) || rate <= 0) return 0;
-  const hoursRaw = Number(classroom.hoursPerSession);
-  const hours = Number.isFinite(hoursRaw) && hoursRaw > 0 ? hoursRaw : 1;
-  return Math.round(rate * hours);
+type FeeSource = Pick<Classroom, 'feeItems' | 'feePerHour' | 'hoursPerSession'>;
+
+/** 단가가 채워진 항목만 남긴 정규화 결과. 계산·표시 양쪽에서 쓴다. */
+export interface NormalizedFeeItem {
+  organization: string;
+  feePerHour: number;
+  hoursPerSession: number;
+}
+
+const normalizeFeeItem = (item: ClassroomFeeItem): NormalizedFeeItem => {
+  const rate = Number(item.feePerHour);
+  const hours = Number(item.hoursPerSession);
+  return {
+    organization: (item.organization ?? '').trim(),
+    feePerHour: Number.isFinite(rate) && rate > 0 ? rate : 0,
+    hoursPerSession: Number.isFinite(hours) && hours > 0 ? hours : 1,
+  };
 };
+
+/**
+ * 계산에 쓸 강사비 항목 목록. feeItems에 단가가 있는 항목이 하나라도 있으면 그것만,
+ * 없으면 레거시 feePerHour/hoursPerSession을 한 항목으로 만들어 돌려준다. 단가 미설정 반은 빈 배열.
+ */
+export const getFeeItems = (classroom: FeeSource): NormalizedFeeItem[] => {
+  const items = (classroom.feeItems ?? [])
+    .map(normalizeFeeItem)
+    .filter((item) => item.feePerHour > 0);
+  if (items.length > 0) return items;
+  return normalizeFeeItem(classroom).feePerHour > 0 ? [normalizeFeeItem(classroom)] : [];
+};
+
+/** 한 회차(수업일)당 강사비(원) = Σ(항목별 시수 단가 × 회차당 시수). 단가가 없으면 0. */
+export const getPerSessionFee = (classroom: FeeSource): number =>
+  getFeeItems(classroom).reduce(
+    (sum, item) => sum + Math.round(item.feePerHour * item.hoursPerSession),
+    0
+  );
 
 /**
  * 한 회차의 실제 시수.
@@ -34,14 +64,24 @@ export const getSessionHours = (
   return Number.isFinite(base) && base > 0 ? base : 1;
 };
 
-/** 한 회차의 강사비(원) = 시수 단가 × 그 회차의 시수(회차별 덮어쓴 값 우선). 단가가 없으면 0. */
+/**
+ * 한 회차의 강사비(원) = Σ(항목별 시수 단가 × 그 회차의 시수). 단가가 없으면 0.
+ * 회차별 덮어쓴 시수(`state.hours`)가 있으면 모든 항목의 시수를 그 값으로 대체한다
+ * (오리엔테이션 1시수처럼 "그날 실제로 한 시수"의 의미라서).
+ */
 export const getSessionFee = (
-  classroom: Pick<Classroom, 'feePerHour' | 'hoursPerSession'>,
+  classroom: FeeSource,
   state?: Pick<ClassroomSessionState, 'hours'> | null
 ): number => {
-  const rate = Number(classroom.feePerHour);
-  if (!Number.isFinite(rate) || rate <= 0) return 0;
-  return Math.round(rate * getSessionHours(classroom, state));
+  const items = getFeeItems(classroom);
+  if (items.length === 0) return 0;
+  const override = Number(state?.hours);
+  const hasOverride = Number.isFinite(override) && override > 0;
+  return items.reduce(
+    (sum, item) =>
+      sum + Math.round(item.feePerHour * (hasOverride ? override : item.hoursPerSession)),
+    0
+  );
 };
 
 /**
@@ -121,7 +161,7 @@ const pad2 = (value: number): string => String(value).padStart(2, '0');
 
 type FeeClassroom = Pick<
   Classroom,
-  'id' | 'name' | 'color' | 'feePerHour' | 'hoursPerSession' | 'sessionStates'
+  'id' | 'name' | 'color' | 'feeItems' | 'feePerHour' | 'hoursPerSession' | 'sessionStates'
 >;
 
 /**

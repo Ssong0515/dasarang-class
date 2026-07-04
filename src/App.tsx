@@ -729,6 +729,16 @@ export default function App() {
           organization: typeof data.organization === 'string' ? data.organization : undefined,
           // 강사비(단가·시수)도 함께 읽어와야 설정 화면에 저장된 값이 다시 뜬다.
           // (빠뜨리면 DB엔 있어도 화면엔 undefined→빈칸이라 "저장 안 됨"처럼 보인다.)
+          feeItems: Array.isArray(data.feeItems)
+            ? data.feeItems
+                .filter((item) => Boolean(item) && typeof item === 'object')
+                .map((item) => ({
+                  organization: typeof item.organization === 'string' ? item.organization : undefined,
+                  feePerHour: typeof item.feePerHour === 'number' ? item.feePerHour : undefined,
+                  hoursPerSession:
+                    typeof item.hoursPerSession === 'number' ? item.hoursPerSession : undefined,
+                }))
+            : undefined,
           feePerHour: typeof data.feePerHour === 'number' ? data.feePerHour : undefined,
           hoursPerSession:
             typeof data.hoursPerSession === 'number' ? data.hoursPerSession : undefined,
