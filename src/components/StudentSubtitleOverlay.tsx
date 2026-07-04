@@ -111,8 +111,10 @@ export const StudentSubtitleOverlay: React.FC<StudentSubtitleOverlayProps> = ({ 
   }, [date]);
 
   // 상단 중앙에 띄운다 — 학생이 보는 실습 콘텐츠는 화면 중앙~하단이라 위쪽이 가장 덜 가린다.
+  // z-[120]: 학생 페이지 sticky 헤더(z-50)·화면 공유(z-105)·수업 종료 안내(z-110)보다 위 —
+  // 어떤 화면 상태에서도 자막이 가려지지 않는다. pointer-events-none이라 조작은 막지 않는다.
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-4 z-40 flex justify-center px-4">
+    <div className="pointer-events-none fixed inset-x-0 top-4 z-[120] flex justify-center px-4">
       <AnimatePresence>
         {visible && current && (
           <motion.div
@@ -121,7 +123,7 @@ export const StudentSubtitleOverlay: React.FC<StudentSubtitleOverlayProps> = ({ 
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
             transition={{ duration: 0.25 }}
-            className="max-w-3xl rounded-2xl bg-black/75 px-5 py-3 text-center text-base font-bold leading-snug text-white shadow-2xl sm:text-xl"
+            className="max-w-3xl rounded-2xl bg-black/90 px-5 py-3 text-center text-base font-bold leading-snug text-white shadow-2xl sm:text-xl"
             dir="auto"
           >
             {current.text}
