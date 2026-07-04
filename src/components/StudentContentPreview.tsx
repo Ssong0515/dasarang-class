@@ -264,71 +264,78 @@ const iframeTranslateScriptTag = `
       st.textContent =
         '#dsr-tr{position:fixed;top:10px;right:10px;z-index:2147483000;font-family:"Malgun Gothic","맑은 고딕",system-ui,sans-serif;text-align:right;}'
         + '#dsr-tr *{box-sizing:border-box;}'
-        + '#dsr-tr .dsr-row{display:inline-flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap;}'
-        + '#dsr-tr .dsr-btn{display:inline-flex;align-items:center;gap:6px;border:none;border-radius:999px;background:#3b6fe0;color:#fff;font-size:15px;font-weight:800;padding:9px 14px;cursor:pointer;box-shadow:0 4px 12px rgba(40,55,90,.25);}'
-        + '#dsr-tr .dsr-btn.ghost{background:#fff;color:#3b6fe0;border:2px solid #cfd9f5;box-shadow:0 3px 8px rgba(40,55,90,.12);}'
-        + '#dsr-tr .dsr-chip{background:#eafaf0;color:#1a7f47;border:2px solid #56cf8c;border-radius:999px;padding:7px 12px;font-size:14px;font-weight:800;}'
-        + '#dsr-tr .dsr-menu{margin-top:6px;background:#fff;border:2px solid #e4e8f2;border-radius:14px;box-shadow:0 12px 30px rgba(40,55,90,.18);padding:6px;max-height:60vh;overflow:auto;display:none;min-width:160px;text-align:left;}'
-        + '#dsr-tr .dsr-menu.open{display:block;}'
-        + '#dsr-tr .dsr-menu button{display:block;width:100%;text-align:left;border:none;background:none;font-size:15px;font-weight:700;color:#2f3445;padding:9px 12px;border-radius:9px;cursor:pointer;}'
-        + '#dsr-tr .dsr-menu button:hover{background:#eef2fb;}'
+        // 평소엔 지름 44px 원형 버튼 하나로 접혀 있어야 실습 콘텐츠(우상단 HUD 등)를 가리지 않는다.
+        + '#dsr-tr .dsr-fab{position:relative;width:44px;height:44px;border:none;border-radius:50%;background:#3b6fe0;color:#fff;font-size:21px;line-height:1;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 12px rgba(40,55,90,.25);opacity:.85;}'
+        + '#dsr-tr .dsr-fab:hover{opacity:1;}'
+        + '#dsr-tr .dsr-fab .dsr-dot{position:absolute;top:1px;right:1px;width:13px;height:13px;border-radius:50%;background:#2ecc71;border:2px solid #fff;}'
+        + '#dsr-tr .dsr-panel{margin-top:6px;background:#fff;border:2px solid #e4e8f2;border-radius:14px;box-shadow:0 12px 30px rgba(40,55,90,.18);padding:8px;max-height:60vh;overflow:auto;display:none;min-width:170px;text-align:left;}'
+        + '#dsr-tr .dsr-panel.open{display:block;}'
+        + '#dsr-tr .dsr-cur{display:block;background:#eafaf0;color:#1a7f47;border:2px solid #56cf8c;border-radius:10px;padding:6px 10px;font-size:13px;font-weight:800;margin-bottom:6px;text-align:center;}'
+        + '#dsr-tr .dsr-panel button{display:block;width:100%;text-align:left;border:none;background:none;font-size:15px;font-weight:700;color:#2f3445;padding:9px 12px;border-radius:9px;cursor:pointer;}'
+        + '#dsr-tr .dsr-panel button:hover{background:#eef2fb;}'
+        + '#dsr-tr .dsr-panel .dsr-off{color:#b42318;}'
         + '@media print{#dsr-tr{display:none!important;}}';
       document.head.appendChild(st);
       root = document.createElement('div');
       root.id = 'dsr-tr';
       root.setAttribute('data-dsr-skip', '1');
+      if (window.__DASA_REVIEW__) root.style.top = '46px'; // 교사 검토 화면의 ⏭ 건너뛰기 배지(우상단)와 겹침 방지
       document.body.appendChild(root);
     }
-    function buildMenu(container) {
-      LANGS.forEach(function (lang) {
-        var b = document.createElement('button');
-        b.textContent = lang;
-        b.onclick = function () { selectLang(lang); };
-        container.appendChild(b);
-      });
-      if (menuOpen) container.classList.add('open');
-    }
+    // 접힌 🌐 원형 버튼 + 눌렀을 때만 열리는 패널. 항상 펼쳐진 칩 줄은 실습 우상단 콘텐츠를 가렸다.
     function renderUI() {
       ensureRoot();
       root.innerHTML = '';
-      var row = document.createElement('div'); row.className = 'dsr-row';
-      var menu = document.createElement('div'); menu.className = 'dsr-menu';
-      if (!state.lang) {
-        var main = document.createElement('button');
-        main.className = 'dsr-btn';
-        main.textContent = '🌐 번역';
-        main.onclick = function () { menuOpen = !menuOpen; renderUI(); };
-        row.appendChild(main);
-      } else {
-        var chip = document.createElement('span');
-        chip.className = 'dsr-chip';
-        chip.textContent = '🌐 ' + state.lang;
-        row.appendChild(chip);
+      var fab = document.createElement('button');
+      fab.className = 'dsr-fab';
+      fab.title = state.lang ? '번역: ' + state.lang : '번역';
+      fab.textContent = '🌐';
+      if (state.lang && !state.showOriginal) {
+        var dot = document.createElement('span'); dot.className = 'dsr-dot'; fab.appendChild(dot);
+      }
+      fab.onclick = function () {
+        // 언어가 하나뿐이고 아직 안 켰으면 바로 그 언어로 번역 (한 번 덜 누르게)
+        if (!state.lang && LANGS.length === 1) { selectLang(LANGS[0]); return; }
+        menuOpen = !menuOpen; renderUI();
+      };
+      var panel = document.createElement('div');
+      panel.className = 'dsr-panel' + (menuOpen ? ' open' : '');
+      if (state.lang) {
+        var cur = document.createElement('span');
+        cur.className = 'dsr-cur';
+        cur.textContent = '🌐 ' + state.lang;
+        panel.appendChild(cur);
         var toggle = document.createElement('button');
-        toggle.className = 'dsr-btn ghost';
         toggle.textContent = state.showOriginal ? '번역 보기' : '원문 보기';
         toggle.onclick = toggleOriginal;
-        row.appendChild(toggle);
-        var langBtn = document.createElement('button');
-        langBtn.className = 'dsr-btn ghost';
-        langBtn.textContent = '언어';
-        langBtn.onclick = function () { menuOpen = !menuOpen; renderUI(); };
-        row.appendChild(langBtn);
-        var off = document.createElement('button');
-        off.className = 'dsr-btn ghost';
-        off.textContent = '✕';
-        off.onclick = turnOff;
-        row.appendChild(off);
+        panel.appendChild(toggle);
       }
-      buildMenu(menu);
-      root.appendChild(row);
-      root.appendChild(menu);
+      LANGS.forEach(function (lang) {
+        if (lang === state.lang) return;
+        var b = document.createElement('button');
+        b.textContent = lang;
+        b.onclick = function () { selectLang(lang); };
+        panel.appendChild(b);
+      });
+      if (state.lang) {
+        var off = document.createElement('button');
+        off.className = 'dsr-off';
+        off.textContent = '번역 끄기';
+        off.onclick = turnOff;
+        panel.appendChild(off);
+      }
+      root.appendChild(fab);
+      root.appendChild(panel);
     }
 
     var moTimer = null, inited = false;
     function init() {
       if (inited) return; inited = true;
       renderUI();
+      // 패널이 열린 채 실습을 조작하다 가려지지 않게, 바깥을 누르면 접는다.
+      document.addEventListener('click', function (e) {
+        if (menuOpen && root && !root.contains(e.target)) { menuOpen = false; renderUI(); }
+      }, true);
       try {
         var mo = new MutationObserver(function () {
           if (!state.lang || state.showOriginal) return;

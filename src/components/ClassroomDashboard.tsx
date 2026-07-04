@@ -47,6 +47,7 @@ import {
   Wallet,
   Coins,
   Languages,
+  ScanSearch,
 } from 'lucide-react';
 import {
   AssignCurriculumDatesResult,
@@ -1873,9 +1874,10 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 onClick={() => setPreviewContent(content)}
                 title={`${content.title} 미리보기`}
                 aria-label="미리보기"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[#E5E3DD] bg-white text-[#8B7E74] transition-all hover:border-[#8B5E3C] hover:text-[#8B5E3C]"
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-xl border border-[#E5E3DD] bg-white px-3 text-xs font-bold text-[#8B7E74] transition-all hover:border-[#8B5E3C] hover:text-[#8B5E3C]"
               >
-                <Eye size={14} />
+                <ScanSearch size={14} />
+                미리보기
               </button>
               {showPracticeSection && (
                 <button
@@ -2677,9 +2679,10 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                                       onClick={() => setPreviewContent(content)}
                                       title={`${content.title} 미리보기`}
                                       aria-label="미리보기"
-                                      className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[#E5E3DD] bg-white text-[#8B7E74] transition-all hover:border-[#8B5E3C] hover:text-[#8B5E3C]"
+                                      className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-xl border border-[#E5E3DD] bg-white px-3 text-xs font-bold text-[#8B7E74] transition-all hover:border-[#8B5E3C] hover:text-[#8B5E3C]"
                                     >
-                                      <Eye size={14} />
+                                      <ScanSearch size={14} />
+                                      미리보기
                                     </button>
                                     {onStartScreenShare && onStopScreenShare && (
                                       <button
