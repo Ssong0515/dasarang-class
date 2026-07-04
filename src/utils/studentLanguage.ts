@@ -5,7 +5,8 @@ import { VOICE_LANG_OPTIONS } from '../components/StudentVoiceButton';
 
 // 각 iso별 한국어 표기 변형 + 자기 문자/영문 표기. 정규화(소문자·공백제거)한 학생 언어 문자열에
 // 아래 키워드가 하나라도 포함되면 그 iso로 본다. (자유 입력이라 표기 흔들림을 넉넉히 커버)
-const LANGUAGE_ALIASES: { iso: string; keywords: string[] }[] = [
+// 실습 iframe의 번역 사전(window.__DSR_TR__) 언어명을 iso와 잇는 데도 같은 데이터를 쓴다(StudentContentPreview).
+export const LANGUAGE_ALIASES: { iso: string; keywords: string[] }[] = [
   { iso: 'ru', keywords: ['러시아', 'russian', 'русск'] },
   { iso: 'zh', keywords: ['중국', '중문', 'chinese', 'mandarin', '中文', '汉语', '漢語'] },
   { iso: 'vi', keywords: ['베트남', 'vietnam', 'việt', 'tiếngviệt'] },

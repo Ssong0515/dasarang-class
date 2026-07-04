@@ -42,6 +42,9 @@ const HOLD_HINTS: Record<string, string> = {
 const holdHintFor = (iso: string): string => HOLD_HINTS[iso] ?? HOLD_HINTS.en;
 
 const VOICE_LANG_STORAGE_KEY = 'dsr_voice_lang';
+// 같은 탭의 다른 기능(실습 병기 번역 등)이 언어 변경을 즉시 따라가도록 쏘는 커스텀 이벤트.
+// storage 이벤트는 다른 탭에서만 발생하므로 같은 탭 전파는 이 이벤트로 한다. detail: { iso }.
+export const VOICE_LANG_CHANGED_EVENT = 'dsr-voice-lang-changed';
 // 학생 언어 세션 TTL(180분). 교사 방송(TeacherBroadcastButton)의 최대 자동 정지 시간과 같은 값을 써야 하므로
 // 상수를 이중으로 정의하지 않고 여기서 export해 공유한다.
 export const LANG_MAX_AGE_MS = 3 * 60 * 60 * 1000; // 3시간
@@ -241,6 +244,12 @@ export const StudentVoiceButton: React.FC<StudentVoiceButtonProps> = ({
     });
     setLang(option);
     setIsPickerOpen(false);
+    // 실습 병기 번역(StudentContentPreview iframe)이 이미 떠 있어도 바로 이 언어로 따라가게 알린다.
+    try {
+      window.dispatchEvent(new CustomEvent(VOICE_LANG_CHANGED_EVENT, { detail: { iso: option.iso } }));
+    } catch {
+      /* 무시 */
+    }
     void warmUpMic(); // 언어 고른 김에 마이크 권한 미리 확보 → 첫 녹음이 안 끊김
   };
 
