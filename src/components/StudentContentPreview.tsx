@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ChevronDown, FileText, Maximize2, Minimize2, Presentation } from 'lucide-react';
 import { LessonContent } from '../types';
+import { LANGUAGE_ALIASES } from '../utils/studentLanguage';
+import { VOICE_LANG_CHANGED_EVENT } from './StudentVoiceButton';
 
 const toSlideEmbedUrl = (url: string): string => {
   const trimmed = url.trim();
@@ -190,6 +192,8 @@ const iframeHeightScriptTag = `
 // 실습 iframe 안에 떠 있는 🌐 번역 버튼. 크롬 페이지 번역은 샌드박스 iframe 내부를 번역하지 않으므로
 // (크로뮴 41090662, wontfix), 실습 HTML 자체에 번역 사전을 심어 두고(루틴이 생성 시 주입) 버튼으로 치환한다.
 // 사전 규약: window.__DSR_TR__ = { "러시아어": { "원문": "번역", ... }, "영어": {...} }. 사전이 없으면 버튼을 띄우지 않는다.
+// 학생이 음성 버튼(StudentVoiceButton)에서 고른 언어(localStorage 'dsr_voice_lang')가 사전에 있으면
+// 그 언어로 자동으로 켜지고, 수업 중 언어를 바꾸면 부모가 postMessage({type:'dsr-voice-lang', iso})로 알려 따라간다.
 const iframeTranslateScriptTag = `
   <script>
   (function () {
@@ -199,6 +203,34 @@ const iframeTranslateScriptTag = `
     if (!TR || typeof TR !== 'object') return;        // 사전이 없으면(옛 콘텐츠 등) 번역 버튼 자체를 띄우지 않는다
     var LANGS = Object.keys(TR).filter(function (k) { return TR[k] && typeof TR[k] === 'object'; });
     if (LANGS.length === 0) return;
+
+    // iso(음성 버튼의 언어 코드) → 사전 언어명 매핑. 사전 키는 자유 표기라("러시아어"/"Russian" 등)
+    // studentLanguage.ts와 같은 별칭 데이터로 느슨하게 잇는다(빌드 시 주입).
+    var ALIASES = ${JSON.stringify(LANGUAGE_ALIASES)};
+    function langKeyForIso(iso) {
+      if (!iso || typeof iso !== 'string') return null;
+      var keywords = null;
+      for (var i = 0; i < ALIASES.length; i++) {
+        if (ALIASES[i].iso === iso) { keywords = ALIASES[i].keywords; break; }
+      }
+      if (!keywords) return null;
+      for (var j = 0; j < LANGS.length; j++) {
+        var norm = LANGS[j].toLowerCase().replace(/\\s+/g, '');
+        for (var k = 0; k < keywords.length; k++) {
+          if (norm.indexOf(keywords[k]) !== -1) return LANGS[j];
+        }
+      }
+      return null;
+    }
+    // 학생이 음성 버튼에서 고른 언어. srcdoc iframe이 allow-same-origin이라 부모와 localStorage를 공유한다.
+    function readVoiceIso() {
+      try {
+        var raw = window.localStorage.getItem('dsr_voice_lang');
+        if (!raw) return null;
+        var parsed = JSON.parse(raw);
+        return parsed && typeof parsed.iso === 'string' && parsed.iso ? parsed.iso : null;
+      } catch (e) { return null; }
+    }
 
     var KO = /[\\uAC00-\\uD7A3]/;       // 한글이 든 텍스트만 번역
     var originals = [];                  // 번역으로 바뀐 텍스트 노드 모음(원문 복원용)
@@ -332,6 +364,18 @@ const iframeTranslateScriptTag = `
     function init() {
       if (inited) return; inited = true;
       renderUI();
+      // 학생이 이미 고른 언어가 사전에 있으면 자동으로 그 언어로 켠다.
+      // 교사 검토 화면(__DASA_REVIEW__)에서는 교사가 원문을 봐야 하므로 자동으로 켜지 않는다(수동 🌐 버튼은 그대로).
+      if (!window.__DASA_REVIEW__) {
+        var autoKey = langKeyForIso(readVoiceIso());
+        if (autoKey && !state.lang) selectLang(autoKey);
+      }
+      // 실습이 떠 있는 동안 학생이 언어를 바꾸면 부모(StudentContentPreviewFrame)가 알려준다 → 즉시 따라간다.
+      window.addEventListener('message', function (e) {
+        if (!e.data || e.data.type !== 'dsr-voice-lang') return;
+        var key = langKeyForIso(e.data.iso);
+        if (key && key !== state.lang) selectLang(key);
+      });
       // 패널이 열린 채 실습을 조작하다 가려지지 않게, 바깥을 누르면 접는다.
       document.addEventListener('click', function (e) {
         if (menuOpen && root && !root.contains(e.target)) { menuOpen = false; renderUI(); }
@@ -497,6 +541,18 @@ export const StudentContentPreviewFrame: React.FC<StudentContentPreviewFrameProp
   useEffect(() => {
     setSkipAvailable(false);
   }, [srcDoc]);
+
+  // 학생이 음성 버튼에서 언어를 바꾸면 iframe 안 번역 스크립트에 전달해 실습 병기 번역도 같은 언어로 맞춘다.
+  // (iframe 로드 시점의 초기 언어는 스크립트가 localStorage에서 직접 읽는다 — 여기는 '변경'만 중계.)
+  useEffect(() => {
+    const handleVoiceLangChanged = (event: Event) => {
+      const iso = (event as CustomEvent<{ iso?: unknown }>).detail?.iso;
+      if (typeof iso !== 'string' || !iso) return;
+      iframeRef.current?.contentWindow?.postMessage({ type: 'dsr-voice-lang', iso }, '*');
+    };
+    window.addEventListener(VOICE_LANG_CHANGED_EVENT, handleVoiceLangChanged);
+    return () => window.removeEventListener(VOICE_LANG_CHANGED_EVENT, handleVoiceLangChanged);
+  }, []);
 
   const iframeElement = (
     <iframe

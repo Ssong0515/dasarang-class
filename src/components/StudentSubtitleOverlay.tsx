@@ -32,14 +32,24 @@ const readStoredIso = (): string | null => {
   }
 };
 
-// 이 학생에게 보여줄 자막 텍스트: 자기 언어 번역이 있으면 그걸, 없으면(언어 미선택·이 메시지에 내 언어 없음) 한국어 원문으로 폴백.
-const pickSubtitle = (message: TeacherBroadcastMessage): string | null => {
+// 이 학생에게 보여줄 자막. 자기 언어 번역이 있으면 번역(primary) + 한국어 원문(korean)을 병기한다 —
+// 한국어 노출이 곧 학습이라 원문을 숨기지 않는다. 번역이 없거나(언어 미선택·이 메시지에 내 언어 없음)
+// 번역이 원문과 같으면(번역 실패 폴백) 한국어만 한 줄로 보여준다.
+interface SubtitleText {
+  primary: string;
+  korean: string | null; // primary가 번역일 때만 채워지는 한국어 원문 병기 줄
+}
+
+const pickSubtitle = (message: TeacherBroadcastMessage): SubtitleText | null => {
+  const korean = message.koreanText?.trim() ?? '';
   const iso = readStoredIso();
-  if (iso) {
-    const translated = message.translations?.[iso];
-    if (typeof translated === 'string' && translated.trim()) return translated.trim();
+  const translated = iso ? message.translations?.[iso] : undefined;
+  const translatedText = typeof translated === 'string' ? translated.trim() : '';
+
+  if (translatedText && translatedText !== korean) {
+    return { primary: translatedText, korean: korean || null };
   }
-  return message.koreanText?.trim() ? message.koreanText.trim() : null;
+  return korean ? { primary: korean, korean: null } : null;
 };
 
 const normalizeBroadcastDoc = (id: string, data: Partial<TeacherBroadcastMessage>): TeacherBroadcastMessage => ({
@@ -60,7 +70,7 @@ export interface StudentSubtitleOverlayProps {
 }
 
 export const StudentSubtitleOverlay: React.FC<StudentSubtitleOverlayProps> = ({ date }) => {
-  const [current, setCurrent] = useState<{ id: string; text: string } | null>(null);
+  const [current, setCurrent] = useState<({ id: string } & SubtitleText) | null>(null);
   const [visible, setVisible] = useState(false);
   const lastSeenIdRef = useRef<string | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -92,13 +102,17 @@ export const StudentSubtitleOverlay: React.FC<StudentSubtitleOverlayProps> = ({ 
         const ageMs = Date.now() - new Date(newest.createdAt).getTime();
         if (!Number.isFinite(ageMs) || ageMs > SUBTITLE_FRESH_WINDOW_MS) return;
 
-        const text = pickSubtitle(newest);
-        if (!text) return;
+        const subtitle = pickSubtitle(newest);
+        if (!subtitle) return;
 
-        setCurrent({ id: newest.id, text });
+        setCurrent({ id: newest.id, ...subtitle });
         setVisible(true);
         if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-        hideTimerRef.current = setTimeout(() => setVisible(false), subtitleDurationMs(text));
+        // 병기 시 한국어 원문까지 읽을 시간을 주기 위해 두 줄 길이를 합쳐 계산한다.
+        hideTimerRef.current = setTimeout(
+          () => setVisible(false),
+          subtitleDurationMs(subtitle.primary + (subtitle.korean ?? ''))
+        );
       },
       (error) =>
         handleFirestoreError(error, OperationType.LIST, TEACHER_BROADCAST_MESSAGES_COLLECTION)
@@ -123,10 +137,19 @@ export const StudentSubtitleOverlay: React.FC<StudentSubtitleOverlayProps> = ({ 
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
             transition={{ duration: 0.25 }}
-            className="max-w-3xl rounded-2xl bg-black/90 px-5 py-3 text-center text-base font-bold leading-snug text-white shadow-2xl sm:text-xl"
-            dir="auto"
+            className="max-w-3xl rounded-2xl bg-black/90 px-5 py-3 text-center leading-snug text-white shadow-2xl"
           >
-            {current.text}
+            <p className="text-base font-bold sm:text-xl" dir="auto">
+              {current.primary}
+            </p>
+            {current.korean && (
+              <p
+                lang="ko"
+                className="mt-1.5 border-t border-white/25 pt-1.5 text-sm font-medium text-white/85 sm:text-base"
+              >
+                🇰🇷 {current.korean}
+              </p>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
