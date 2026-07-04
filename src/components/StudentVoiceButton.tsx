@@ -22,6 +22,11 @@ export const VOICE_LANG_OPTIONS: VoiceLangOption[] = [
   { label: 'English', stt: 'en-US', iso: 'en' },
 ];
 
+// '한국어(번역 없음)' 선택지 — 외국어를 골랐다가 되돌리고 싶은 학생용. VOICE_LANG_OPTIONS에 넣지 않는 이유:
+// 그 배열은 교사 방송 번역 대상·학생 언어 매핑의 단일 출처라 한국어가 섞이면 안 된다.
+// 이 모드에선 번역 자막·마이크 없이 조용한 언어 버튼만 남는다(자막 오버레이는 iso 'ko' 번역이 없어 한국어 원문 폴백).
+export const KOREAN_LANG_OPTION: VoiceLangOption = { label: '한국어', stt: 'ko-KR', iso: 'ko' };
+
 // ── 푸시투토크 안전장치 상수 ─────────────────────────────────────────────────
 // 이보다 짧게 누르면 '누른 채 말하기'를 모르는 것으로 보고 사용법 힌트를 띄운다.
 const MIN_HOLD_MS = 600;
@@ -245,12 +250,16 @@ export const StudentVoiceButton: React.FC<StudentVoiceButtonProps> = ({
     setLang(option);
     setIsPickerOpen(false);
     // 실습 병기 번역(StudentContentPreview iframe)이 이미 떠 있어도 바로 이 언어로 따라가게 알린다.
+    // (한국어 되돌리기 포함 — iso 'ko'를 알려 병기 번역을 끄게 한다.)
     try {
       window.dispatchEvent(new CustomEvent(VOICE_LANG_CHANGED_EVENT, { detail: { iso: option.iso } }));
     } catch {
       /* 무시 */
     }
-    void warmUpMic(); // 언어 고른 김에 마이크 권한 미리 확보 → 첫 녹음이 안 끊김
+    // 한국어(번역 없음) 모드는 마이크를 안 쓰므로 권한 프롬프트를 띄우지 않는다.
+    if (option.iso !== KOREAN_LANG_OPTION.iso) {
+      void warmUpMic(); // 언어 고른 김에 마이크 권한 미리 확보 → 첫 녹음이 안 끊김
+    }
   };
 
   const finishAndSend = useCallback(async () => {
@@ -462,6 +471,26 @@ export const StudentVoiceButton: React.FC<StudentVoiceButtonProps> = ({
     );
   }
 
+  // ── 렌더: 한국어(번역 없음) 모드 — 강조·마이크 없이 조용한 언어 칩만 남긴다 ────
+  // 외국어를 골랐다가 되돌린 학생이 다시 '언어 고르라'는 강조 애니메이션에 시달리지 않게,
+  // 미선택 상태로 돌리지 않고 '한국어 선택됨'을 저장해 둔다(TTL·수업 종료 리셋은 다른 언어와 동일).
+  if (lang.iso === KOREAN_LANG_OPTION.iso) {
+    return (
+      <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2">
+        {isPickerOpen && <LangPicker onChoose={chooseLang} onClose={() => setIsPickerOpen(false)} />}
+        <button
+          type="button"
+          onClick={() => setIsPickerOpen((open) => !open)}
+          aria-label="언어 선택 · Choose language"
+          className="flex items-center gap-1.5 rounded-full bg-white px-3 py-2 text-xs font-bold text-[#8B5E3C] shadow-lg ring-1 ring-[#EADBC8] transition-transform hover:scale-105"
+        >
+          <Globe className="h-4 w-4" />
+          한국어
+        </button>
+      </div>
+    );
+  }
+
   // ── 렌더: 마이크 모드 (누르고 있는 동안 녹음) ──────────────────────────────
   // 버블은 인식된 텍스트를 그대로 보여준다(말하는 중 + 뗀 뒤 ~1.2초). 전송 확인은 버튼 초록 ✓로.
   const bubbleText = interimText;
@@ -570,6 +599,14 @@ const LangPicker: React.FC<{
           {option.label}
         </button>
       ))}
+      {/* 되돌리기용 한국어 — 외국어를 잘못 골랐던 학생이 번역·자막을 끄는 선택지 */}
+      <button
+        type="button"
+        onClick={() => onChoose(KOREAN_LANG_OPTION)}
+        className="col-span-2 rounded-xl bg-white px-3 py-2 text-sm font-semibold text-[#8B7E74] ring-1 ring-[#EADBC8] transition-colors hover:bg-[#F9F7F3]"
+      >
+        한국어 · 번역 없음
+      </button>
     </div>
   </div>
 );
