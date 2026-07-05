@@ -1877,6 +1877,18 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
         (effectiveTheoryPrompts.length > 0 && recordedPracticeContents.length === 0));
 
     // 그룹 모드 실습 행 — 실습 컨트롤(미리보기·공개)만. 이론 컨트롤은 그룹 헤더가 담당한다.
+    // 참고 예시(kind:reference) 배지 — 실습 행이 여러 레이아웃(인터리브/평면)에서 렌더되므로 한 곳에서 만든다.
+    const renderKindBadge = (content: LessonContent) =>
+      content.kind === 'reference' ? (
+        <span
+          className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#FFF1DC] px-2 py-0.5 text-[10px] font-bold text-[#8B5E3C]"
+          title="참고 예시 문서 — 학생이 외부 도구(구글 문서 등)에서 보고 따라 만드는 자료"
+        >
+          <FileText size={11} />
+          예시
+        </span>
+      ) : null;
+
     const renderGroupedPracticeRow = (content: LessonContent) => {
       const isPublished = publishedContentIdSet.has(content.id);
       return (
@@ -1897,15 +1909,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                   <Lock size={16} className="shrink-0 text-[#8B7E74]" />
                 ))}
               <span className="truncate text-sm font-bold text-[#4A3728]">{content.title}</span>
-              {content.kind === 'reference' && (
-                <span
-                  className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#FFF1DC] px-2 py-0.5 text-[10px] font-bold text-[#8B5E3C]"
-                  title="참고 예시 문서 — 학생이 외부 도구(구글 문서 등)에서 보고 따라 만드는 자료"
-                >
-                  <FileText size={11} />
-                  예시
-                </span>
-              )}
+              {renderKindBadge(content)}
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
               <button
@@ -2626,6 +2630,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                                 <span className="truncate text-sm font-bold text-[#4A3728]">
                                   {content.title}
                                 </span>
+                                {renderKindBadge(content)}
                               </div>
                               <div className="flex shrink-0 items-center gap-1.5">
                                 {showRowTheory && (
