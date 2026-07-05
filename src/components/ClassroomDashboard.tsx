@@ -1877,17 +1877,43 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
         (effectiveTheoryPrompts.length > 0 && recordedPracticeContents.length === 0));
 
     // 그룹 모드 실습 행 — 실습 컨트롤(미리보기·공개)만. 이론 컨트롤은 그룹 헤더가 담당한다.
-    // 참고 예시(kind:reference) 배지 — 실습 행이 여러 레이아웃(인터리브/평면)에서 렌더되므로 한 곳에서 만든다.
-    const renderKindBadge = (content: LessonContent) =>
-      content.kind === 'reference' ? (
-        <span
-          className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#FFF1DC] px-2 py-0.5 text-[10px] font-bold text-[#8B5E3C]"
-          title="참고 예시 문서 — 학생이 외부 도구(구글 문서 등)에서 보고 따라 만드는 자료"
-        >
-          <FileText size={11} />
-          예시
+    // 공개/잠그기 버튼 — 참고 예시(kind:reference)면 버튼 우상단 모서리에 아이콘 마커를 얹는다.
+    // 실습 행이 여러 레이아웃(인터리브/평면)에서 렌더되므로 한 곳에서 만든다.
+    const renderPublishButton = (content: LessonContent) => {
+      const isPublished = publishedContentIdSet.has(content.id);
+      return (
+        <span className="relative inline-flex shrink-0">
+          <button
+            onClick={() => handleTogglePublishContent(content)}
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+              isPublished
+                ? 'bg-[#FDECEC] text-[#B42318] hover:bg-[#FAD4D1]'
+                : 'bg-[#8B5E3C] text-white hover:bg-[#724D31]'
+            }`}
+          >
+            {isPublished ? (
+              <>
+                <EyeOff size={14} />
+                잠그기
+              </>
+            ) : (
+              <>
+                <Eye size={14} />
+                공개
+              </>
+            )}
+          </button>
+          {content.kind === 'reference' && (
+            <span
+              className="pointer-events-none absolute -right-1.5 -top-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-[#FFF1DC] text-[#8B5E3C] ring-2 ring-white"
+              title="참고 예시 문서 — 학생이 외부 도구(구글 문서 등)에서 보고 따라 만드는 자료"
+            >
+              <FileText size={10} />
+            </span>
+          )}
         </span>
-      ) : null;
+      );
+    };
 
     const renderGroupedPracticeRow = (content: LessonContent) => {
       const isPublished = publishedContentIdSet.has(content.id);
@@ -1909,7 +1935,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                   <Lock size={16} className="shrink-0 text-[#8B7E74]" />
                 ))}
               <span className="truncate text-sm font-bold text-[#4A3728]">{content.title}</span>
-              {renderKindBadge(content)}
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
               <button
@@ -1922,28 +1947,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 <ScanSearch size={14} />
                 미리보기
               </button>
-              {showPracticeSection && (
-                <button
-                  onClick={() => handleTogglePublishContent(content)}
-                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
-                    isPublished
-                      ? 'bg-[#FDECEC] text-[#B42318] hover:bg-[#FAD4D1]'
-                      : 'bg-[#8B5E3C] text-white hover:bg-[#724D31]'
-                  }`}
-                >
-                  {isPublished ? (
-                    <>
-                      <EyeOff size={14} />
-                      잠그기
-                    </>
-                  ) : (
-                    <>
-                      <Eye size={14} />
-                      공개
-                    </>
-                  )}
-                </button>
-              )}
+              {showPracticeSection && renderPublishButton(content)}
             </div>
           </div>
         </div>
@@ -2630,7 +2634,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                                 <span className="truncate text-sm font-bold text-[#4A3728]">
                                   {content.title}
                                 </span>
-                                {renderKindBadge(content)}
                               </div>
                               <div className="flex shrink-0 items-center gap-1.5">
                                 {showRowTheory && (
@@ -2734,26 +2737,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                                       <ScanSearch size={14} />
                                       미리보기
                                     </button>
-                                    <button
-                                      onClick={() => handleTogglePublishContent(content)}
-                                      className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
-                                        isPublished
-                                          ? 'bg-[#FDECEC] text-[#B42318] hover:bg-[#FAD4D1]'
-                                          : 'bg-[#8B5E3C] text-white hover:bg-[#724D31]'
-                                      }`}
-                                    >
-                                      {isPublished ? (
-                                        <>
-                                          <EyeOff size={14} />
-                                          잠그기
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Eye size={14} />
-                                          공개
-                                        </>
-                                      )}
-                                    </button>
+                                    {renderPublishButton(content)}
                                   </>
                                 )}
                               </div>
