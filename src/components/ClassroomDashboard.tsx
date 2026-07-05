@@ -1989,10 +1989,16 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       groupCtx?: { promptIndex: number; index: number; count: number }
     ) => {
       const isPublished = publishedContentIdSet.has(content.id);
-      // 담기 대상 이론이 있고 이 실습이 아직 그 이론에 안 묶였으면 '담기'(이동) 버튼을 보인다.
+      // 편집(수정) 모드 관련: 지금 수정 중인 이론이 이 행이 속한 그룹인지 / 어떤 이론이든 수정 중인지.
+      const isEditing = activePromptIndex !== null;
+      const rowInEditingGroup = Boolean(groupCtx) && groupCtx!.promptIndex === activePromptIndex;
+      // 담기 대상(수정 중) 이론이 있고 이 실습이 아직 그 이론에 안 묶였으면 '담기'(이동) 버튼을 보인다.
       const canBindToActive =
-        activePromptIndex !== null &&
+        isEditing &&
         !(effectiveTheoryPrompts[activePromptIndex]?.contentIds ?? []).includes(content.id);
+      // 순서 변경(↑↓)은 수정 중인 그 이론의 실습에만, 제거(X)는 수정 중인 이론 실습 또는 미묶음 실습에.
+      const showReorder = rowInEditingGroup && Boolean(groupCtx) && groupCtx!.count > 1;
+      const showRemove = isEditing && (rowInEditingGroup || !groupCtx);
       return (
         <div
           key={content.id}
@@ -2013,7 +2019,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               <span className="truncate text-sm font-bold text-[#4A3728]">{content.title}</span>
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
-              {groupCtx && groupCtx.count > 1 && (
+              {showReorder && groupCtx && (
                 <span className="mr-0.5 inline-flex overflow-hidden rounded-lg border border-[#E5E3DD]">
                   <button
                     type="button"
@@ -2060,15 +2066,17 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 미리보기
               </button>
               {showPracticeSection && renderPublishButton(content)}
-              <button
-                type="button"
-                onClick={() => handleToggleDateRecordContent(content)}
-                title="수업기록에서 빼기"
-                aria-label={`${content.title} 수업기록에서 빼기`}
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[#E5E3DD] bg-white text-[#B7AFA4] transition-all hover:border-[#D9534F] hover:text-[#D9534F]"
-              >
-                <X size={15} />
-              </button>
+              {showRemove && (
+                <button
+                  type="button"
+                  onClick={() => handleToggleDateRecordContent(content)}
+                  title="수업기록에서 빼기"
+                  aria-label={`${content.title} 수업기록에서 빼기`}
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[#E5E3DD] bg-white text-[#B7AFA4] transition-all hover:border-[#D9534F] hover:text-[#D9534F]"
+                >
+                  <X size={15} />
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -2593,18 +2601,18 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                                     }
                                     title={
                                       isActiveTarget
-                                        ? '담기 끝내기 — 다른 이론에 담으려면 그 이론에서 누르세요'
-                                        : '여기에 담기 — 지금부터 아래 「수업 콘텐츠 선택」에서 고르는 실습이 이 이론에 순서대로 묶입니다'
+                                        ? '수정 완료 — 순서 변경·제거 버튼을 숨깁니다'
+                                        : '수정 — 이 이론에 실습을 담고, 순서 변경·제거 버튼을 켭니다'
                                     }
-                                    aria-label={isActiveTarget ? '담기 끝내기' : '이 이론에 담기'}
+                                    aria-label={isActiveTarget ? '수정 완료' : '이 이론 수정'}
                                     className={`inline-flex h-8 shrink-0 items-center gap-1 rounded-xl px-2.5 text-xs font-bold transition-all ${
                                       isActiveTarget
                                         ? 'bg-[#8B5E3C] text-white hover:bg-[#724D31]'
                                         : 'border border-[#E5E3DD] bg-white text-[#8B7E74] hover:border-[#8B5E3C] hover:text-[#8B5E3C]'
                                     }`}
                                   >
-                                    {isActiveTarget ? <Check size={14} /> : <Plus size={14} />}
-                                    {isActiveTarget ? '담는 중' : '담기'}
+                                    {isActiveTarget ? <Check size={14} /> : <Edit3 size={14} />}
+                                    {isActiveTarget ? '완료' : '수정'}
                                   </button>
                                 )}
                                 <button
@@ -3007,21 +3015,21 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                   <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-[#8B5E3C] bg-[#FFF7EE] px-4 py-2.5 text-sm">
                     <span className="font-bold text-[#8B5E3C]">
                       「{effectiveTheoryPrompts[activePromptIndex].label?.trim() ||
-                        `${activePromptIndex + 1}번째 이론수업`}」에 담는 중
+                        `${activePromptIndex + 1}번째 이론수업`}」 수정 중
                     </span>
-                    <span className="text-xs text-[#8B7E74]">— 실습을 누르면 이 이론에 순서대로 묶여요</span>
+                    <span className="text-xs text-[#8B7E74]">— 실습을 누르면 이 이론에 순서대로 담겨요</span>
                     <button
                       type="button"
                       onClick={() => setActivePromptIndex(null)}
                       className="ml-auto inline-flex items-center gap-1 rounded-full bg-white px-3 py-1 text-xs font-bold text-[#8B7E74] transition-all hover:text-[#8B5E3C]"
                     >
-                      <X size={12} />
-                      담기 해제
+                      <Check size={12} />
+                      완료
                     </button>
                   </div>
                 ) : effectiveTheoryPrompts.length > 0 ? (
                   <p className="mb-4 rounded-2xl border border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-4 py-2.5 text-xs text-[#8B7E74]">
-                    어느 이론에도 안 묶고 개별 실습으로 담는 중이에요. 위 이론의 <b className="text-[#8B5E3C]">담기</b> 버튼을 누르면, 이후 고르는 실습이 그 이론에 순서대로 묶여요.
+                    이론 헤더의 <b className="text-[#8B5E3C]">수정</b> 버튼을 누르면, 그 이론에 실습을 담고 순서 변경·제거를 할 수 있어요.
                   </p>
                 ) : null}
                 {assignedContents.length > 0 ? (
