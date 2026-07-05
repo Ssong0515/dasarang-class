@@ -1267,7 +1267,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       .map((id) => recordedPracticeContents.find((content) => content.id === id))
       .filter((content): content is LessonContent => Boolean(content)),
   }));
-  const hasTheoryGrouping = theoryGroups.some((group) => group.contents.length > 0);
   const groupedContentIdSet = new Set(
     theoryGroups.flatMap((group) => group.contents.map((content) => content.id))
   );
@@ -1343,6 +1342,27 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     const reordered = [...effectiveTheorySlides];
     [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
     onSaveDateRecord({ ...base, theorySlideUrl: '', theorySlides: reordered });
+  };
+
+  // 이미 수업기록에 있는 실습을 '담기 대상' 이론으로 옮긴다(다른 이론에 묶여 있었으면 거기선 빠짐 — 한 실습은 한 이론에만).
+  const handleBindPracticeToActivePrompt = (content: LessonContent) => {
+    if (activePromptIndex === null || !currentDateRecord) return;
+    const prompts = currentDateRecord.theoryPrompts ?? [];
+    if (!prompts[activePromptIndex]) return;
+    onSaveDateRecord({
+      ...currentDateRecord,
+      theoryPrompts: prompts.map((prompt, idx) =>
+        idx === activePromptIndex
+          ? {
+              ...prompt,
+              contentIds: [
+                ...(prompt.contentIds ?? []).filter((id) => id !== content.id),
+                content.id,
+              ],
+            }
+          : { ...prompt, contentIds: (prompt.contentIds ?? []).filter((id) => id !== content.id) }
+      ),
+    });
   };
 
   // 한 이론에 묶인 실습들의 순서를 위/아래로 바꾼다(그 이론의 contentIds 안에서만).
@@ -1920,14 +1940,10 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     const theorySlidesVisible = showTheorySection && recordedSlideContents.length > 0;
     const contentListVisible =
       (showTheorySection || showPracticeSection) && recordedPracticeContents.length > 0;
-    // 인터리브 그룹 모드: 프롬프트에 실습 매핑(contentIds)이 있고 이론 영역이 켜진 반에서만.
-    // (이론을 끈 반은 그룹 헤더가 의미 없으니 기존 평면 목록으로 폴백)
-    // ★ 이론만 날짜(실습 콘텐츠 0개)도 그룹 모드로 — 프롬프트가 실습 행 없이는 안 보이던 버그 방지.
-    //   실습이 있는데 매핑이 없는 구버전 기록은 기존 평면 목록(index 1:1)을 유지한다.
-    const useGroupedLayout =
-      showTheorySection &&
-      ((contentListVisible && hasTheoryGrouping) ||
-        (effectiveTheoryPrompts.length > 0 && recordedPracticeContents.length === 0));
+    // 인터리브 그룹 모드: 이론 영역이 켜져 있고 이론 프롬프트가 하나라도 있으면 항상 그룹 레이아웃.
+    // (매핑이 아직 없어도 그룹 헤더를 띄워야 강사가 '담기'로 실습을 이론에 묶을 수 있다 — 닭·달걀 방지.
+    //  아직 안 묶인 실습은 '이론과 묶이지 않은 실습' 영역에 나오고, 거기서 담기 대상 이론으로 옮긴다.)
+    const useGroupedLayout = showTheorySection && effectiveTheoryPrompts.length > 0;
 
     // 그룹 모드 실습 행 — 실습 컨트롤(미리보기·공개)만. 이론 컨트롤은 그룹 헤더가 담당한다.
     // 공개/잠그기 버튼 — 참고 예시(kind:reference)면 버튼 우상단 모서리에 아이콘 마커를 얹는다.
@@ -1973,6 +1989,10 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       groupCtx?: { promptIndex: number; index: number; count: number }
     ) => {
       const isPublished = publishedContentIdSet.has(content.id);
+      // 담기 대상 이론이 있고 이 실습이 아직 그 이론에 안 묶였으면 '담기'(이동) 버튼을 보인다.
+      const canBindToActive =
+        activePromptIndex !== null &&
+        !(effectiveTheoryPrompts[activePromptIndex]?.contentIds ?? []).includes(content.id);
       return (
         <div
           key={content.id}
@@ -2017,6 +2037,18 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                   </button>
                 </span>
               )}
+              {canBindToActive && (
+                <button
+                  type="button"
+                  onClick={() => handleBindPracticeToActivePrompt(content)}
+                  title="담기 대상 이론으로 옮기기"
+                  aria-label="이 이론으로 담기"
+                  className="inline-flex h-8 shrink-0 items-center gap-1 rounded-xl bg-[#8B5E3C] px-2.5 text-xs font-bold text-white transition-all hover:bg-[#724D31]"
+                >
+                  <Plus size={14} />
+                  담기
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setPreviewContent(content)}
@@ -2028,6 +2060,15 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 미리보기
               </button>
               {showPracticeSection && renderPublishButton(content)}
+              <button
+                type="button"
+                onClick={() => handleToggleDateRecordContent(content)}
+                title="수업기록에서 빼기"
+                aria-label={`${content.title} 수업기록에서 빼기`}
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[#E5E3DD] bg-white text-[#B7AFA4] transition-all hover:border-[#D9534F] hover:text-[#D9534F]"
+              >
+                <X size={15} />
+              </button>
             </div>
           </div>
         </div>
