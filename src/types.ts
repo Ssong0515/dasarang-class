@@ -379,23 +379,6 @@ export interface TeacherBroadcastMessage {
   createdAt: string;     // ISO 문자열
 }
 
-/**
- * 교사가 "학생 화면에 띄우기(발표)"를 누른 실시간 상태. 지금 학생 전원 화면에 크게 띄울 실습/슬라이드 콘텐츠 하나를 가리킨다.
- * publishedLessons(학생이 직접 골라 푸는 공개)와 달리, 교사가 강제로 한 콘텐츠를 모두의 화면 앞에 띄우는 용도.
- * 문서 id는 `${classroomId}_${date}` (publishedLessons와 동일 규칙). 발표를 내리면 문서를 지운다.
- * 공용 학생 계정 1개를 쓰므로 학생 식별 정보는 담지 않는다.
- */
-export interface TeacherScreenShare {
-  id: string;                 // `${classroomId}_${date}`
-  classroomId: string;
-  classroomName?: string;
-  date: string;               // 'YYYY-MM-DD'
-  /** 지금 학생 화면에 띄우는 콘텐츠 id. 발표 중이 아니면 문서가 없다. */
-  contentId: string;
-  ownerUid: string;
-  updatedAt: string;          // ISO 문자열. 바뀔 때마다 학생 오버레이가 다시 뜬다.
-}
-
 export interface AccessLog {
   id: string;
   email: string;

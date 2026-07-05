@@ -35,8 +35,6 @@ import {
   Eye,
   EyeOff,
   Presentation,
-  MonitorPlay,
-  MonitorOff,
   Lock,
   Unlock,
   RefreshCw,
@@ -62,7 +60,6 @@ import {
   Classroom,
   ClassroomFeeItem,
   PublishedLesson,
-  TeacherScreenShare,
   TheorySlideSyncResult,
   Student,
   StudentPost,
@@ -129,12 +126,6 @@ interface ClassroomDashboardProps {
   ) => Promise<void>;
   /** 수업 종료: 학생 화면을 잠그고 '오늘 수업 끝!' 안내를 모든 학생 화면에 띄운다. */
   onEndLesson?: (classroomId: string, classroomName: string, date: string) => Promise<void>;
-  /** 지금 '학생 화면에 띄우기(발표)' 중인 콘텐츠 상태(반+날짜). */
-  teacherScreenShares?: TeacherScreenShare[];
-  /** 실습/슬라이드 하나를 학생 전원 화면에 크게 띄운다(발표 시작·교체). */
-  onStartScreenShare?: (classroomId: string, classroomName: string, date: string, contentId: string) => Promise<void>;
-  /** 발표 내리기 — 학생 화면 오버레이를 없앤다. */
-  onStopScreenShare?: (classroomId: string, date: string) => Promise<void>;
   /** 이론 행 동기화 — 반 이론 폴더에서 제목과 맞는 pptx를 구글 슬라이드로 변환해 slideUrl을 돌려준다. */
   onSyncTheorySlide?: (
     folderId: string,
@@ -475,9 +466,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   onSaveContent,
   onUpdatePublishedLesson,
   onEndLesson,
-  teacherScreenShares,
-  onStartScreenShare,
-  onStopScreenShare,
   onSyncTheorySlide,
   onUpdateClassroom,
   onDeleteClassroom,
@@ -694,27 +682,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     () => new Set(currentPublishedLesson?.publishedContentIds || []),
     [currentPublishedLesson]
   );
-  // 지금 이 반+날짜에 '학생 화면에 띄우기(발표)' 중인 콘텐츠 (없으면 undefined)
-  const currentScreenShare = useMemo(
-    () =>
-      (teacherScreenShares || []).find(
-        (share) => share.classroomId === classroom.id && share.date === selectedDate
-      ),
-    [teacherScreenShares, classroom.id, selectedDate]
-  );
-  const presentingContentId = currentScreenShare?.contentId ?? null;
-
-  // 실습 하나를 학생 화면에 띄우거나(발표 시작·교체) 내린다(같은 걸 다시 누르면 내림).
-  const handleToggleScreenShare = (content: LessonContent) => {
-    if (!onStartScreenShare || !onStopScreenShare) {
-      return;
-    }
-    if (presentingContentId === content.id) {
-      void onStopScreenShare(classroom.id, selectedDate);
-    } else {
-      void onStartScreenShare(classroom.id, classroom.name, selectedDate, content.id);
-    }
-  };
   // 수업기록에 담긴 콘텐츠를 강사용 슬라이드(PPT)와 학생용 실습(HTML)으로 분류한다.
   // 슬라이드는 강사 화면 전용이라 공개 대상이 아니고, HTML 실습만 학생에게 공개한다.
   const recordedSlideContents = currentDateRecordedContents.filter((content) =>
@@ -2411,54 +2378,27 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 {theorySlidesVisible && (
                   <div className="mb-4">
                     <p className="mb-2 text-xs font-bold uppercase tracking-wider text-[#8B7E74]">
-                      이론 슬라이드 (강사 화면 · 학생 화면에 띄우기)
+                      이론 슬라이드 (강사 화면)
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      {recordedSlideContents.map((content) => {
-                        const isPresenting = presentingContentId === content.id;
-                        return (
-                          <div
-                            key={content.id}
-                            className={`inline-flex items-center gap-1 rounded-full border py-1 pl-3 pr-1 shadow-sm transition-all ${
-                              isPresenting ? 'border-[#8B5E3C] bg-[#FFF5E9]' : 'border-[#E5E3DD] bg-white'
-                            }`}
+                      {recordedSlideContents.map((content) => (
+                        <div
+                          key={content.id}
+                          className="inline-flex items-center gap-1 rounded-full border border-[#E5E3DD] bg-white py-1 pl-3 pr-3 shadow-sm transition-all"
+                        >
+                          <a
+                            href={content.slideUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1.5 text-sm font-bold text-[#4A3728] transition-colors hover:text-[#8B5E3C]"
                           >
-                            <a
-                              href={content.slideUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1.5 text-sm font-bold text-[#4A3728] transition-colors hover:text-[#8B5E3C]"
-                            >
-                              <Presentation size={14} className="text-[#8B5E3C]" />
-                              {content.title}
-                              <ExternalLink size={12} className="text-[#8B7E74]" />
-                            </a>
-                            {onStartScreenShare && onStopScreenShare && (
-                              <button
-                                type="button"
-                                onClick={() => handleToggleScreenShare(content)}
-                                title={isPresenting ? '학생 화면에서 내리기' : '학생 화면에 띄우기'}
-                                aria-label={isPresenting ? '학생 화면에서 내리기' : '학생 화면에 띄우기'}
-                                className={`ml-1 inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-bold transition-all ${
-                                  isPresenting
-                                    ? 'bg-[#8B5E3C] text-white hover:bg-[#724D31]'
-                                    : 'bg-[#F3F2EE] text-[#8B7E74] hover:bg-[#E8E5DE] hover:text-[#4A3728]'
-                                }`}
-                              >
-                                {isPresenting ? <MonitorOff size={13} /> : <MonitorPlay size={13} />}
-                                {isPresenting ? '내리기' : '띄우기'}
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })}
+                            <Presentation size={14} className="text-[#8B5E3C]" />
+                            {content.title}
+                            <ExternalLink size={12} className="text-[#8B7E74]" />
+                          </a>
+                        </div>
+                      ))}
                     </div>
-                    {recordedSlideContents.some((content) => content.id === presentingContentId) && (
-                      <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-[#8B5E3C]">
-                        <MonitorPlay size={12} />
-                        지금 이 슬라이드를 학생 화면에 실시간으로 띄우는 중이에요.
-                      </p>
-                    )}
                   </div>
                 )}
 
@@ -2780,21 +2720,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                                       <ScanSearch size={14} />
                                       미리보기
                                     </button>
-                                    {onStartScreenShare && onStopScreenShare && (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleToggleScreenShare(content)}
-                                        title={presentingContentId === content.id ? '학생 화면에서 내리기' : '학생 화면에 띄우기(발표)'}
-                                        aria-label={presentingContentId === content.id ? '학생 화면에서 내리기' : '학생 화면에 띄우기'}
-                                        className={`inline-flex h-8 w-8 items-center justify-center rounded-xl border transition-all ${
-                                          presentingContentId === content.id
-                                            ? 'border-[#8B5E3C] bg-[#8B5E3C] text-white hover:bg-[#724D31]'
-                                            : 'border-[#E5E3DD] bg-white text-[#8B7E74] hover:border-[#8B5E3C] hover:text-[#8B5E3C]'
-                                        }`}
-                                      >
-                                        {presentingContentId === content.id ? <MonitorOff size={14} /> : <MonitorPlay size={14} />}
-                                      </button>
-                                    )}
                                     <button
                                       onClick={() => handleTogglePublishContent(content)}
                                       className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-all ${

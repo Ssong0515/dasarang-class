@@ -11,9 +11,8 @@ import {
   CheckCircle2,
   X,
   Lock,
-  MonitorPlay,
 } from 'lucide-react';
-import { Classroom, LessonCategory, LessonContent, PublishedLesson, TeacherScreenShare } from '../types';
+import { Classroom, LessonCategory, LessonContent, PublishedLesson } from '../types';
 import { resolveAppPath } from '../utils/appPaths';
 import { StudentContentCard } from './StudentContentPreview';
 import { StudentVoiceButton } from './StudentVoiceButton';
@@ -110,7 +109,6 @@ interface StudentPageProps {
   categories?: LessonCategory[];
   contents?: LessonContent[];
   publishedLessons?: PublishedLesson[];
-  teacherScreenShares?: TeacherScreenShare[];
 }
 
 type Language = 'KO' | 'EN' | 'RU' | 'ZH';
@@ -312,7 +310,6 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   categories = [],
   contents = [],
   publishedLessons = [],
-  teacherScreenShares = [],
 }) => {
   const [lang, setLang] = useState<Language>('KO');
   const [isLangOpen, setIsLangOpen] = useState(false);
@@ -330,8 +327,6 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   const [endNoticeLang, setEndNoticeLang] = useState(0);
   // 이미 닫은 종료 안내의 endNoticeAt. 교사가 다시 종료(새 시각)하면 값이 달라져 안내가 다시 뜬다.
   const [dismissedEndNoticeAt, setDismissedEndNoticeAt] = useState<string | null>(null);
-  // 학생이 닫은 발표(화면 띄우기)의 키(contentId_updatedAt). 교사가 새로 띄우거나 콘텐츠를 바꾸면 키가 달라져 다시 뜬다.
-  const [dismissedScreenShareKey, setDismissedScreenShareKey] = useState<string | null>(null);
   const [uploadStudentName, setUploadStudentName] = useState('');
   const [uploadTitle, setUploadTitle] = useState('');
   const [uploadAnonymous, setUploadAnonymous] = useState(false);
@@ -580,30 +575,6 @@ export const StudentPage: React.FC<StudentPageProps> = ({
     pickClassroomFromLessons(todaysPublishedLessons) ??
     null;
   effectiveClassroomIdRef.current = effectiveClassroom?.id ?? null;
-
-  // 교사가 '학생 화면에 띄우기(발표)'를 누른 콘텐츠. 강제로 전체 화면을 덮으므로 '지금 진행 중인 반'(effectiveClassroom)의
-  // 발표만 보여준다 — 음성·자막 오버레이가 effectiveClassroom을 기준 삼는 것과 같은 방식(다른 반의 남은 발표가 튀어나오지 않게).
-  // 아직 공개한 실습이 없어 진행 반을 못 잡을 때(예: 수업 시작에 슬라이드부터 띄우는 경우)는 오늘의 가장 최근 발표로 폴백한다.
-  const todaysScreenShares = teacherScreenShares.filter(
-    (share) => share.date === gatingDateString && share.contentId
-  );
-  const activeScreenShare =
-    (effectiveClassroom
-      ? todaysScreenShares.find((share) => share.classroomId === effectiveClassroom.id)
-      : undefined) ??
-    [...todaysScreenShares]
-      .sort((a, b) => String(a.updatedAt).localeCompare(String(b.updatedAt)))
-      .pop() ??
-    null;
-  const presentedContent = activeScreenShare
-    ? contents.find((content) => content.id === activeScreenShare.contentId) ?? null
-    : null;
-  // 발표를 식별하는 키 — 콘텐츠나 발표 시각이 바뀌면 값이 달라져 닫아 둔 오버레이가 다시 뜬다.
-  const activeScreenShareKey = presentedContent
-    ? `${activeScreenShare!.contentId}_${activeScreenShare!.updatedAt}`
-    : null;
-  const isScreenShareOpen =
-    Boolean(activeScreenShareKey) && activeScreenShareKey !== dismissedScreenShareKey;
 
   const contentsByCategory = categories
     .map((category) => ({
@@ -1252,50 +1223,6 @@ export const StudentPage: React.FC<StudentPageProps> = ({
       {/* 교사 통역 자막 방송 수신 — 실제 학생 화면에서만(강사 미리보기 제외).
           반·수업 공개 여부와 무관하게 오늘의 최신 방송을 내 언어 자막으로 하단에 띄운다. */}
       {!isAdmin && <StudentSubtitleOverlay date={gatingDateString} />}
-
-      {/* 교사 발표(화면 띄우기) — 강사가 실습/슬라이드 하나를 학생 전원 화면에 실시간으로 크게 띄운다.
-          기존 SlideEmbed(구글 슬라이드)·StudentContentCard(HTML)를 그대로 재사용해 렌더한다. 학생은 잠시 닫고 다시 볼 수 있다. */}
-      {presentedContent && isScreenShareOpen && (
-        <div className="fixed inset-0 z-[105] flex flex-col bg-[#141414]/90 backdrop-blur-sm">
-          <div className="flex shrink-0 items-center justify-between gap-3 px-4 py-3 text-white sm:px-6">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#8B5E3C]">
-                <MonitorPlay size={16} />
-              </span>
-              <div className="min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#D8C7B4]">
-                  선생님 화면 · 실시간
-                </p>
-                <p className="truncate text-sm font-bold">{presentedContent.title}</p>
-              </div>
-            </div>
-            <button
-              onClick={() => setDismissedScreenShareKey(activeScreenShareKey)}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white/10 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-white/20"
-              title="잠시 닫기 · Close"
-            >
-              <X size={14} />
-              닫기
-            </button>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-6 sm:px-6">
-            <div className="mx-auto w-full max-w-6xl">
-              <StudentContentCard content={presentedContent} showDescriptionToggle={false} />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 발표 중인데 학생이 닫아 둔 경우 — 다시 볼 수 있는 플로팅 버튼. 교사가 발표를 내리면 사라진다. */}
-      {presentedContent && !isScreenShareOpen && (
-        <button
-          onClick={() => setDismissedScreenShareKey(null)}
-          className="fixed left-1/2 top-4 z-[95] inline-flex -translate-x-1/2 items-center gap-2 rounded-full bg-[#8B5E3C] px-5 py-2.5 text-sm font-bold text-white shadow-lg transition-all hover:bg-[#724D31]"
-        >
-          <MonitorPlay size={16} />
-          선생님 화면 다시 보기
-        </button>
-      )}
 
       {/* 수업 종료 안내 — 교사가 대시보드에서 '수업 종료'를 누르면 실시간 신호로 모든 학생 화면에 뜬다. 학생은 띄우거나 닫을 수만 있다. */}
       {isEndNoticeOpen && (
