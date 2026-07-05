@@ -44,6 +44,12 @@ export interface LessonContent {
   html: string;
   slideUrl?: string;
   /**
+   * 콘텐츠 성격. 'practice'(학생이 직접 조작하는 실습, 기본값) |
+   * 'reference'(외부 도구—구글 문서 등—로 실습할 때 보고 따라 하는 예시·참고 문서).
+   * 없으면 practice로 취급(하위호환). 대시보드 라벨·루틴 판단이 이 값을 읽는다.
+   */
+  kind?: 'practice' | 'reference';
+  /**
    * 이 실습 콘텐츠에 1:1로 묶인 이론 수업 자료 링크(강사 화면 전용).
    * 콘텐츠에 저장하므로 같은 실습을 다른 반·날짜에 쓰면 이론이 자동으로 따라온다.
    * (반별 수업 진행 상태는 classroomDateRecord에 따로 있어 동기화되지 않는다.)

@@ -642,6 +642,11 @@ export const StudentContentCard: React.FC<StudentContentCardProps> = ({
             <FileText size={16} className="text-[#8B5E3C]" />
           </div>
           <h3 className="text-lg font-bold text-[#4A3728]">{content.title}</h3>
+          {content.kind === 'reference' && (
+            <span className="inline-flex shrink-0 items-center rounded-full bg-[#FFF1DC] px-2.5 py-1 text-xs font-bold text-[#8B5E3C]">
+              예시 · 따라 만들어요
+            </span>
+          )}
         </div>
         {headerControls ? (
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">

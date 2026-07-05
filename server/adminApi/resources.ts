@@ -169,7 +169,7 @@ export const RESOURCE_SPECS: Record<ResourceName, ResourceSpec> = {
   contents: {
     collection: 'contents',
     description:
-      '수업 콘텐츠. slideUrl=이론 슬라이드(강사 화면 전용), html=실습(학생 화면). categoryId가 null이면 어디에도 안 보인다. 카테고리에 넣어도 학생 화면에는 강사가 수업 중 "공개"한 실습만 열린다(게이팅). 목록 조회에서는 html이 생략되며 includeHtml=true로 포함시킬 수 있다.',
+      '수업 콘텐츠. slideUrl=이론 슬라이드(강사 화면 전용), html=실습(학생 화면). kind=콘텐츠 성격(practice=학생이 직접 조작하는 실습(기본) / reference=외부 도구(구글 문서 등)로 실습할 때 보고 따라 하는 예시·참고 문서, 비인터랙티브). categoryId가 null이면 어디에도 안 보인다. 카테고리에 넣어도 학생 화면에는 강사가 수업 중 "공개"한 실습만 열린다(게이팅). 목록 조회에서는 html이 생략되며 includeHtml=true로 포함시킬 수 있다.',
     filterFields: ['categoryId'],
     sort: { field: 'order', direction: 'asc' },
     fields: {
@@ -177,6 +177,12 @@ export const RESOURCE_SPECS: Record<ResourceName, ResourceSpec> = {
       description: { type: 'string', description: '설명' },
       html: { type: 'string', description: '자체 HTML 콘텐츠 (iframe으로 렌더됨, 최대 약 900KB)' },
       slideUrl: { type: 'string', description: 'Google Slides 임베드 URL' },
+      kind: {
+        type: 'string',
+        enumValues: ['practice', 'reference'],
+        description:
+          "콘텐츠 성격. 'practice'(학생이 직접 조작하는 실습, 기본값) | 'reference'(외부 도구—구글 문서 등—로 실습할 때 보고 따라 하는 예시·참고 문서, 비인터랙티브 표시전용). 없으면 practice로 취급.",
+      },
       categoryId: { type: 'stringOrNull', description: '카테고리 id. null이면 미배정(학생에게 숨김)' },
       order: { type: 'number', description: '카테고리 내 정렬 순서' },
     },

@@ -573,6 +573,8 @@ export interface CreatePracticeContentInput {
   categoryId?: string;
   /** categoryId가 없을 때 사용할 카테고리 이름. 없으면 '실습 자료' */
   categoryName?: string;
+  /** 콘텐츠 성격. 'reference'면 외부 도구 실습용 예시·참고 문서(비인터랙티브). 없으면 practice(기본). */
+  kind?: 'practice' | 'reference';
 }
 
 export const createPracticeContent = async (input: CreatePracticeContentInput) => {
@@ -631,6 +633,8 @@ export const createPracticeContent = async (input: CreatePracticeContentInput) =
     ownerUid,
     createdAt: iso,
     order: maxOrder + 1,
+    // reference일 때만 필드를 남긴다(없으면 practice로 취급 — 하위호환).
+    ...(input.kind === 'reference' ? { kind: 'reference' as const } : {}),
   };
   await contentRef.set(contentData);
 

@@ -193,13 +193,17 @@ const buildMcpServer = () => {
 
   server.tool(
     'create_practice_content',
-    '실습 자료(자체 완결 HTML)를 학생 콘텐츠로 등록한다. 등록해도 학생 화면에는 바로 안 보이고, 강사가 클래스 관리 > 수업 진행에서 "공개"를 눌러야 그 실습이 학생에게 열린다(게이팅). categoryId나 categoryName을 주지 않으면 "실습 자료" 카테고리에 들어간다. 회차에 연결하려면 반환된 콘텐츠 id를 mutate_curriculum_sessions의 session.contentIds에 넣을 것. HTML은 외부 리소스 없이 자체 완결로 작성할 것 (최대 약 900KB).',
+    '실습 자료(자체 완결 HTML)를 학생 콘텐츠로 등록한다. 등록해도 학생 화면에는 바로 안 보이고, 강사가 클래스 관리 > 수업 진행에서 "공개"를 눌러야 그 실습이 학생에게 열린다(게이팅). categoryId나 categoryName을 주지 않으면 "실습 자료" 카테고리에 들어간다. 회차에 연결하려면 반환된 콘텐츠 id를 mutate_curriculum_sessions의 session.contentIds에 넣을 것. HTML은 외부 리소스 없이 자체 완결로 작성할 것 (최대 약 900KB). kind="reference"를 주면 학생이 직접 조작하는 실습이 아니라, 외부 도구(구글 문서 등)에서 보고 따라 만드는 예시·참고 문서(표시전용)로 등록된다 — 커리큘럼 details의 "실습 방식: 외부도구"인 개념에 사용.',
     {
       title: z.string(),
       description: z.string().optional().describe('학생에게 보이는 짧은 설명'),
       html: z.string().describe('완성된 HTML 문서 전체'),
       categoryId: z.string().optional(),
       categoryName: z.string().optional(),
+      kind: z
+        .enum(['practice', 'reference'])
+        .optional()
+        .describe("콘텐츠 성격. 'reference'=외부 도구 실습용 예시·참고 문서(비인터랙티브). 생략 시 practice."),
     },
     async (input) => run(() => createPracticeContent(input))
   );
