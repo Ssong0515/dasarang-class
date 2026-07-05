@@ -66,10 +66,7 @@ import {
   TheorySlide,
   TheoryPrompt,
 } from '../types';
-import {
-  normalizeClassroomDateRecordContentIds,
-  orderClassroomDateRecordContentIds,
-} from '../utils/classroomDateRecordContent';
+import { normalizeClassroomDateRecordContentIds } from '../utils/classroomDateRecordContent';
 import {
   CLASSROOM_COLOR_OPTIONS,
   CLASSROOM_ICON_OPTIONS,
@@ -587,6 +584,12 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const isMemoDirty = (currentDateRecord?.memo || '') !== localMemo;
   const [isAssignmentCardCollapsed, setIsAssignmentCardCollapsed] = useState(true);
   const [isContentPaletteCollapsed, setIsContentPaletteCollapsed] = useState(true);
+  // '수업 콘텐츠 선택'으로 추가할 실습을 묶을 대상 이론(그룹) index. null이면 어느 이론에도 안 묶고 개별 실습으로 추가한다.
+  const [activePromptIndex, setActivePromptIndex] = useState<number | null>(null);
+  // 날짜가 바뀌면 다른 날짜의 이론 index를 가리키지 않도록 담기 대상을 해제한다.
+  useEffect(() => {
+    setActivePromptIndex(null);
+  }, [selectedDate]);
   const activeDateSet = useMemo(
     () => new Set(classroomDateRecords.map((record) => record.date)),
     [classroomDateRecords]
@@ -1201,17 +1204,44 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
 
   const handleToggleDateRecordContent = (content: LessonContent) => {
     const base = currentDateRecord ?? createDateRecord();
+    const prompts = base.theoryPrompts ?? [];
 
     const currentIds = normalizeClassroomDateRecordContentIds(base).filter((contentId) =>
       assignedContentsById.has(contentId)
     );
-    const nextIds = currentIds.includes(content.id)
-      ? currentIds.filter((contentId) => contentId !== content.id)
-      : [...currentIds, content.id];
+    const isRemoving = currentIds.includes(content.id);
 
+    if (isRemoving) {
+      // 수업기록에서 빼면 어느 이론에 묶여 있든 그 이론에서도 함께 제거한다(고아 매핑 방지).
+      onSaveDateRecord({
+        ...base,
+        contentIds: currentIds.filter((contentId) => contentId !== content.id),
+        theoryPrompts: prompts.map((prompt) => ({
+          ...prompt,
+          contentIds: (prompt.contentIds ?? []).filter((id) => id !== content.id),
+        })),
+      });
+      return;
+    }
+
+    // 추가: 선택한 순서 그대로 뒤에 붙인다(재정렬하지 않음). 담기 대상 이론이 있으면 그 이론에도 순서대로 묶는다.
+    const targetsPrompt = activePromptIndex !== null && Boolean(prompts[activePromptIndex]);
     onSaveDateRecord({
       ...base,
-      contentIds: orderClassroomDateRecordContentIds(nextIds, assignedContents),
+      contentIds: [...currentIds, content.id],
+      theoryPrompts: targetsPrompt
+        ? prompts.map((prompt, idx) =>
+            idx === activePromptIndex
+              ? {
+                  ...prompt,
+                  contentIds: [
+                    ...(prompt.contentIds ?? []).filter((id) => id !== content.id),
+                    content.id,
+                  ],
+                }
+              : prompt
+          )
+        : prompts,
     });
   };
 
@@ -1313,6 +1343,29 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     const reordered = [...effectiveTheorySlides];
     [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
     onSaveDateRecord({ ...base, theorySlideUrl: '', theorySlides: reordered });
+  };
+
+  // 한 이론에 묶인 실습들의 순서를 위/아래로 바꾼다(그 이론의 contentIds 안에서만).
+  const handleMovePracticeInGroup = (
+    promptIndex: number,
+    contentId: string,
+    direction: -1 | 1
+  ) => {
+    if (!currentDateRecord) return;
+    const prompts = currentDateRecord.theoryPrompts ?? [];
+    const prompt = prompts[promptIndex];
+    if (!prompt) return;
+    const ids = [...(prompt.contentIds ?? [])];
+    const from = ids.indexOf(contentId);
+    const target = from + direction;
+    if (from < 0 || target < 0 || target >= ids.length) return;
+    [ids[from], ids[target]] = [ids[target], ids[from]];
+    onSaveDateRecord({
+      ...currentDateRecord,
+      theoryPrompts: prompts.map((item, idx) =>
+        idx === promptIndex ? { ...item, contentIds: ids } : item
+      ),
+    });
   };
 
   // 이론 프롬프트 보기·수정 팝업 열기 (본문을 편집 버퍼로 복사).
@@ -1915,7 +1968,10 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       );
     };
 
-    const renderGroupedPracticeRow = (content: LessonContent) => {
+    const renderGroupedPracticeRow = (
+      content: LessonContent,
+      groupCtx?: { promptIndex: number; index: number; count: number }
+    ) => {
       const isPublished = publishedContentIdSet.has(content.id);
       return (
         <div
@@ -1937,6 +1993,30 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               <span className="truncate text-sm font-bold text-[#4A3728]">{content.title}</span>
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
+              {groupCtx && groupCtx.count > 1 && (
+                <span className="mr-0.5 inline-flex overflow-hidden rounded-lg border border-[#E5E3DD]">
+                  <button
+                    type="button"
+                    onClick={() => handleMovePracticeInGroup(groupCtx.promptIndex, content.id, -1)}
+                    disabled={groupCtx.index === 0}
+                    title="위로 (이 이론 안에서 순서 올리기)"
+                    aria-label="위로"
+                    className="inline-flex h-8 w-7 items-center justify-center bg-white text-[#8B7E74] transition-all hover:text-[#8B5E3C] disabled:cursor-not-allowed disabled:text-[#DAD5CC]"
+                  >
+                    <ChevronUp size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleMovePracticeInGroup(groupCtx.promptIndex, content.id, 1)}
+                    disabled={groupCtx.index === groupCtx.count - 1}
+                    title="아래로 (이 이론 안에서 순서 내리기)"
+                    aria-label="아래로"
+                    className="inline-flex h-8 w-7 items-center justify-center border-l border-[#E5E3DD] bg-white text-[#8B7E74] transition-all hover:text-[#8B5E3C] disabled:cursor-not-allowed disabled:text-[#DAD5CC]"
+                  >
+                    <ChevronDown size={14} />
+                  </button>
+                </span>
+              )}
               <button
                 type="button"
                 onClick={() => setPreviewContent(content)}
@@ -2432,6 +2512,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                     <div className="space-y-4">
                       {theoryGroups.map(({ prompt, promptIndex, contents }) => {
                         const isCopied = copiedPromptIndex === promptIndex;
+                        const isActiveTarget = activePromptIndex === promptIndex;
                         const promptSlideUrl = prompt.slideUrl?.trim() ?? '';
                         const hasSlide = promptSlideUrl.length > 0;
                         const isSlideInputOpen = slideInputPromptIndex === promptIndex;
@@ -2441,7 +2522,11 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                         return (
                           <div
                             key={`theory-group-${promptIndex}`}
-                            className="rounded-2xl border border-[#E5E3DD] bg-[#FBFAF8] p-3"
+                            className={`rounded-2xl border p-3 transition-all ${
+                              isActiveTarget
+                                ? 'border-[#8B5E3C] bg-[#FFF7EE] ring-1 ring-[#8B5E3C]'
+                                : 'border-[#E5E3DD] bg-[#FBFAF8]'
+                            }`}
                           >
                             {/* 이론 헤더 — 이 덱(프롬프트·자료 링크)과 아래 실습들이 한 묶음 */}
                             <div className="flex flex-col gap-2 px-1 pb-1 sm:flex-row sm:items-center sm:justify-between">
@@ -2457,6 +2542,30 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                                 )}
                               </div>
                               <div className="flex shrink-0 items-center gap-1.5">
+                                {showPracticeSection && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setActivePromptIndex((current) =>
+                                        current === promptIndex ? null : promptIndex
+                                      )
+                                    }
+                                    title={
+                                      isActiveTarget
+                                        ? '담기 끝내기 — 다른 이론에 담으려면 그 이론에서 누르세요'
+                                        : '여기에 담기 — 지금부터 아래 「수업 콘텐츠 선택」에서 고르는 실습이 이 이론에 순서대로 묶입니다'
+                                    }
+                                    aria-label={isActiveTarget ? '담기 끝내기' : '이 이론에 담기'}
+                                    className={`inline-flex h-8 shrink-0 items-center gap-1 rounded-xl px-2.5 text-xs font-bold transition-all ${
+                                      isActiveTarget
+                                        ? 'bg-[#8B5E3C] text-white hover:bg-[#724D31]'
+                                        : 'border border-[#E5E3DD] bg-white text-[#8B7E74] hover:border-[#8B5E3C] hover:text-[#8B5E3C]'
+                                    }`}
+                                  >
+                                    {isActiveTarget ? <Check size={14} /> : <Plus size={14} />}
+                                    {isActiveTarget ? '담는 중' : '담기'}
+                                  </button>
+                                )}
                                 <button
                                   type="button"
                                   onClick={() => handleCopyTheoryPrompt(prompt.prompt, promptIndex)}
@@ -2557,7 +2666,13 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
 
                             {/* 이 이론에 묶인 실습들 (개념/진행 순서) */}
                             <div className="space-y-2">
-                              {contents.map((content) => renderGroupedPracticeRow(content))}
+                              {contents.map((content, contentIndex) =>
+                                renderGroupedPracticeRow(content, {
+                                  promptIndex,
+                                  index: contentIndex,
+                                  count: contents.length,
+                                })
+                              )}
                               {/* 이론만 날짜(실습 영역 꺼짐)는 실습이 없는 게 정상이라 안내를 띄우지 않는다. */}
                               {contents.length === 0 && showPracticeSection && (
                                 <p className="rounded-xl border border-dashed border-[#E5E3DD] bg-white px-3 py-2 text-xs text-[#8B7E74]">
@@ -2847,6 +2962,27 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
 
             {!isContentPaletteCollapsed && (
               <div className="mt-4">
+                {activePromptIndex !== null && effectiveTheoryPrompts[activePromptIndex] ? (
+                  <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-[#8B5E3C] bg-[#FFF7EE] px-4 py-2.5 text-sm">
+                    <span className="font-bold text-[#8B5E3C]">
+                      「{effectiveTheoryPrompts[activePromptIndex].label?.trim() ||
+                        `${activePromptIndex + 1}번째 이론수업`}」에 담는 중
+                    </span>
+                    <span className="text-xs text-[#8B7E74]">— 실습을 누르면 이 이론에 순서대로 묶여요</span>
+                    <button
+                      type="button"
+                      onClick={() => setActivePromptIndex(null)}
+                      className="ml-auto inline-flex items-center gap-1 rounded-full bg-white px-3 py-1 text-xs font-bold text-[#8B7E74] transition-all hover:text-[#8B5E3C]"
+                    >
+                      <X size={12} />
+                      담기 해제
+                    </button>
+                  </div>
+                ) : effectiveTheoryPrompts.length > 0 ? (
+                  <p className="mb-4 rounded-2xl border border-dashed border-[#E5E3DD] bg-[#FBFBFA] px-4 py-2.5 text-xs text-[#8B7E74]">
+                    어느 이론에도 안 묶고 개별 실습으로 담는 중이에요. 위 이론의 <b className="text-[#8B5E3C]">담기</b> 버튼을 누르면, 이후 고르는 실습이 그 이론에 순서대로 묶여요.
+                  </p>
+                ) : null}
                 {assignedContents.length > 0 ? (
                   <div className="space-y-5">
                     {contentsByCategory.map(({ category, catContents }) => (
