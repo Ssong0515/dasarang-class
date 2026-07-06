@@ -88,6 +88,11 @@ export const RESOURCE_SPECS: Record<ResourceName, ResourceSpec> = {
         description:
           '이론 슬라이드·실습에 병기할 번역 언어 목록 (문자열 배열, 0개~여러 개. 예: ["러시아어","베트남어"]). 강사가 직접 지정하며, 학생 language로 유추하지 않는다. 비면 병기 없이 쉬운 한국어+그림만 쓴다.',
       },
+      copyGroup: {
+        type: 'string',
+        description:
+          "'수업 복사해오기' 그룹 라벨. 같은 값을 가진 반끼리만 서로의 수업을 복사 후보로 본다(예: 레인보우 1·2반=\"레인보우\", 앱 기초·활용반=\"앱\"). 비면 복사 후보 없음.",
+      },
       showTheory: {
         type: 'boolean',
         description:
