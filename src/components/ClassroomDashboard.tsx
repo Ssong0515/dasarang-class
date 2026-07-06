@@ -589,10 +589,13 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const [activePromptIndex, setActivePromptIndex] = useState<number | null>(null);
   // 이 회차 커리큘럼 상세 팝업 열림 여부.
   const [showCurriculumDetail, setShowCurriculumDetail] = useState(false);
-  // 날짜가 바뀌면 다른 날짜의 이론 index를 가리키지 않도록 담기 대상을 해제하고, 회차 상세 팝업도 닫는다.
+  // 다른 반 수업 '복사해오기(덮어쓰기)' 드롭다운 열림 여부.
+  const [isCopyPickerOpen, setIsCopyPickerOpen] = useState(false);
+  // 날짜가 바뀌면 다른 날짜의 이론 index를 가리키지 않도록 담기 대상을 해제하고, 팝업·드롭다운도 닫는다.
   useEffect(() => {
     setActivePromptIndex(null);
     setShowCurriculumDetail(false);
+    setIsCopyPickerOpen(false);
   }, [selectedDate]);
   const activeDateSet = useMemo(
     () => new Set(classroomDateRecords.map((record) => record.date)),
@@ -1124,6 +1127,65 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       createdAt: timestamp,
       updatedAt: timestamp,
     };
+  };
+
+  // 다른 반에서 '복사해올' 수 있는 수업 후보 — 이론·실습이 담긴 기록(자기 자신 제외). 날짜·반·커리큘럼명으로 판단.
+  const lessonCopyOptions = useMemo(() => {
+    const selfId = currentDateRecord?.id ?? `${classroom.id}_${selectedDate}`;
+    const classroomById = new Map<string, Classroom>(
+      classrooms.map((entry): [string, Classroom] => [entry.id, entry])
+    );
+    const curriculumById = new Map<string, Curriculum>(
+      (curriculums || []).map((entry): [string, Curriculum] => [entry.id, entry])
+    );
+    return dateRecords
+      .filter(
+        (record) =>
+          record.id !== selfId &&
+          ((record.contentIds?.length ?? 0) > 0 || (record.theoryPrompts?.length ?? 0) > 0)
+      )
+      .map((record) => {
+        const cls = classroomById.get(record.classroomId);
+        const curr = curriculumById.get(record.curriculumId || cls?.curriculumId || '');
+        return {
+          recordId: record.id,
+          date: record.date,
+          className: record.classroomName || cls?.name || '알 수 없는 반',
+          curriculumTitle: curr?.title || '커리큘럼 없음',
+          practiceCount: record.contentIds?.length ?? 0,
+          theoryCount: record.theoryPrompts?.length ?? 0,
+        };
+      })
+      .sort((left, right) => (left.date < right.date ? 1 : left.date > right.date ? -1 : 0));
+  }, [dateRecords, classrooms, curriculums, currentDateRecord?.id, classroom.id, selectedDate]);
+
+  // 다른 수업의 이론·실습을 이 날짜로 '복사'해온다(덮어쓰기). 복사이므로 이후 양쪽은 독립적으로 편집된다.
+  // 다시 불러오면 그대로 다시 덮어써 똑같아진다.
+  const handleCopyLessonFrom = (sourceRecordId: string) => {
+    const source = dateRecords.find((record) => record.id === sourceRecordId);
+    if (!source) return;
+    const base = currentDateRecord ?? createDateRecord();
+    const hasExisting =
+      (base.contentIds?.length ?? 0) > 0 || (base.theoryPrompts?.length ?? 0) > 0;
+    if (
+      hasExisting &&
+      !window.confirm(
+        `현재 수업의 이론·실습을 '${source.classroomName || '다른 반'} · ${source.date}'의 내용으로 덮어쓸까요? (출석·메모는 유지)`
+      )
+    ) {
+      return;
+    }
+    onSaveDateRecord({
+      ...base,
+      contentIds: [...(source.contentIds ?? [])],
+      theoryPrompts: (source.theoryPrompts ?? []).map((prompt) => ({
+        ...prompt,
+        contentIds: prompt.contentIds ? [...prompt.contentIds] : undefined,
+      })),
+      theorySlides: (source.theorySlides ?? []).map((slide) => ({ ...slide })),
+      theorySlideUrl: source.theorySlideUrl ?? '',
+    });
+    setIsCopyPickerOpen(false);
   };
 
   // 임시(회차 미배정) 날짜 활성화: 빈 수업기록을 만들어 출석·메모·콘텐츠 입력을 연다.
@@ -2500,6 +2562,50 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
 
             {onUpdatePublishedLesson && (showTheorySection || showPracticeSection) && (
               <div className="mb-8 rounded-[28px] border border-[#E5E3DD] bg-[#FBFBFA] p-6">
+                {/* 다른 반 수업 복사해오기(덮어쓰기) — 복사이므로 이후 양쪽은 독립. 다시 불러오면 다시 덮어써 똑같아진다. */}
+                <div className="mb-4">
+                  <button
+                    type="button"
+                    onClick={() => setIsCopyPickerOpen((open) => !open)}
+                    className="inline-flex w-full items-center justify-between gap-2 rounded-2xl border border-dashed border-[#CFE0FF] bg-[#F5F9FF] px-4 py-3 text-sm font-bold text-[#2F5EA8] transition-all hover:bg-[#EAF2FF]"
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <Copy size={15} />
+                      다른 반 수업 복사해오기 (덮어쓰기)
+                    </span>
+                    {isCopyPickerOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                  </button>
+                  {isCopyPickerOpen && (
+                    <div className="mt-2 max-h-[320px] space-y-1.5 overflow-y-auto rounded-2xl border border-[#E5E3DD] bg-white p-2">
+                      {lessonCopyOptions.length === 0 ? (
+                        <p className="px-2 py-3 text-xs text-[#8B7E74]">
+                          복사해올 수 있는 다른 수업이 아직 없습니다.
+                        </p>
+                      ) : (
+                        lessonCopyOptions.map((option) => (
+                          <button
+                            key={option.recordId}
+                            type="button"
+                            onClick={() => handleCopyLessonFrom(option.recordId)}
+                            className="flex w-full flex-col items-start gap-0.5 rounded-xl border border-[#E5E3DD] bg-white px-3 py-2 text-left transition-all hover:border-[#2F5EA8] hover:bg-[#F5F9FF]"
+                          >
+                            <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm font-bold text-[#4A3728]">
+                              <span>{option.date}</span>
+                              <span className="text-[#B7AFA4]">·</span>
+                              <span>{option.className}</span>
+                            </span>
+                            <span className="flex flex-wrap items-center gap-x-2 text-[11px] text-[#8B7E74]">
+                              <span className="truncate">{option.curriculumTitle}</span>
+                              <span className="shrink-0 rounded-full bg-[#F3F2EE] px-2 py-0.5 font-bold">
+                                이론 {option.theoryCount} · 실습 {option.practiceCount}
+                              </span>
+                            </span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
                 <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-1">
                     {sessionTopicTitle && (
