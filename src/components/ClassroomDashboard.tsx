@@ -1407,6 +1407,22 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     setEditingPromptIndex(null);
   };
 
+  // 이론 수업(덱=theoryPrompt) 자체를 기록에서 제거한다. 묶여 있던 실습은 "이론과 묶이지 않은 실습"으로 내려간다.
+  const handleRemoveTheoryPrompt = (index: number) => {
+    if (!currentDateRecord) return;
+    const label = effectiveTheoryPrompts[index]?.label?.trim() || `${index + 1}번째 이론수업`;
+    if (!window.confirm(`'${label}' 이론 수업을 삭제할까요?`)) return;
+    onSaveDateRecord({
+      ...currentDateRecord,
+      theoryPrompts: effectiveTheoryPrompts.filter((_, idx) => idx !== index),
+    });
+    // 삭제로 index가 밀리므로 프롬프트 index를 가리키던 상태를 모두 초기화한다.
+    setActivePromptIndex(null);
+    setEditingPromptIndex(null);
+    setSlideInputPromptIndex(null);
+    setCopiedPromptIndex(null);
+  };
+
   // 이론 프롬프트(시수)에 자료 링크를 붙인다. 입력값은 임베드용으로 정규화해 저장하고 인라인 입력을 닫는다.
   const handleSetTheoryPromptSlide = (index: number, rawUrl: string) => {
     if (!currentDateRecord) return;
@@ -2673,6 +2689,15 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                                     <Plus size={14} />
                                   </button>
                                 )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveTheoryPrompt(promptIndex)}
+                                  title="이론 수업 삭제"
+                                  aria-label="이론 수업 삭제"
+                                  className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[#E5E3DD] bg-white text-[#B7AFA4] transition-all hover:border-[#D9534F] hover:text-[#D9534F]"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
                               </div>
                             </div>
 
