@@ -744,9 +744,10 @@ export default function App() {
                 .map((lang) => lang.trim())
                 .filter(Boolean)
             : undefined,
-          // 수업 복사 그룹 라벨. 빼먹으면 스냅샷 정규화에서 떨어져 설정에서 저장해도 사라진 것처럼 보인다.
-          copyGroup:
-            typeof data.copyGroup === 'string' && data.copyGroup.trim() ? data.copyGroup.trim() : undefined,
+          // 복사해올 원본 클래스 id 목록. 빼먹으면 스냅샷 정규화에서 떨어져 설정에서 저장해도 사라진 것처럼 보인다.
+          copyFromClassroomIds: Array.isArray(data.copyFromClassroomIds)
+            ? data.copyFromClassroomIds.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+            : undefined,
           calendarClassId: typeof data.calendarClassId === 'string' ? data.calendarClassId : undefined,
           sessionStates:
             data.sessionStates && typeof data.sessionStates === 'object'

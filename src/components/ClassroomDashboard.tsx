@@ -146,24 +146,6 @@ type Tab = 'dashboard' | 'results' | 'students' | 'curriculum' | 'settings';
 
 const DOW_LABELS = ['월', '화', '수', '목', '금', '토'];
 
-// 병기 번역 언어 드롭다운 기본(시드) 목록. 여기에 다른 반이 쓰는 언어·강사가 등록한 언어가 합쳐진다.
-const SEED_ANNOTATION_LANGUAGES = [
-  '러시아어',
-  '우즈베크어',
-  '중국어',
-  '베트남어',
-  '필리핀어',
-  '몽골어',
-  '태국어',
-  '네팔어',
-  '우크라이나어',
-  '카자흐어',
-  '캄보디아어',
-  '인도네시아어',
-  '영어',
-  '일본어',
-];
-
 // 회차를 '완료'로 누른 순간 울리는 "띠링~" 동전 효과음. (Web Audio, 짧은 두 음 상승)
 // 오디오 미지원·사용자 제스처 차단 등으로 실패하면 조용히 무시한다(시각 효과만 남음).
 let sharedAudioCtx: AudioContext | null = null;
@@ -553,7 +535,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     organization: classroom.organization || '',
     feeItems: buildFeeItemsDraft(classroom),
     annotationLanguages: classroom.annotationLanguages ?? [],
-    copyGroup: classroom.copyGroup ?? '',
+    copyFromClassroomIds: classroom.copyFromClassroomIds ?? [],
     // 값이 없으면(레거시 반) 활성으로 본다. 대시보드에는 켜진 영역만 보인다.
     showTheory: classroom.showTheory !== false,
     showPractice: classroom.showPractice !== false,
@@ -563,9 +545,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const [isLanguagePopupOpen, setIsLanguagePopupOpen] = useState(false);
   // 이번 세션에서 '언어 등록'으로 새로 만든 언어들(드롭다운에 계속 뜨도록). 저장돼 다른 반에 쓰이면 union으로도 유지된다.
   const [registeredLanguages, setRegisteredLanguages] = useState<string[]>([]);
-  // 설정 '복사 그룹' — 새 그룹 만들기 팝업 상태.
-  const [isCopyGroupPopupOpen, setIsCopyGroupPopupOpen] = useState(false);
-  const [copyGroupInput, setCopyGroupInput] = useState('');
 
   const [calendarClasses, setCalendarClasses] = useState<CalendarClassSummary[]>([]);
   const [calendarClassesLoading, setCalendarClassesLoading] = useState(false);
@@ -778,6 +757,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
 
   // 배열은 스냅샷마다 새 참조라 deps에 그대로 넣으면 편집 중에도 리셋된다. 내용 기반 키로 비교한다.
   const annotationLanguagesKey = (classroom.annotationLanguages ?? []).join('');
+  const copyFromClassroomIdsKey = (classroom.copyFromClassroomIds ?? []).join(',');
   const feeItemsKey = JSON.stringify(classroom.feeItems ?? null);
   useEffect(() => {
     setSettingsDraft({
@@ -788,7 +768,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       organization: classroom.organization || '',
       feeItems: buildFeeItemsDraft(classroom),
       annotationLanguages: classroom.annotationLanguages ?? [],
-      copyGroup: classroom.copyGroup ?? '',
+      copyFromClassroomIds: classroom.copyFromClassroomIds ?? [],
       showTheory: classroom.showTheory !== false,
       showPractice: classroom.showPractice !== false,
     });
@@ -802,7 +782,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     classroom.feePerHour,
     classroom.hoursPerSession,
     annotationLanguagesKey,
-    classroom.copyGroup,
+    copyFromClassroomIdsKey,
     classroom.showTheory,
     classroom.showPractice,
   ]);
@@ -1157,10 +1137,12 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   };
 
   // 이 반의 복사 그룹(설정에서 지정). 같은 그룹 반끼리만 서로의 수업을 복사 후보로 본다.
-  const currentCopyGroup = classroom.copyGroup?.trim() || '';
-  // 다른 반에서 '복사해올' 수 있는 수업 후보 — 같은 복사 그룹 + 이론·실습이 담긴 기록(자기 자신 제외). 날짜·반·커리큘럼명으로 판단.
+  // 이 반이 복사해올 원본 클래스 id들(설정에서 선택). 대시보드 복사 후보는 이 클래스들의 수업 기록으로 한정한다.
+  const copyFromClassroomIds = classroom.copyFromClassroomIds ?? [];
+  const copyFromClassroomIdSet = useMemo(() => new Set(copyFromClassroomIds), [copyFromClassroomIdsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 복사해올 수 있는 수업 후보 — 선택한 클래스들의, 이론·실습이 담긴 기록(자기 자신 제외). 날짜·반·커리큘럼명으로 판단.
   const lessonCopyOptions = useMemo(() => {
-    if (!currentCopyGroup) return [];
+    if (copyFromClassroomIdSet.size === 0) return [];
     const selfId = currentDateRecord?.id ?? `${classroom.id}_${selectedDate}`;
     const classroomById = new Map<string, Classroom>(
       classrooms.map((entry): [string, Classroom] => [entry.id, entry])
@@ -1173,9 +1155,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
         if (record.id === selfId) return false;
         if ((record.contentIds?.length ?? 0) === 0 && (record.theoryPrompts?.length ?? 0) === 0)
           return false;
-        // 같은 복사 그룹의 반만.
-        const recGroup = classroomById.get(record.classroomId)?.copyGroup?.trim() || '';
-        return recGroup === currentCopyGroup;
+        // 선택한 클래스의 기록만.
+        return copyFromClassroomIdSet.has(record.classroomId);
       })
       .map((record) => {
         const cls = classroomById.get(record.classroomId);
@@ -1197,18 +1178,12 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     currentDateRecord?.id,
     classroom.id,
     selectedDate,
-    currentCopyGroup,
+    copyFromClassroomIdSet,
   ]);
-  // 설정 화면 '복사 그룹' 입력의 자동완성 후보 — 다른 반들이 이미 쓰는 그룹 라벨 모음.
-  const existingCopyGroups = useMemo(
-    () =>
-      [...new Set(classrooms.map((entry) => entry.copyGroup?.trim()).filter((g): g is string => Boolean(g)))].sort(),
-    [classrooms]
-  );
-  // 병기 언어 드롭다운 후보: 시드 + 다른 반들이 쓰는 언어 + 이번 세션에 등록한 언어(중복 제거).
+  // 병기 언어 드롭다운 후보: 지금 다른 반들이 실제로 쓰는 언어 + 이번 세션에 등록한 언어만(기본 시드 없음).
   const knownAnnotationLanguages = useMemo(() => {
     const fromClasses = classrooms.flatMap((entry) => entry.annotationLanguages ?? []);
-    return [...new Set([...SEED_ANNOTATION_LANGUAGES, ...fromClasses, ...registeredLanguages].map((l) => l.trim()).filter(Boolean))];
+    return [...new Set([...fromClasses, ...registeredLanguages].map((l) => l.trim()).filter(Boolean))];
   }, [classrooms, registeredLanguages]);
 
   // 병기 언어 추가(중복 무시). 드롭다운 선택 시 호출.
@@ -1230,13 +1205,20 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     setAnnotationLanguageInput('');
     setIsLanguagePopupOpen(false);
   };
-  // '새 그룹 만들기' 팝업 확정 — 입력한 라벨을 이 반의 복사 그룹으로 지정한다(드롭다운에도 뜬다).
-  const createCopyGroup = () => {
-    const next = copyGroupInput.trim();
-    if (!next) return;
-    setSettingsDraft((prev) => ({ ...prev, copyGroup: next }));
-    setCopyGroupInput('');
-    setIsCopyGroupPopupOpen(false);
+  // 복사해올 원본 클래스 추가/제거(설정). 중복 무시.
+  const addCopyFromClassroom = (id: string) => {
+    if (!id) return;
+    setSettingsDraft((prev) =>
+      prev.copyFromClassroomIds.includes(id)
+        ? prev
+        : { ...prev, copyFromClassroomIds: [...prev.copyFromClassroomIds, id] }
+    );
+  };
+  const removeCopyFromClassroom = (id: string) => {
+    setSettingsDraft((prev) => ({
+      ...prev,
+      copyFromClassroomIds: prev.copyFromClassroomIds.filter((entry) => entry !== id),
+    }));
   };
 
   // 다른 수업의 이론·실습을 이 날짜로 '복사'해온다(덮어쓰기). 복사이므로 이후 양쪽은 독립적으로 편집된다.
@@ -2659,9 +2641,9 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                     <div className="mt-2 max-h-[320px] space-y-1.5 overflow-y-auto rounded-2xl border border-[#E5E3DD] bg-white p-2">
                       {lessonCopyOptions.length === 0 ? (
                         <p className="px-2 py-3 text-xs text-[#8B7E74]">
-                          {currentCopyGroup
-                            ? `'${currentCopyGroup}' 그룹의 다른 반에 아직 만든 수업이 없습니다.`
-                            : '설정 탭에서 이 반의 복사 그룹을 지정하면, 같은 그룹 반의 수업을 불러올 수 있어요.'}
+                          {copyFromClassroomIdSet.size > 0
+                            ? '선택한 복사 클래스에 아직 만든 수업이 없습니다.'
+                            : '설정 탭 → 복사 클래스에서 가져올 클래스를 선택하면, 그 클래스의 수업을 불러올 수 있어요.'}
                         </p>
                       ) : (
                         lessonCopyOptions.map((option) => (
@@ -4621,7 +4603,10 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                   feePerHour: primaryFeeItem?.feePerHour ?? deleteField(),
                   hoursPerSession: primaryFeeItem?.hoursPerSession ?? deleteField(),
                   annotationLanguages,
-                  copyGroup: settingsDraft.copyGroup.trim() ? settingsDraft.copyGroup.trim() : deleteField(),
+                  copyFromClassroomIds:
+                    settingsDraft.copyFromClassroomIds.length > 0
+                      ? settingsDraft.copyFromClassroomIds
+                      : deleteField(),
                   showTheory: settingsDraft.showTheory,
                   showPractice: settingsDraft.showPractice,
                 } as Partial<Classroom>);
@@ -4673,34 +4658,53 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
         <div className="mb-5">
           <div className="mb-3 flex items-center gap-2">
             <Copy size={16} className="text-[#8B5E3C]" />
-            <h3 className="text-sm font-bold text-[#4A3728]">복사 그룹</h3>
+            <h3 className="text-sm font-bold text-[#4A3728]">복사 클래스</h3>
           </div>
+          {settingsDraft.copyFromClassroomIds.length > 0 && (
+            <div className="mb-3 flex flex-wrap gap-2">
+              {settingsDraft.copyFromClassroomIds.map((id) => {
+                const cls = classrooms.find((entry) => entry.id === id);
+                return (
+                  <span
+                    key={id}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-[#EAF2FF] px-3 py-1.5 text-sm font-bold text-[#2F5EA8]"
+                  >
+                    {cls?.name || '(삭제된 클래스)'}
+                    <button
+                      type="button"
+                      onClick={() => removeCopyFromClassroom(id)}
+                      className="rounded-full p-0.5 text-[#7EA3D6] transition-colors hover:bg-[#D6E6FF] hover:text-[#2F5EA8]"
+                      aria-label={`${cls?.name || '클래스'} 제거`}
+                    >
+                      <X size={14} />
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+          )}
           <select
-            value={settingsDraft.copyGroup}
+            value=""
             onChange={(event) => {
-              const value = event.target.value;
-              if (value === '__new__') {
-                setCopyGroupInput('');
-                setIsCopyGroupPopupOpen(true);
-                return;
-              }
-              setSettingsDraft({ ...settingsDraft, copyGroup: value });
+              if (event.target.value) addCopyFromClassroom(event.target.value);
+              event.target.value = '';
             }}
             className="w-full rounded-2xl border-2 border-[#E5E3DD] bg-white px-4 py-2.5 text-sm font-medium text-[#4A3728] transition-all focus:border-[#8B5E3C] focus:outline-none"
           >
-            <option value="">— 그룹 없음 (복사 안 함) —</option>
-            {/* 현재 값이 기존 목록에 없으면(방금 만든 그룹) 선택 유지를 위해 함께 노출 */}
-            {[...new Set([...existingCopyGroups, ...(settingsDraft.copyGroup.trim() ? [settingsDraft.copyGroup.trim()] : [])])].map(
-              (group) => (
-                <option key={group} value={group}>
-                  {group}
-                </option>
+            <option value="">복사해올 클래스 선택…</option>
+            {classrooms
+              .filter(
+                (entry) =>
+                  entry.id !== classroom.id && !settingsDraft.copyFromClassroomIds.includes(entry.id)
               )
-            )}
-            <option value="__new__">+ 새 그룹 만들기…</option>
+              .map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.name}
+                </option>
+              ))}
           </select>
           <p className="mt-1.5 px-1 text-[11px] text-[#8B7E74]">
-            같은 그룹 반끼리만 대시보드 '다른 반 수업 복사해오기' 후보로 보입니다. 비우면 이 반은 복사 후보가 없어요.
+            여기서 고른 클래스의 수업을 대시보드 '다른 반 수업 복사해오기'에서 가져올 수 있어요. 비우면 이 반은 복사 후보가 없어요.
           </p>
         </div>
 
@@ -5210,56 +5214,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
           </div>
         )}
 
-        {/* 새 복사 그룹 만들기 팝업 */}
-        {isCopyGroupPopupOpen && (
-          <div
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4"
-            onClick={(event) => {
-              if (event.target === event.currentTarget) setIsCopyGroupPopupOpen(false);
-            }}
-          >
-            <div className="w-full max-w-sm rounded-[24px] bg-white p-6 shadow-2xl">
-              <div className="mb-3 flex items-center gap-2">
-                <Copy size={18} className="text-[#8B5E3C]" />
-                <h3 className="text-base font-bold text-[#4A3728]">새 복사 그룹 만들기</h3>
-              </div>
-              <p className="mb-3 text-xs text-[#8B7E74]">
-                그룹 이름을 입력하세요. 다른 반도 같은 이름의 그룹을 고르면 서로 수업을 복사해올 수 있어요.
-              </p>
-              <input
-                type="text"
-                autoFocus
-                value={copyGroupInput}
-                onChange={(event) => setCopyGroupInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault();
-                    createCopyGroup();
-                  }
-                }}
-                placeholder="예: 레인보우"
-                className="w-full rounded-2xl border-2 border-[#E5E3DD] px-4 py-2.5 text-sm font-medium text-[#4A3728] outline-none transition-all focus:border-[#8B5E3C]"
-              />
-              <div className="mt-4 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsCopyGroupPopupOpen(false)}
-                  className="rounded-2xl bg-[#F3F2EE] px-5 py-2.5 text-sm font-bold text-[#4A3728] transition-all hover:bg-[#EAE8E2]"
-                >
-                  취소
-                </button>
-                <button
-                  type="button"
-                  onClick={createCopyGroup}
-                  disabled={!copyGroupInput.trim()}
-                  className="rounded-2xl bg-[#8B5E3C] px-5 py-2.5 text-sm font-bold text-white transition-all hover:bg-[#724D31] disabled:cursor-not-allowed disabled:bg-[#B8AA9A]"
-                >
-                  만들기
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </motion.div>
     );
   };
