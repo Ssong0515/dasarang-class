@@ -545,6 +545,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const [isLanguagePopupOpen, setIsLanguagePopupOpen] = useState(false);
   // 이번 세션에서 '언어 등록'으로 새로 만든 언어들(드롭다운에 계속 뜨도록). 저장돼 다른 반에 쓰이면 union으로도 유지된다.
   const [registeredLanguages, setRegisteredLanguages] = useState<string[]>([]);
+  // 설정 '복사 클래스' 추가 드롭다운(커스텀 — 아이콘·컬러 표시) 열림 여부.
+  const [isCopyClassPickerOpen, setIsCopyClassPickerOpen] = useState(false);
 
   const [calendarClasses, setCalendarClasses] = useState<CalendarClassSummary[]>([]);
   const [calendarClassesLoading, setCalendarClassesLoading] = useState(false);
@@ -4664,16 +4666,24 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
             <div className="mb-3 flex flex-wrap gap-2">
               {settingsDraft.copyFromClassroomIds.map((id) => {
                 const cls = classrooms.find((entry) => entry.id === id);
+                const meta = getClassroomColorMeta(cls?.color || DEFAULT_CLASSROOM_COLOR);
+                const ChipIcon = getClassroomIconComponent(cls?.icon || DEFAULT_CLASSROOM_ICON);
                 return (
                   <span
                     key={id}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-[#EAF2FF] px-3 py-1.5 text-sm font-bold text-[#2F5EA8]"
+                    className="inline-flex items-center gap-2 rounded-full border border-[#E5E3DD] bg-white py-1 pl-1.5 pr-2 text-sm font-bold text-[#4A3728]"
                   >
+                    <span
+                      className="flex h-6 w-6 items-center justify-center rounded-lg"
+                      style={{ backgroundColor: meta.bg }}
+                    >
+                      {ChipIcon && <ChipIcon size={13} style={{ color: meta.value }} />}
+                    </span>
                     {cls?.name || '(삭제된 클래스)'}
                     <button
                       type="button"
                       onClick={() => removeCopyFromClassroom(id)}
-                      className="rounded-full p-0.5 text-[#7EA3D6] transition-colors hover:bg-[#D6E6FF] hover:text-[#2F5EA8]"
+                      className="rounded-full p-0.5 text-[#B7AFA4] transition-colors hover:bg-[#F3F2EE] hover:text-[#D9534F]"
                       aria-label={`${cls?.name || '클래스'} 제거`}
                     >
                       <X size={14} />
@@ -4683,28 +4693,59 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               })}
             </div>
           )}
-          <select
-            value=""
-            onChange={(event) => {
-              if (event.target.value) addCopyFromClassroom(event.target.value);
-              event.target.value = '';
-            }}
-            className="w-full rounded-2xl border-2 border-[#E5E3DD] bg-white px-4 py-2.5 text-sm font-medium text-[#4A3728] transition-all focus:border-[#8B5E3C] focus:outline-none"
-          >
-            <option value="">복사해올 클래스 선택…</option>
-            {classrooms
-              .filter(
-                (entry) =>
-                  entry.id !== classroom.id && !settingsDraft.copyFromClassroomIds.includes(entry.id)
-              )
-              .map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {entry.name}
-                </option>
-              ))}
-          </select>
+          {/* 커스텀 드롭다운 — 사이드바처럼 아이콘·컬러로 보여준다. 숨긴 클래스는 제외하고 활성 클래스만. */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsCopyClassPickerOpen((open) => !open)}
+              className="flex w-full items-center justify-between gap-2 rounded-2xl border-2 border-[#E5E3DD] bg-white px-4 py-2.5 text-sm font-medium text-[#8B7E74] transition-all hover:border-[#8B5E3C]"
+            >
+              복사해올 클래스 선택…
+              {isCopyClassPickerOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+            {isCopyClassPickerOpen && (
+              <div className="mt-2 max-h-[280px] space-y-1 overflow-y-auto rounded-2xl border border-[#E5E3DD] bg-white p-2 shadow-sm">
+                {(() => {
+                  const available = classrooms.filter(
+                    (entry) =>
+                      entry.id !== classroom.id &&
+                      !entry.hidden &&
+                      !settingsDraft.copyFromClassroomIds.includes(entry.id)
+                  );
+                  if (available.length === 0) {
+                    return (
+                      <p className="px-2 py-3 text-xs text-[#8B7E74]">추가할 수 있는 클래스가 없습니다.</p>
+                    );
+                  }
+                  return available.map((entry) => {
+                    const meta = getClassroomColorMeta(entry.color || DEFAULT_CLASSROOM_COLOR);
+                    const RowIcon = getClassroomIconComponent(entry.icon || DEFAULT_CLASSROOM_ICON);
+                    return (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        onClick={() => {
+                          addCopyFromClassroom(entry.id);
+                          setIsCopyClassPickerOpen(false);
+                        }}
+                        className="flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-left transition-all hover:bg-[#F3F2EE]"
+                      >
+                        <span
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl"
+                          style={{ backgroundColor: meta.bg }}
+                        >
+                          {RowIcon && <RowIcon size={16} style={{ color: meta.value }} />}
+                        </span>
+                        <span className="truncate text-sm font-bold text-[#4A3728]">{entry.name}</span>
+                      </button>
+                    );
+                  });
+                })()}
+              </div>
+            )}
+          </div>
           <p className="mt-1.5 px-1 text-[11px] text-[#8B7E74]">
-            여기서 고른 클래스의 수업을 대시보드 '다른 반 수업 복사해오기'에서 가져올 수 있어요. 비우면 이 반은 복사 후보가 없어요.
+            여기서 고른 클래스의 수업을 대시보드 '다른 반 수업 복사해오기'에서 가져올 수 있어요. 숨긴 클래스는 목록에 나오지 않아요.
           </p>
         </div>
 
