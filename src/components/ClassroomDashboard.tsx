@@ -146,6 +146,24 @@ type Tab = 'dashboard' | 'results' | 'students' | 'curriculum' | 'settings';
 
 const DOW_LABELS = ['월', '화', '수', '목', '금', '토'];
 
+// 병기 번역 언어 드롭다운 기본(시드) 목록. 여기에 다른 반이 쓰는 언어·강사가 등록한 언어가 합쳐진다.
+const SEED_ANNOTATION_LANGUAGES = [
+  '러시아어',
+  '우즈베크어',
+  '중국어',
+  '베트남어',
+  '필리핀어',
+  '몽골어',
+  '태국어',
+  '네팔어',
+  '우크라이나어',
+  '카자흐어',
+  '캄보디아어',
+  '인도네시아어',
+  '영어',
+  '일본어',
+];
+
 // 회차를 '완료'로 누른 순간 울리는 "띠링~" 동전 효과음. (Web Audio, 짧은 두 음 상승)
 // 오디오 미지원·사용자 제스처 차단 등으로 실패하면 조용히 무시한다(시각 효과만 남음).
 let sharedAudioCtx: AudioContext | null = null;
@@ -540,8 +558,14 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     showTheory: classroom.showTheory !== false,
     showPractice: classroom.showPractice !== false,
   });
-  // 설정에서 새 병기 언어를 입력 중인 칸 (추가 버튼/엔터로 settingsDraft.annotationLanguages에 넣는다)
+  // 설정 '병기 번역 언어' — 드롭다운에 없는 언어를 등록하는 팝업 상태(입력값은 annotationLanguageInput 재사용).
   const [annotationLanguageInput, setAnnotationLanguageInput] = useState('');
+  const [isLanguagePopupOpen, setIsLanguagePopupOpen] = useState(false);
+  // 이번 세션에서 '언어 등록'으로 새로 만든 언어들(드롭다운에 계속 뜨도록). 저장돼 다른 반에 쓰이면 union으로도 유지된다.
+  const [registeredLanguages, setRegisteredLanguages] = useState<string[]>([]);
+  // 설정 '복사 그룹' — 새 그룹 만들기 팝업 상태.
+  const [isCopyGroupPopupOpen, setIsCopyGroupPopupOpen] = useState(false);
+  const [copyGroupInput, setCopyGroupInput] = useState('');
 
   const [calendarClasses, setCalendarClasses] = useState<CalendarClassSummary[]>([]);
   const [calendarClassesLoading, setCalendarClassesLoading] = useState(false);
@@ -1181,6 +1205,39 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       [...new Set(classrooms.map((entry) => entry.copyGroup?.trim()).filter((g): g is string => Boolean(g)))].sort(),
     [classrooms]
   );
+  // 병기 언어 드롭다운 후보: 시드 + 다른 반들이 쓰는 언어 + 이번 세션에 등록한 언어(중복 제거).
+  const knownAnnotationLanguages = useMemo(() => {
+    const fromClasses = classrooms.flatMap((entry) => entry.annotationLanguages ?? []);
+    return [...new Set([...SEED_ANNOTATION_LANGUAGES, ...fromClasses, ...registeredLanguages].map((l) => l.trim()).filter(Boolean))];
+  }, [classrooms, registeredLanguages]);
+
+  // 병기 언어 추가(중복 무시). 드롭다운 선택 시 호출.
+  const addAnnotationLanguage = (lang: string) => {
+    const next = lang.trim();
+    if (!next) return;
+    setSettingsDraft((prev) =>
+      prev.annotationLanguages.includes(next)
+        ? prev
+        : { ...prev, annotationLanguages: [...prev.annotationLanguages, next] }
+    );
+  };
+  // '언어 등록' 팝업 확정 — 세션 등록 목록에 넣고 이 반에도 바로 추가한다.
+  const registerAnnotationLanguage = () => {
+    const next = annotationLanguageInput.trim();
+    if (!next) return;
+    setRegisteredLanguages((prev) => (prev.includes(next) ? prev : [...prev, next]));
+    addAnnotationLanguage(next);
+    setAnnotationLanguageInput('');
+    setIsLanguagePopupOpen(false);
+  };
+  // '새 그룹 만들기' 팝업 확정 — 입력한 라벨을 이 반의 복사 그룹으로 지정한다(드롭다운에도 뜬다).
+  const createCopyGroup = () => {
+    const next = copyGroupInput.trim();
+    if (!next) return;
+    setSettingsDraft((prev) => ({ ...prev, copyGroup: next }));
+    setCopyGroupInput('');
+    setIsCopyGroupPopupOpen(false);
+  };
 
   // 다른 수업의 이론·실습을 이 날짜로 '복사'해온다(덮어쓰기). 복사이므로 이후 양쪽은 독립적으로 편집된다.
   // 다시 불러오면 그대로 다시 덮어써 똑같아진다.
@@ -4618,19 +4675,30 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
             <Copy size={16} className="text-[#8B5E3C]" />
             <h3 className="text-sm font-bold text-[#4A3728]">복사 그룹</h3>
           </div>
-          <input
-            type="text"
-            list="copy-group-suggestions"
+          <select
             value={settingsDraft.copyGroup}
-            onChange={(event) => setSettingsDraft({ ...settingsDraft, copyGroup: event.target.value })}
-            className="w-full rounded-2xl border-2 border-[#E5E3DD] px-4 py-2.5 text-sm font-medium text-[#4A3728] transition-all focus:border-[#8B5E3C] focus:outline-none"
-            placeholder='예: "레인보우", "앱" — 같은 값을 가진 반끼리만 수업을 복사해올 수 있어요'
-          />
-          <datalist id="copy-group-suggestions">
-            {existingCopyGroups.map((group) => (
-              <option key={group} value={group} />
-            ))}
-          </datalist>
+            onChange={(event) => {
+              const value = event.target.value;
+              if (value === '__new__') {
+                setCopyGroupInput('');
+                setIsCopyGroupPopupOpen(true);
+                return;
+              }
+              setSettingsDraft({ ...settingsDraft, copyGroup: value });
+            }}
+            className="w-full rounded-2xl border-2 border-[#E5E3DD] bg-white px-4 py-2.5 text-sm font-medium text-[#4A3728] transition-all focus:border-[#8B5E3C] focus:outline-none"
+          >
+            <option value="">— 그룹 없음 (복사 안 함) —</option>
+            {/* 현재 값이 기존 목록에 없으면(방금 만든 그룹) 선택 유지를 위해 함께 노출 */}
+            {[...new Set([...existingCopyGroups, ...(settingsDraft.copyGroup.trim() ? [settingsDraft.copyGroup.trim()] : [])])].map(
+              (group) => (
+                <option key={group} value={group}>
+                  {group}
+                </option>
+              )
+            )}
+            <option value="__new__">+ 새 그룹 만들기…</option>
+          </select>
           <p className="mt-1.5 px-1 text-[11px] text-[#8B7E74]">
             같은 그룹 반끼리만 대시보드 '다른 반 수업 복사해오기' 후보로 보입니다. 비우면 이 반은 복사 후보가 없어요.
           </p>
@@ -4912,51 +4980,31 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               아직 병기 언어가 없어요. 비워 두면 번역 병기 없이 쉬운 한국어+그림으로만 만듭니다.
             </p>
           )}
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={annotationLanguageInput}
-              onChange={(event) => setAnnotationLanguageInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  const next = annotationLanguageInput.trim();
-                  if (
-                    next &&
-                    !settingsDraft.annotationLanguages.some((lang) => lang === next)
-                  ) {
-                    setSettingsDraft({
-                      ...settingsDraft,
-                      annotationLanguages: [...settingsDraft.annotationLanguages, next],
-                    });
-                  }
-                  setAnnotationLanguageInput('');
-                }
-              }}
-              placeholder='예: 러시아어 (입력 후 Enter 또는 추가)'
-              className="w-full rounded-2xl border-2 border-[#E5E3DD] px-4 py-2.5 text-sm font-medium text-[#4A3728] transition-all focus:border-[#8B5E3C] focus:outline-none"
-            />
-            <button
-              type="button"
-              onClick={() => {
-                const next = annotationLanguageInput.trim();
-                if (
-                  next &&
-                  !settingsDraft.annotationLanguages.some((lang) => lang === next)
-                ) {
-                  setSettingsDraft({
-                    ...settingsDraft,
-                    annotationLanguages: [...settingsDraft.annotationLanguages, next],
-                  });
-                }
+          <select
+            value=""
+            onChange={(event) => {
+              const value = event.target.value;
+              if (!value) return;
+              if (value === '__register__') {
                 setAnnotationLanguageInput('');
-              }}
-              className="inline-flex shrink-0 items-center gap-1 rounded-2xl border-2 border-[#E5E3DD] px-4 py-2.5 text-sm font-bold text-[#8B5E3C] transition-all hover:bg-[#F3F2EE]"
-            >
-              <Plus size={16} />
-              추가
-            </button>
-          </div>
+                setIsLanguagePopupOpen(true);
+              } else {
+                addAnnotationLanguage(value);
+              }
+              event.target.value = '';
+            }}
+            className="w-full rounded-2xl border-2 border-[#E5E3DD] bg-white px-4 py-2.5 text-sm font-medium text-[#4A3728] transition-all focus:border-[#8B5E3C] focus:outline-none"
+          >
+            <option value="">언어 추가…</option>
+            {knownAnnotationLanguages
+              .filter((lang) => !settingsDraft.annotationLanguages.includes(lang))
+              .map((lang) => (
+                <option key={lang} value={lang}>
+                  {lang}
+                </option>
+              ))}
+            <option value="__register__">+ 언어 등록 (목록에 없는 언어)</option>
+          </select>
           <p className="mt-2 text-xs text-[#A89F94]">
             추가/삭제 후 위의 <span className="font-bold">저장</span>을 눌러야 반영됩니다.
           </p>
@@ -5110,6 +5158,108 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
             클래스 삭제
           </button>
         </div>
+
+        {/* 언어 등록 팝업 — 드롭다운에 없는 새 언어를 등록해 이후 목록에 나오게 한다. */}
+        {isLanguagePopupOpen && (
+          <div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) setIsLanguagePopupOpen(false);
+            }}
+          >
+            <div className="w-full max-w-sm rounded-[24px] bg-white p-6 shadow-2xl">
+              <div className="mb-3 flex items-center gap-2">
+                <Languages size={18} className="text-[#8B5E3C]" />
+                <h3 className="text-base font-bold text-[#4A3728]">언어 등록</h3>
+              </div>
+              <p className="mb-3 text-xs text-[#8B7E74]">
+                목록에 없는 언어를 입력하세요. 등록하면 이 반에 바로 추가되고, 다음부터 드롭다운에도 나옵니다.
+              </p>
+              <input
+                type="text"
+                autoFocus
+                value={annotationLanguageInput}
+                onChange={(event) => setAnnotationLanguageInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    registerAnnotationLanguage();
+                  }
+                }}
+                placeholder="예: 크메르어"
+                className="w-full rounded-2xl border-2 border-[#E5E3DD] px-4 py-2.5 text-sm font-medium text-[#4A3728] outline-none transition-all focus:border-[#8B5E3C]"
+              />
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsLanguagePopupOpen(false)}
+                  className="rounded-2xl bg-[#F3F2EE] px-5 py-2.5 text-sm font-bold text-[#4A3728] transition-all hover:bg-[#EAE8E2]"
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  onClick={registerAnnotationLanguage}
+                  disabled={!annotationLanguageInput.trim()}
+                  className="rounded-2xl bg-[#8B5E3C] px-5 py-2.5 text-sm font-bold text-white transition-all hover:bg-[#724D31] disabled:cursor-not-allowed disabled:bg-[#B8AA9A]"
+                >
+                  등록
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 새 복사 그룹 만들기 팝업 */}
+        {isCopyGroupPopupOpen && (
+          <div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) setIsCopyGroupPopupOpen(false);
+            }}
+          >
+            <div className="w-full max-w-sm rounded-[24px] bg-white p-6 shadow-2xl">
+              <div className="mb-3 flex items-center gap-2">
+                <Copy size={18} className="text-[#8B5E3C]" />
+                <h3 className="text-base font-bold text-[#4A3728]">새 복사 그룹 만들기</h3>
+              </div>
+              <p className="mb-3 text-xs text-[#8B7E74]">
+                그룹 이름을 입력하세요. 다른 반도 같은 이름의 그룹을 고르면 서로 수업을 복사해올 수 있어요.
+              </p>
+              <input
+                type="text"
+                autoFocus
+                value={copyGroupInput}
+                onChange={(event) => setCopyGroupInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    createCopyGroup();
+                  }
+                }}
+                placeholder="예: 레인보우"
+                className="w-full rounded-2xl border-2 border-[#E5E3DD] px-4 py-2.5 text-sm font-medium text-[#4A3728] outline-none transition-all focus:border-[#8B5E3C]"
+              />
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCopyGroupPopupOpen(false)}
+                  className="rounded-2xl bg-[#F3F2EE] px-5 py-2.5 text-sm font-bold text-[#4A3728] transition-all hover:bg-[#EAE8E2]"
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  onClick={createCopyGroup}
+                  disabled={!copyGroupInput.trim()}
+                  className="rounded-2xl bg-[#8B5E3C] px-5 py-2.5 text-sm font-bold text-white transition-all hover:bg-[#724D31] disabled:cursor-not-allowed disabled:bg-[#B8AA9A]"
+                >
+                  만들기
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </motion.div>
     );
   };
