@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Edit3,
+  Info,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -586,9 +587,12 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const [isContentPaletteCollapsed, setIsContentPaletteCollapsed] = useState(true);
   // '수업 콘텐츠 선택'으로 추가할 실습을 묶을 대상 이론(그룹) index. null이면 어느 이론에도 안 묶고 개별 실습으로 추가한다.
   const [activePromptIndex, setActivePromptIndex] = useState<number | null>(null);
-  // 날짜가 바뀌면 다른 날짜의 이론 index를 가리키지 않도록 담기 대상을 해제한다.
+  // 이 회차 커리큘럼 상세 팝업 열림 여부.
+  const [showCurriculumDetail, setShowCurriculumDetail] = useState(false);
+  // 날짜가 바뀌면 다른 날짜의 이론 index를 가리키지 않도록 담기 대상을 해제하고, 회차 상세 팝업도 닫는다.
   useEffect(() => {
     setActivePromptIndex(null);
+    setShowCurriculumDetail(false);
   }, [selectedDate]);
   const activeDateSet = useMemo(
     () => new Set(classroomDateRecords.map((record) => record.date)),
@@ -1951,6 +1955,15 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       daySessions.length > 0
         ? daySessions.map((session) => `${session.order}회차 · ${session.topic}`).join(' / ')
         : null;
+    // 이 날짜에 매칭되는 커리큘럼 회차(상세 팝업용). currentSessionId로 정확히 찾고, 없으면 첫 회차로 폴백.
+    const curriculumSession =
+      daySessions.find((session) => session.id === currentSessionId) ?? daySessions[0] ?? null;
+    // 팝업 제목. topic에 이미 "N회차"가 들어 있으면(이 커리큘럼 관행) 접두사를 빼 중복을 막는다.
+    const curriculumSessionHeading = curriculumSession
+      ? curriculumSession.topic.trim().startsWith(`${curriculumSession.order}회차`)
+        ? curriculumSession.topic.trim()
+        : `${curriculumSession.order}회차 · ${curriculumSession.topic}`
+      : '';
     // 이론 슬라이드 소구간 / 콘텐츠 목록의 표시 여부. 둘 다 안 보이면 빈 안내를 띄운다.
     // (콘텐츠 목록은 이론·실습 중 하나라도 켜져 있으면 보여서, 이론만 반에서도 이론 버튼이 사라지지 않는다.)
     const theorySlidesVisible = showTheorySection && recordedSlideContents.length > 0;
@@ -2426,6 +2439,48 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               </div>
             )}
 
+        {showCurriculumDetail && curriculumSession && (
+          <div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) setShowCurriculumDetail(false);
+            }}
+          >
+            <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-[28px] bg-white p-7 shadow-2xl">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#FFF5E9]">
+                    <Info size={20} className="text-[#8B5E3C]" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-lg font-bold text-[#4A3728]">{curriculumSessionHeading}</h3>
+                    {linkedCurriculum?.title && (
+                      <p className="truncate text-xs text-[#8B7E74]">{linkedCurriculum.title}</p>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowCurriculumDetail(false)}
+                  aria-label="닫기"
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[#8B7E74] transition-all hover:bg-[#F3F2EE]"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="flex-1 overflow-auto rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] px-4 py-3">
+                {curriculumSession.details?.trim() ? (
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#4A3728]">
+                    {curriculumSession.details}
+                  </p>
+                ) : (
+                  <p className="text-sm text-[#8B7E74]">이 회차에 저장된 상세 내용이 없습니다.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {isDateOpen && (
           <div className="order-3 col-span-2 rounded-[40px] border border-[#E5E3DD] bg-white p-5 shadow-sm sm:p-10">
             {missingCurrentDateContentCount > 0 && (
@@ -2600,6 +2655,17 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                                 <span className="truncate text-sm font-bold text-[#4A3728]">
                                   {prompt.label?.trim() || `${promptIndex + 1}번째 이론수업`}
                                 </span>
+                                {curriculumSession && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowCurriculumDetail(true)}
+                                    title="이 회차 커리큘럼 상세 보기"
+                                    aria-label="커리큘럼 회차 상세 보기"
+                                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[#8B7E74] transition-all hover:bg-[#F3F2EE] hover:text-[#8B5E3C]"
+                                  >
+                                    <Info size={14} />
+                                  </button>
+                                )}
                                 {showPracticeSection && contents.length > 0 && (
                                   <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-[#8B7E74]">
                                     실습 {groupPublishedCount}/{contents.length}
