@@ -3080,6 +3080,16 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                             >
                               {content.title}
                             </button>
+                            {/* 참고 예시(kind:reference) 표시 — 실습 행 공개 버튼과 같은 코너 아이콘 마커.
+                                오른쪽은 추가/빼기 버튼이 있으니 겹치지 않게 왼쪽 위 모서리에 얹는다. */}
+                            {content.kind === 'reference' && (
+                              <span
+                                className="pointer-events-none absolute -left-1.5 -top-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-[#FFF1DC] text-[#8B5E3C] ring-2 ring-white"
+                                title="참고 예시 문서 — 학생이 외부 도구(구글 문서 등)에서 보고 따라 만드는 자료"
+                              >
+                                <FileText size={10} />
+                              </span>
+                            )}
                             <button
                               type="button"
                               onClick={(event) => {
