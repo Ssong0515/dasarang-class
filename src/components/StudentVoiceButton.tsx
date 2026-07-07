@@ -47,6 +47,11 @@ const HOLD_HINTS: Record<string, string> = {
 const holdHintFor = (iso: string): string => HOLD_HINTS[iso] ?? HOLD_HINTS.en;
 
 const VOICE_LANG_STORAGE_KEY = 'dsr_voice_lang';
+// FAB 스택(언어 칩·피커·마이크)의 공통 래퍼. z-[10010]: 학생 페이지의 모든 오버레이(콘텐츠 드롭다운 z-90 ·
+// 업로드 모달 z-100 · 수업 종료 안내 z-110 · 교사 자막 z-120)는 물론 슬라이드 '창 전체화면'(z-[9999], 종료 버튼
+// z-[10000])보다도 위 — 언어·마이크 버튼은 어떤 화면 상태에서도 항상 맨 위에 떠 있어야 한다(2026-07-07 사용자 요청).
+// 이 버튼 하나가 실습 병기 번역·교사 방송 자막의 언어를 모두 제어하므로 가려지면 안 된다.
+const FAB_WRAPPER_CLASS = 'fixed bottom-4 right-4 z-[10010]';
 // 같은 탭의 다른 기능(실습 병기 번역 등)이 언어 변경을 즉시 따라가도록 쏘는 커스텀 이벤트.
 // storage 이벤트는 다른 탭에서만 발생하므로 같은 탭 전파는 이 이벤트로 한다. detail: { iso }.
 export const VOICE_LANG_CHANGED_EVENT = 'dsr-voice-lang-changed';
@@ -421,7 +426,7 @@ export const StudentVoiceButton: React.FC<StudentVoiceButtonProps> = ({
   // ── 렌더: 미지원 브라우저 ────────────────────────────────────────────────
   if (!speechSupported) {
     return (
-      <div className="fixed bottom-4 right-4 z-50">
+      <div className={FAB_WRAPPER_CLASS}>
         <button
           type="button"
           disabled
@@ -439,7 +444,7 @@ export const StudentVoiceButton: React.FC<StudentVoiceButtonProps> = ({
   // 퍼지는 핑 링 + 굵은 금색 링 + 위에서 통통 튀는 👇 이모지. 피커를 열면 강조는 사라진다.
   if (!lang) {
     return (
-      <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2">
+      <div className={`${FAB_WRAPPER_CLASS} flex flex-col items-end gap-2`}>
         {isPickerOpen && (
           <LangPicker onChoose={chooseLang} onClose={() => setIsPickerOpen(false)} />
         )}
@@ -476,7 +481,7 @@ export const StudentVoiceButton: React.FC<StudentVoiceButtonProps> = ({
   // 미선택 상태로 돌리지 않고 '한국어 선택됨'을 저장해 둔다(TTL·수업 종료 리셋은 다른 언어와 동일).
   if (lang.iso === KOREAN_LANG_OPTION.iso) {
     return (
-      <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2">
+      <div className={`${FAB_WRAPPER_CLASS} flex flex-col items-end gap-2`}>
         {isPickerOpen && <LangPicker onChoose={chooseLang} onClose={() => setIsPickerOpen(false)} />}
         <button
           type="button"
@@ -496,7 +501,7 @@ export const StudentVoiceButton: React.FC<StudentVoiceButtonProps> = ({
   const bubbleText = interimText;
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2">
+    <div className={`${FAB_WRAPPER_CLASS} flex flex-col items-end gap-2`}>
       {isPickerOpen && <LangPicker onChoose={chooseLang} onClose={() => setIsPickerOpen(false)} />}
 
       {bubbleText && (

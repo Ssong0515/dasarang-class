@@ -11,6 +11,7 @@ import {
 } from '../firebase';
 import type { TeacherBroadcastMessage } from '../types';
 import { TEACHER_BROADCAST_MESSAGES_COLLECTION } from '../utils/classroomDomain';
+import { VOICE_LANG_CHANGED_EVENT } from './StudentVoiceButton';
 
 // 학생이 StudentVoiceButton에서 고른 언어(iso)를 읽는 곳 — 같은 localStorage 키를 공유한다.
 const VOICE_LANG_STORAGE_KEY = 'dsr_voice_lang';
@@ -74,6 +75,8 @@ export const StudentSubtitleOverlay: React.FC<StudentSubtitleOverlayProps> = ({ 
   const [visible, setVisible] = useState(false);
   const lastSeenIdRef = useRef<string | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 지금 자막으로 띄운 방송 원본 — 학생이 언어를 바꾸면 이 메시지로 자막을 새 언어로 다시 그린다.
+  const lastMessageRef = useRef<TeacherBroadcastMessage | null>(null);
 
   // 교사 방송 구독 — 오늘 날짜 전체. 반 선택·수업 공개 여부와 무관하게 강사가 켜면 바로 자막이 뜬다.
   // 등호 필터 1개뿐이라 복합 색인 없이 동작한다(정렬은 클라이언트에서).
@@ -105,6 +108,7 @@ export const StudentSubtitleOverlay: React.FC<StudentSubtitleOverlayProps> = ({ 
         const subtitle = pickSubtitle(newest);
         if (!subtitle) return;
 
+        lastMessageRef.current = newest;
         setCurrent({ id: newest.id, ...subtitle });
         setVisible(true);
         if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
@@ -124,11 +128,30 @@ export const StudentSubtitleOverlay: React.FC<StudentSubtitleOverlayProps> = ({ 
     };
   }, [date]);
 
+  // 학생이 우하단 언어 버튼(StudentVoiceButton)으로 언어를 바꾸면, 지금 떠 있는 자막도 즉시 그 언어로 다시 그린다.
+  // (다음 방송부터가 아니라 '지금' 바뀌어야 버튼 하나로 실습 번역·자막이 함께 따라온다는 감각이 생긴다.)
+  // pickSubtitle이 localStorage에서 새 iso를 직접 읽으므로 이벤트 detail은 쓰지 않는다 —
+  // chooseLang이 저장을 먼저 하고 이벤트를 쏘기 때문에 이 시점엔 항상 새 언어가 저장돼 있다.
+  useEffect(() => {
+    const handleLangChanged = () => {
+      const message = lastMessageRef.current;
+      if (!message) return;
+      const subtitle = pickSubtitle(message);
+      if (!subtitle) return;
+      // 표시 중인 그 자막일 때만 교체(id 동일 → 재애니메이션 없이 텍스트만 스왑). 숨김 타이머는 그대로 둔다.
+      setCurrent((prev) => (prev && prev.id === message.id ? { id: message.id, ...subtitle } : prev));
+    };
+    window.addEventListener(VOICE_LANG_CHANGED_EVENT, handleLangChanged);
+    return () => window.removeEventListener(VOICE_LANG_CHANGED_EVENT, handleLangChanged);
+  }, []);
+
   // 상단 중앙에 띄운다 — 학생이 보는 실습 콘텐츠는 화면 중앙~하단이라 위쪽이 가장 덜 가린다.
-  // z-[120]: 학생 페이지 sticky 헤더(z-50)·화면 공유(z-105)·수업 종료 안내(z-110)보다 위 —
-  // 어떤 화면 상태에서도 자막이 가려지지 않는다. pointer-events-none이라 조작은 막지 않는다.
+  // z-[10005]: 헤더(z-50)·화면 공유(z-105)·수업 종료 안내(z-110)는 물론 슬라이드 '창 전체화면'(z-[9999],
+  // 종료 버튼 z-[10000])보다도 위, FAB(z-[10010])보다는 아래 — 슬라이드를 전체화면으로 보는 중에도
+  // 교사 자막이 보여야 한다(2026-07-07, 우하단 언어 버튼 하나로 자막·실습 번역을 함께 제어하는 개편과 함께 정리).
+  // pointer-events-none이라 조작은 막지 않는다.
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-4 z-[120] flex justify-center px-4">
+    <div className="pointer-events-none fixed inset-x-0 top-4 z-[10005] flex justify-center px-4">
       <AnimatePresence>
         {visible && current && (
           <motion.div

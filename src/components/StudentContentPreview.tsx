@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ChevronDown, FileText, Maximize2, Minimize2, Presentation } from 'lucide-react';
 import { LessonContent } from '../types';
 import { LANGUAGE_ALIASES } from '../utils/studentLanguage';
-import { VOICE_LANG_CHANGED_EVENT } from './StudentVoiceButton';
+import { LANG_MAX_AGE_MS, VOICE_LANG_CHANGED_EVENT } from './StudentVoiceButton';
 
 const toSlideEmbedUrl = (url: string): string => {
   const trimmed = url.trim();
@@ -189,11 +189,13 @@ const iframeHeightScriptTag = `
   <\/script>
 `;
 
-// 실습 iframe 안에 떠 있는 🌐 번역 버튼. 크롬 페이지 번역은 샌드박스 iframe 내부를 번역하지 않으므로
-// (크로뮴 41090662, wontfix), 실습 HTML 자체에 번역 사전을 심어 두고(루틴이 생성 시 주입) 버튼으로 치환한다.
-// 사전 규약: window.__DSR_TR__ = { "러시아어": { "원문": "번역", ... }, "영어": {...} }. 사전이 없으면 버튼을 띄우지 않는다.
-// 학생이 음성 버튼(StudentVoiceButton)에서 고른 언어(localStorage 'dsr_voice_lang')가 사전에 있으면
-// 그 언어로 자동으로 켜지고, 수업 중 언어를 바꾸면 부모가 postMessage({type:'dsr-voice-lang', iso})로 알려 따라간다.
+// 실습 iframe 병기 번역 엔진. 크롬 페이지 번역은 샌드박스 iframe 내부를 번역하지 않으므로
+// (크로뮴 41090662, wontfix), 실습 HTML 자체에 심어 둔 번역 사전(루틴이 생성 시 주입)으로 텍스트를 치환한다.
+// 사전 규약: window.__DSR_TR__ = { "러시아어": { "원문": "번역", ... }, "영어": {...} }. 사전이 없으면 아무것도 안 한다.
+// ★ 학생 화면에는 버튼 UI가 없다(2026-07-07): 실습 안 🌐 버튼과 우하단 FAB가 동시에 떠 학생이 혼란스러워해서,
+//   언어 제어는 학생 페이지 우하단 언어 버튼(StudentVoiceButton) 하나로 통일했다. 초기 언어는 localStorage
+//   'dsr_voice_lang'에서 읽고, 수업 중 변경은 부모(StudentContentPreviewFrame)의 postMessage({type:'dsr-voice-lang', iso})를 따른다.
+// ★ 교사 검토 화면(__DASA_REVIEW__)에서만 우상단 🌐 수동 버튼을 띄운다 — 강사가 사전 번역을 직접 확인하는 용도.
 const iframeTranslateScriptTag = `
   <script>
   (function () {
@@ -223,12 +225,22 @@ const iframeTranslateScriptTag = `
       return null;
     }
     // 학생이 음성 버튼에서 고른 언어. srcdoc iframe이 allow-same-origin이라 부모와 localStorage를 공유한다.
+    // ★ 만료 검증 포함(2026-07-07): StudentVoiceButton과 같은 규칙(오늘 날짜 classKey + TTL). FAB가 없는 화면
+    //   (강사의 학생 페이지 미리보기, 콘텐츠 라이브러리의 학생 화면 미리보기)에서는 아무도 만료 정리를 안 해 주고
+    //   이제 실습 안에 번역을 끌 버튼도 없으므로, 며칠 지난 선택이 자동 번역을 켜지 않게 여기서도 걸러야 한다.
     function readVoiceIso() {
       try {
         var raw = window.localStorage.getItem('dsr_voice_lang');
         if (!raw) return null;
         var parsed = JSON.parse(raw);
-        return parsed && typeof parsed.iso === 'string' && parsed.iso ? parsed.iso : null;
+        if (!parsed || typeof parsed.iso !== 'string' || !parsed.iso) return null;
+        var setAtMs = new Date(parsed.setAt || 0).getTime();
+        if (!isFinite(setAtMs) || Date.now() - setAtMs > ${LANG_MAX_AGE_MS}) return null;
+        var now = new Date();
+        var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+        var todayKey = 'today_' + now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
+        if (parsed.classKey !== todayKey) return null;
+        return parsed.iso;
       } catch (e) { return null; }
     }
 
@@ -236,6 +248,7 @@ const iframeTranslateScriptTag = `
     var originals = [];                  // 번역으로 바뀐 텍스트 노드 모음(원문 복원용)
     var state = { lang: null, showOriginal: false };
     var root = null, menuOpen = false;
+    var REVIEW = !!window.__DASA_REVIEW__; // 검토 모드에서만 수동 🌐 버튼 UI를 만든다(학생 화면은 버튼 없음)
 
     function notifyHeight() { try { window.dispatchEvent(new Event('resize')); } catch (e) {} }
 
@@ -282,7 +295,12 @@ const iframeTranslateScriptTag = `
       }
       notifyHeight();
     }
-    function selectLang(lang) { state.lang = lang; state.showOriginal = false; menuOpen = false; renderUI(); applyTranslations(); }
+    // 언어 전환 시 이전 언어의 흔적이 남지 않게 먼저 원문으로 되돌린 뒤 새 사전을 적용한다 —
+    // 새 사전에 없는 키가 이전 언어 번역으로 남아 두 언어가 섞이는 것 방지(같은 틱이라 화면 깜빡임 없음).
+    function selectLang(lang) {
+      if (state.lang && state.lang !== lang) restoreOriginals();
+      state.lang = lang; state.showOriginal = false; menuOpen = false; renderUI(); applyTranslations();
+    }
     function toggleOriginal() {
       state.showOriginal = !state.showOriginal;
       if (state.showOriginal) restoreOriginals(); else applyTranslations();
@@ -311,11 +329,13 @@ const iframeTranslateScriptTag = `
       root = document.createElement('div');
       root.id = 'dsr-tr';
       root.setAttribute('data-dsr-skip', '1');
-      if (window.__DASA_REVIEW__) root.style.top = '46px'; // 교사 검토 화면의 ⏭ 건너뛰기 배지(우상단)와 겹침 방지
+      root.style.top = '46px'; // 검토 화면 전용 UI — ⏭ 건너뛰기 배지(우상단)와 겹침 방지
       document.body.appendChild(root);
     }
-    // 접힌 🌐 원형 버튼 + 눌렀을 때만 열리는 패널. 항상 펼쳐진 칩 줄은 실습 우상단 콘텐츠를 가렸다.
+    // 접힌 🌐 원형 버튼 + 눌렀을 때만 열리는 패널 — 교사 검토 화면 전용(강사가 사전 번역을 확인).
+    // 학생 화면에서는 no-op: 언어 제어는 우하단 언어 버튼(StudentVoiceButton) 하나뿐이다.
     function renderUI() {
+      if (!REVIEW) return;
       ensureRoot();
       root.innerHTML = '';
       var fab = document.createElement('button');
@@ -364,24 +384,26 @@ const iframeTranslateScriptTag = `
     function init() {
       if (inited) return; inited = true;
       renderUI();
-      // 학생이 이미 고른 언어가 사전에 있으면 자동으로 그 언어로 켠다.
-      // 교사 검토 화면(__DASA_REVIEW__)에서는 교사가 원문을 봐야 하므로 자동으로 켜지 않는다(수동 🌐 버튼은 그대로).
-      if (!window.__DASA_REVIEW__) {
+      // 학생이 우하단 언어 버튼에서 이미 고른 언어가 사전에 있으면 자동으로 그 언어로 켠다.
+      // 교사 검토 화면에서는 교사가 원문을 봐야 하므로 자동으로 켜지 않는다(수동 🌐 버튼은 그대로).
+      if (!REVIEW) {
         var autoKey = langKeyForIso(readVoiceIso());
         if (autoKey && !state.lang) selectLang(autoKey);
       }
-      // 실습이 떠 있는 동안 학생이 언어를 바꾸면 부모(StudentContentPreviewFrame)가 알려준다 → 즉시 따라간다.
-      // 사전에 없는 언어(한국어 되돌리기 iso 'ko' 포함)로 바꾸면 번역을 끄고 원문으로 돌린다.
+      // 실습이 떠 있는 동안 학생이 우하단 언어 버튼으로 언어를 바꾸면 부모(StudentContentPreviewFrame)가
+      // 알려준다 → 즉시 따라간다. 사전에 없는 언어(한국어 되돌리기 iso 'ko' 포함)로 바꾸면 번역을 끄고 원문으로 돌린다.
       window.addEventListener('message', function (e) {
         if (!e.data || e.data.type !== 'dsr-voice-lang') return;
         var key = langKeyForIso(e.data.iso);
         if (key && key !== state.lang) selectLang(key);
         else if (!key && state.lang) turnOff();
       });
-      // 패널이 열린 채 실습을 조작하다 가려지지 않게, 바깥을 누르면 접는다.
-      document.addEventListener('click', function (e) {
-        if (menuOpen && root && !root.contains(e.target)) { menuOpen = false; renderUI(); }
-      }, true);
+      // (검토 화면 전용) 패널이 열린 채 실습을 조작하다 가려지지 않게, 바깥을 누르면 접는다.
+      if (REVIEW) {
+        document.addEventListener('click', function (e) {
+          if (menuOpen && root && !root.contains(e.target)) { menuOpen = false; renderUI(); }
+        }, true);
+      }
       try {
         var mo = new MutationObserver(function () {
           if (!state.lang || state.showOriginal) return;
@@ -453,8 +475,8 @@ export const buildResponsiveSrcDoc = (html: string, options?: { review?: boolean
     return '';
   }
 
-  // 실습 안 🌐 번역 버튼(이주민 학생용 병기 번역)은 노출한다. 페이지 상단 UI 언어 선택기는 대신 숨긴다.
-  // 끄려면 false로.
+  // 실습 병기 번역 엔진(이주민 학생용) 주입 여부. 학생 화면은 버튼 없이 우하단 언어 버튼(StudentVoiceButton)을
+  // 따라 자동 치환되고, 교사 검토 화면(reviewMode)에서만 수동 🌐 버튼이 뜬다. 끄려면 false로.
   const ENABLE_INLINE_TRANSLATE = true;
   const translateTag = ENABLE_INLINE_TRANSLATE ? iframeTranslateScriptTag : '';
   // 브리지는 실습 <script>보다 먼저 실행돼야 하므로 head 쪽에 넣는다.
@@ -484,7 +506,9 @@ interface StudentContentPreviewFrameProps {
   title: string;
   autoHeight?: boolean;
   className?: string;
-  /** 교사 검토 화면에서 true — 검토 브리지를 주입하고, 콘텐츠가 __reviewSkip 훅을 정의하면 공용 ⏭ 버튼을 띄운다. */
+  /** 교사 검토 화면에서 true — 검토 브리지를 주입하고, 콘텐츠가 __reviewSkip 훅을 정의하면 공용 ⏭ 버튼을 띄운다.
+   *  번역도 이 값을 따른다: true면 실습 안 수동 🌐 번역 버튼을 띄우고 자동 번역을 끈다(원문 검토용),
+   *  false(학생 화면·학생 화면 미리보기)면 버튼 없이 우하단 언어 버튼(localStorage/postMessage)을 따라 자동 치환. */
   reviewMode?: boolean;
 }
 

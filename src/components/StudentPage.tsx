@@ -490,8 +490,8 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   // Set to true to restore the classroom selection home screen
   const SHOW_CLASSROOM_SELECTION = false;
 
-  // 페이지 상단 UI 언어 선택기(한국어 ▾)를 숨긴다. 학생 혼동 방지 — 번역은 실습 안 🌐 번역 버튼으로 한다.
-  // 다시 보이려면 true로.
+  // 페이지 상단 UI 언어 선택기(한국어 ▾)를 숨긴다. 학생 혼동 방지 — 번역은 우하단 언어 버튼(StudentVoiceButton)
+  // 하나로 한다(실습 병기 번역·교사 방송 자막을 함께 제어). 다시 보이려면 true로.
   const SHOW_PAGE_LANGUAGE_SELECTOR = false;
 
   const homeT = translations[lang];
@@ -1072,11 +1072,13 @@ export const StudentPage: React.FC<StudentPageProps> = ({
             }
           }}
         >
+          {/* mb-20: 모바일 바텀시트가 FAB(z-[10010], 우하단 64px — 모달보다 위에 뜬다)와 겹쳐
+              업로드 버튼 탭을 뺏기지 않게 FAB 높이만큼 띄운다. 데스크톱(sm, 중앙 정렬)은 안 겹침. */}
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 30 }}
-            className="w-full max-w-md rounded-[32px] bg-white p-7 shadow-2xl"
+            className="mb-20 w-full max-w-md rounded-[32px] bg-white p-7 shadow-2xl sm:mb-0"
           >
             <div className="mb-5 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -1221,7 +1223,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
       )}
 
       {/* 교사 통역 자막 방송 수신 — 실제 학생 화면에서만(강사 미리보기 제외).
-          반·수업 공개 여부와 무관하게 오늘의 최신 방송을 내 언어 자막으로 하단에 띄운다. */}
+          반·수업 공개 여부와 무관하게 오늘의 최신 방송을 내 언어 자막으로 상단 중앙에 띄운다. */}
       {!isAdmin && <StudentSubtitleOverlay date={gatingDateString} />}
 
       {/* 수업 종료 안내 — 교사가 대시보드에서 '수업 종료'를 누르면 실시간 신호로 모든 학생 화면에 뜬다. 학생은 띄우거나 닫을 수만 있다. */}
