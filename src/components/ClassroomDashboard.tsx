@@ -2167,38 +2167,44 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     // 공개/잠그기 버튼 — 참고 예시(kind:reference)면 버튼 우상단 모서리에 아이콘 마커를 얹는다.
     // 실습 행이 여러 레이아웃(인터리브/평면)에서 렌더되므로 한 곳에서 만든다.
     const renderPublishButton = (content: LessonContent) => {
+      // 참고 예시(kind:reference)는 학생 노트북에 공개하지 않는다. 대신 [예제] 버튼으로 교사 공용
+      // 화면(빔프로젝터)에 크게 띄우고, 학생은 그걸 보며 진짜 구글 문서에서 직접 만든다 → 창 나누기 불필요.
+      // 게임형 완충 실습(kind:practice)만 [공개]로 학생 노트북에 연다.
+      if (content.kind === 'reference') {
+        return (
+          <button
+            type="button"
+            onClick={() => setPreviewContent(content)}
+            title="예제 — 공용 화면(빔프로젝터)에 크게 띄우기. 학생 노트북엔 안 나갑니다. 학생은 보며 진짜 구글 문서에서 직접 만들어요."
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-[#3B5BA9] px-4 py-2 text-xs font-bold text-white transition-all hover:bg-[#2F4A8C]"
+          >
+            <Presentation size={14} />
+            예제
+          </button>
+        );
+      }
       const isPublished = publishedContentIdSet.has(content.id);
       return (
-        <span className="relative inline-flex shrink-0">
-          <button
-            onClick={() => handleTogglePublishContent(content)}
-            className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
-              isPublished
-                ? 'bg-[#FDECEC] text-[#B42318] hover:bg-[#FAD4D1]'
-                : 'bg-[#8B5E3C] text-white hover:bg-[#724D31]'
-            }`}
-          >
-            {isPublished ? (
-              <>
-                <EyeOff size={14} />
-                잠그기
-              </>
-            ) : (
-              <>
-                <Eye size={14} />
-                공개
-              </>
-            )}
-          </button>
-          {content.kind === 'reference' && (
-            <span
-              className="pointer-events-none absolute -right-1.5 -top-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-[#FFF1DC] text-[#8B5E3C] ring-2 ring-white"
-              title="참고 예시 문서 — 학생이 외부 도구(구글 문서 등)에서 보고 따라 만드는 자료"
-            >
-              <FileText size={10} />
-            </span>
+        <button
+          onClick={() => handleTogglePublishContent(content)}
+          className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+            isPublished
+              ? 'bg-[#FDECEC] text-[#B42318] hover:bg-[#FAD4D1]'
+              : 'bg-[#8B5E3C] text-white hover:bg-[#724D31]'
+          }`}
+        >
+          {isPublished ? (
+            <>
+              <EyeOff size={14} />
+              잠그기
+            </>
+          ) : (
+            <>
+              <Eye size={14} />
+              공개
+            </>
           )}
-        </span>
+        </button>
       );
     };
 
