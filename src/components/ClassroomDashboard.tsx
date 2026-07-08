@@ -711,7 +711,11 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const recordedPracticeContents = currentDateRecordedContents.filter(
     (content) => Boolean(content.html?.trim()) && !content.slideUrl?.trim()
   );
-  const publishedPracticeCount = recordedPracticeContents.filter((content) =>
+  // 예제(참고 자료, kind:reference)는 학생 공개 대상이 아니라 강사 미리보기 전용이다.
+  // 목록에는 그대로 나오되(예제 버튼) 공개 계산·전체공개/잠금 대상에서는 제외한다.
+  const isPublishableContent = (content: LessonContent) => content.kind !== 'reference';
+  const publishablePracticeContents = recordedPracticeContents.filter(isPublishableContent);
+  const publishedPracticeCount = publishablePracticeContents.filter((content) =>
     publishedContentIdSet.has(content.id)
   ).length;
   const calendarDays = getDaysInMonth(viewMonth);
@@ -1769,7 +1773,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       classroom.id,
       classroom.name,
       selectedDate,
-      recordedPracticeContents.map((content) => content.id)
+      publishablePracticeContents.map((content) => content.id)
     );
   };
 
@@ -2163,26 +2167,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     //  아직 안 묶인 실습은 '이론과 묶이지 않은 실습' 영역에 나오고, 거기서 담기 대상 이론으로 옮긴다.)
     const useGroupedLayout = showTheorySection && effectiveTheoryPrompts.length > 0;
 
-    // 그룹 모드 실습 행 — 실습 컨트롤(미리보기·공개)만. 이론 컨트롤은 그룹 헤더가 담당한다.
-    // 공개/잠그기 버튼 — 참고 예시(kind:reference)면 버튼 우상단 모서리에 아이콘 마커를 얹는다.
-    // 실습 행이 여러 레이아웃(인터리브/평면)에서 렌더되므로 한 곳에서 만든다.
+    // 공개/잠그기 버튼 (실습 전용). 예제(kind:reference)는 이 버튼을 쓰지 않고 '예제' 버튼(강사 미리보기)만 노출한다.
     const renderPublishButton = (content: LessonContent) => {
-      // 참고 예시(kind:reference)는 학생 노트북에 공개하지 않는다. 대신 [예제] 버튼으로 교사 공용
-      // 화면(빔프로젝터)에 크게 띄우고, 학생은 그걸 보며 진짜 구글 문서에서 직접 만든다 → 창 나누기 불필요.
-      // 게임형 완충 실습(kind:practice)만 [공개]로 학생 노트북에 연다.
-      if (content.kind === 'reference') {
-        return (
-          <button
-            type="button"
-            onClick={() => setPreviewContent(content)}
-            title="예제 — 공용 화면(빔프로젝터)에 크게 띄우기. 학생 노트북엔 안 나갑니다. 학생은 보며 진짜 구글 문서에서 직접 만들어요."
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-[#3B5BA9] px-4 py-2 text-xs font-bold text-white transition-all hover:bg-[#2F4A8C]"
-          >
-            <Presentation size={14} />
-            예제
-          </button>
-        );
-      }
       const isPublished = publishedContentIdSet.has(content.id);
       return (
         <button
@@ -2208,11 +2194,159 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       );
     };
 
+    // 콘텐츠 행 오른쪽 액션 — [미리보기]·[공개]·[예제] 세 버튼을 항상 함께 보인다.
+    // 한 개념(unit) = 실습(practice) + 예제(example). 있는 것만 활성, 없는 것은 회색(비활성).
+    //  · 미리보기·공개 = 실습(있으면). · 예제 = 예제(있으면, 눌러서 강사 공용 화면 미리보기).
+    // 개념에 실습·예제가 다 있으면 세 버튼 모두 활성 — 한 항목에 미리보기·공개·예제가 함께 산다.
+    const disabledActionCls =
+      'inline-flex h-8 shrink-0 cursor-not-allowed items-center gap-1.5 rounded-xl border border-[#EEEBE5] bg-[#F7F6F3] px-3 text-xs font-bold text-[#C7C0B5]';
+    const renderContentActionButtons = ({
+      practice,
+      example,
+    }: {
+      practice: LessonContent | null;
+      example: LessonContent | null;
+    }) => {
+      return (
+        <>
+          {/* 미리보기 — 실습 있으면 활성 */}
+          {practice ? (
+            <button
+              type="button"
+              onClick={() => setPreviewContent(practice)}
+              title={`${practice.title} 미리보기`}
+              aria-label="미리보기"
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-xl border border-[#E5E3DD] bg-white px-3 text-xs font-bold text-[#8B7E74] transition-all hover:border-[#8B5E3C] hover:text-[#8B5E3C]"
+            >
+              <ScanSearch size={14} />
+              미리보기
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled
+              aria-label="미리보기"
+              title="이 항목엔 실습이 없어요 (예제만)"
+              className={disabledActionCls}
+            >
+              <ScanSearch size={14} />
+              미리보기
+            </button>
+          )}
+          {/* 공개 — 실습이 있고 실습 영역이 켜져 있을 때만 활성 */}
+          {practice && showPracticeSection ? (
+            renderPublishButton(practice)
+          ) : (
+            <button
+              type="button"
+              disabled
+              aria-label="공개"
+              title={
+                practice
+                  ? '실습을 켜면 학생에게 공개할 수 있어요'
+                  : '예제(참고 자료)는 학생 화면에 공개하지 않아요 (강사 공용 화면 전용)'
+              }
+              className={disabledActionCls}
+            >
+              <Eye size={14} />
+              공개
+            </button>
+          )}
+          {/* 예제 — 예제 있으면 활성 (공용 화면 미리보기) */}
+          {example ? (
+            <button
+              type="button"
+              onClick={() => setPreviewContent(example)}
+              title={`${example.title} 예제 보기 (공용 화면 전용, 학생 노트북엔 안 나감)`}
+              aria-label="예제 보기"
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-xl border border-[#EAD9BF] bg-[#FFF5E9] px-3 text-xs font-bold text-[#8B5E3C] transition-all hover:border-[#8B5E3C] hover:bg-[#FFEFD8]"
+            >
+              <FileText size={14} />
+              예제
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled
+              aria-label="예제"
+              title="이 실습에는 예제(참고 자료)가 없어요"
+              className={disabledActionCls}
+            >
+              <FileText size={14} />
+              예제
+            </button>
+          )}
+        </>
+      );
+    };
+
+    // 순서상 [실습] 바로 뒤에 오는 [예제]를 그 실습의 예제로 묶어 개념 단위(unit)로 만든다.
+    // 앞에 실습이 없는 예제(예: 완성 예시)나 짝 없는 실습은 단독 단위. → 개념 1개 = 행 1개.
+    const buildConceptUnits = (ordered: LessonContent[]) => {
+      const units: { key: string; practice: LessonContent | null; example: LessonContent | null }[] = [];
+      for (let i = 0; i < ordered.length; i++) {
+        const c = ordered[i];
+        if (c.kind !== 'reference') {
+          const next = ordered[i + 1];
+          if (next && next.kind === 'reference') {
+            units.push({ key: c.id, practice: c, example: next });
+            i++;
+          } else {
+            units.push({ key: c.id, practice: c, example: null });
+          }
+        } else {
+          units.push({ key: c.id, practice: null, example: c });
+        }
+      }
+      return units;
+    };
+
+    // 묶인 개념 단위 1개를 한 행으로 렌더 (수정 모드가 아닐 때). 실습 있으면 실습 상태·제목 기준.
+    const renderConceptRow = (unit: {
+      key: string;
+      practice: LessonContent | null;
+      example: LessonContent | null;
+    }) => {
+      const primary = unit.practice ?? unit.example!;
+      const isExampleOnly = !unit.practice;
+      const isPublished = unit.practice ? publishedContentIdSet.has(unit.practice.id) : false;
+      return (
+        <div
+          key={unit.key}
+          className={`rounded-2xl border px-4 py-3 transition-all ${
+            isPublished && showPracticeSection
+              ? 'border-[#BFE3CC] bg-[#F2FBF3]'
+              : 'border-[#E5E3DD] bg-white'
+          }`}
+        >
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-2">
+              {isExampleOnly ? (
+                <FileText size={16} className="shrink-0 text-[#8B5E3C]" />
+              ) : (
+                showPracticeSection &&
+                (isPublished ? (
+                  <Eye size={16} className="shrink-0 text-[#2D7A4D]" />
+                ) : (
+                  <Lock size={16} className="shrink-0 text-[#8B7E74]" />
+                ))
+              )}
+              <span className="truncate text-sm font-bold text-[#4A3728]">{primary.title}</span>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              {renderContentActionButtons(unit)}
+            </div>
+          </div>
+        </div>
+      );
+    };
+
     const renderGroupedPracticeRow = (
       content: LessonContent,
       groupCtx?: { promptIndex: number; index: number; count: number }
     ) => {
-      const isPublished = publishedContentIdSet.has(content.id);
+      const isReference = content.kind === 'reference';
+      const isPublished = isPublishableContent(content) && publishedContentIdSet.has(content.id);
       // 편집(수정) 모드 관련: 지금 수정 중인 이론이 이 행이 속한 그룹인지 / 어떤 이론이든 수정 중인지.
       const isEditing = activePromptIndex !== null;
       const rowInEditingGroup = Boolean(groupCtx) && groupCtx!.promptIndex === activePromptIndex;
@@ -2234,12 +2368,16 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
         >
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-center gap-2">
-              {showPracticeSection &&
+              {isReference ? (
+                <FileText size={16} className="shrink-0 text-[#8B5E3C]" />
+              ) : (
+                showPracticeSection &&
                 (isPublished ? (
                   <Eye size={16} className="shrink-0 text-[#2D7A4D]" />
                 ) : (
                   <Lock size={16} className="shrink-0 text-[#8B7E74]" />
-                ))}
+                ))
+              )}
               <span className="truncate text-sm font-bold text-[#4A3728]">{content.title}</span>
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
@@ -2279,17 +2417,10 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                   담기
                 </button>
               )}
-              <button
-                type="button"
-                onClick={() => setPreviewContent(content)}
-                title={`${content.title} 미리보기`}
-                aria-label="미리보기"
-                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-xl border border-[#E5E3DD] bg-white px-3 text-xs font-bold text-[#8B7E74] transition-all hover:border-[#8B5E3C] hover:text-[#8B5E3C]"
-              >
-                <ScanSearch size={14} />
-                미리보기
-              </button>
-              {showPracticeSection && renderPublishButton(content)}
+              {renderContentActionButtons({
+                practice: content.kind !== 'reference' ? content : null,
+                example: content.kind === 'reference' ? content : null,
+              })}
               {showRemove && (
                 <button
                   type="button"
@@ -2936,11 +3067,11 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                         실습
                       </button>
                     </div>
-                    {showPracticeSection && recordedPracticeContents.length > 0 && (
+                    {showPracticeSection && publishablePracticeContents.length > 0 && (
                       <>
                         <button
                           onClick={handlePublishAllPractice}
-                          disabled={publishedPracticeCount === recordedPracticeContents.length}
+                          disabled={publishedPracticeCount === publishablePracticeContents.length}
                           className="inline-flex items-center gap-1.5 rounded-xl bg-[#EEF7F0] px-3 py-2 text-xs font-bold text-[#2D7A4D] transition-all hover:bg-[#DCEFE2] disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           <Unlock size={14} />
@@ -2948,7 +3079,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                         </button>
                         <button
                           onClick={handleUnpublishAll}
-                          disabled={publishedPracticeCount === 0}
+                          disabled={(currentPublishedLesson?.publishedContentIds?.length ?? 0) === 0}
                           className="inline-flex items-center gap-1.5 rounded-xl bg-[#FDECEC] px-3 py-2 text-xs font-bold text-[#B42318] transition-all hover:bg-[#FAD4D1] disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           <Lock size={14} />
@@ -3007,9 +3138,9 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                   <div>
                     <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#8B7E74]">
                       {recordedPracticeContents.length > 0 ? '이론 · 실습 (수업 진행 순서)' : '이론 수업'}
-                      {showPracticeSection && (
+                      {showPracticeSection && publishablePracticeContents.length > 0 && (
                         <span className="rounded-full bg-[#EEF7F0] px-2 py-0.5 text-[10px] text-[#2D7A4D]">
-                          {publishedPracticeCount}/{recordedPracticeContents.length} 공개됨
+                          {publishedPracticeCount}/{publishablePracticeContents.length} 공개됨
                         </span>
                       )}
                     </p>
@@ -3020,7 +3151,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                         const promptSlideUrl = prompt.slideUrl?.trim() ?? '';
                         const hasSlide = promptSlideUrl.length > 0;
                         const isSlideInputOpen = slideInputPromptIndex === promptIndex;
-                        const groupPublishedCount = contents.filter((content) =>
+                        const groupPublishableContents = contents.filter(isPublishableContent);
+                        const groupPublishedCount = groupPublishableContents.filter((content) =>
                           publishedContentIdSet.has(content.id)
                         ).length;
                         return (
@@ -3050,9 +3182,9 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                                     <Info size={14} />
                                   </button>
                                 )}
-                                {showPracticeSection && contents.length > 0 && (
+                                {showPracticeSection && groupPublishableContents.length > 0 && (
                                   <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-[#8B7E74]">
-                                    실습 {groupPublishedCount}/{contents.length}
+                                    실습 {groupPublishedCount}/{groupPublishableContents.length}
                                   </span>
                                 )}
                               </div>
@@ -3188,15 +3320,18 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                               </form>
                             )}
 
-                            {/* 이 이론에 묶인 실습들 (개념/진행 순서) */}
+                            {/* 이 이론에 묶인 실습들 (개념/진행 순서).
+                                평소엔 개념 단위(실습+예제)로 묶어 한 행씩, 수정 중이면 콘텐츠별 행으로 펼쳐 편집. */}
                             <div className="space-y-2">
-                              {contents.map((content, contentIndex) =>
-                                renderGroupedPracticeRow(content, {
-                                  promptIndex,
-                                  index: contentIndex,
-                                  count: contents.length,
-                                })
-                              )}
+                              {activePromptIndex !== null
+                                ? contents.map((content, contentIndex) =>
+                                    renderGroupedPracticeRow(content, {
+                                      promptIndex,
+                                      index: contentIndex,
+                                      count: contents.length,
+                                    })
+                                  )
+                                : buildConceptUnits(contents).map((unit) => renderConceptRow(unit))}
                               {/* 이론만 날짜(실습 영역 꺼짐)는 실습이 없는 게 정상이라 안내를 띄우지 않는다. */}
                               {contents.length === 0 && showPracticeSection && (
                                 <p className="rounded-xl border border-dashed border-[#E5E3DD] bg-white px-3 py-2 text-xs text-[#8B7E74]">
@@ -3214,7 +3349,13 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                             이론과 묶이지 않은 실습
                           </p>
                           <div className="space-y-2">
-                            {ungroupedPracticeContents.map((content) => renderGroupedPracticeRow(content))}
+                            {activePromptIndex !== null
+                              ? ungroupedPracticeContents.map((content) =>
+                                  renderGroupedPracticeRow(content)
+                                )
+                              : buildConceptUnits(ungroupedPracticeContents).map((unit) =>
+                                  renderConceptRow(unit)
+                                )}
                           </div>
                         </div>
                       )}
@@ -3226,15 +3367,17 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                   <div>
                     <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#8B7E74]">
                       {showPracticeSection ? '실습 (학생 화면)' : '이론 자료'}
-                      {showPracticeSection && (
+                      {showPracticeSection && publishablePracticeContents.length > 0 && (
                         <span className="rounded-full bg-[#EEF7F0] px-2 py-0.5 text-[10px] text-[#2D7A4D]">
-                          {publishedPracticeCount}/{recordedPracticeContents.length} 공개됨
+                          {publishedPracticeCount}/{publishablePracticeContents.length} 공개됨
                         </span>
                       )}
                     </p>
                     <div className="space-y-2">
                       {recordedPracticeContents.map((content, index) => {
-                        const isPublished = publishedContentIdSet.has(content.id);
+                        const isReference = content.kind === 'reference';
+                        const isPublished =
+                          isPublishableContent(content) && publishedContentIdSet.has(content.id);
                         // 이론 프롬프트(복사·수정)는 시수 순서(index)로 매칭. 자료 링크는 콘텐츠에 묶여 별도.
                         const matchedPrompt = effectiveTheoryPrompts[index];
                         const isCopied = copiedPromptIndex === index;
@@ -3251,7 +3394,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                         // 이론 영역: 프롬프트(복사·수정)나 자료 링크 컨트롤이 하나라도 있을 때만 표시.
                         const hasTheoryControls = Boolean(matchedPrompt) || Boolean(onSaveContent);
                         const showRowTheory = showTheorySection && hasTheoryControls;
-                        const showRowPractice = showPracticeSection;
                         return (
                           <div
                             key={content.id}
@@ -3264,12 +3406,16 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                               {/* 콘텐츠 이름 — 미리보기 버튼은 실습 영역으로 옮겼다 */}
                               <div className="flex min-w-0 items-center gap-2">
-                                {showPracticeSection &&
+                                {isReference ? (
+                                  <FileText size={16} className="shrink-0 text-[#8B5E3C]" />
+                                ) : (
+                                  showPracticeSection &&
                                   (isPublished ? (
                                     <Eye size={16} className="shrink-0 text-[#2D7A4D]" />
                                   ) : (
                                     <Lock size={16} className="shrink-0 text-[#8B7E74]" />
-                                  ))}
+                                  ))
+                                )}
                                 <span className="truncate text-sm font-bold text-[#4A3728]">
                                   {content.title}
                                 </span>
@@ -3361,24 +3507,13 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                                   ))}
                                   </>
                                 )}
-                                {showRowTheory && showRowPractice && (
+                                {showRowTheory && (
                                   <span className="h-6 w-px shrink-0 bg-[#E5E3DD]" aria-hidden />
                                 )}
-                                {showRowPractice && (
-                                  <>
-                                    <button
-                                      type="button"
-                                      onClick={() => setPreviewContent(content)}
-                                      title={`${content.title} 미리보기`}
-                                      aria-label="미리보기"
-                                      className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-xl border border-[#E5E3DD] bg-white px-3 text-xs font-bold text-[#8B7E74] transition-all hover:border-[#8B5E3C] hover:text-[#8B5E3C]"
-                                    >
-                                      <ScanSearch size={14} />
-                                      미리보기
-                                    </button>
-                                    {renderPublishButton(content)}
-                                  </>
-                                )}
+                                {renderContentActionButtons({
+                                  practice: content.kind !== 'reference' ? content : null,
+                                  example: content.kind === 'reference' ? content : null,
+                                })}
                               </div>
                             </div>
 
