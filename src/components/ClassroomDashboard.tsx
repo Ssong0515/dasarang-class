@@ -596,12 +596,15 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const [isCopyPickerOpen, setIsCopyPickerOpen] = useState(false);
   // 복사해오기 1단계에서 고른 원본 클래스 id (null이면 클래스 목록을 먼저 보여준다).
   const [copyPickerClassroomId, setCopyPickerClassroomId] = useState<string | null>(null);
+  // 복사해오기 2단계에서 고른 수업 기록 id (null이면 아직 안 고름). 고르면 '덮어쓰기/뒤에 추가' 버튼을 편다.
+  const [copyPickerRecordId, setCopyPickerRecordId] = useState<string | null>(null);
   // 날짜가 바뀌면 다른 날짜의 이론 index를 가리키지 않도록 담기 대상을 해제하고, 팝업·드롭다운도 닫는다.
   useEffect(() => {
     setActivePromptIndex(null);
     setShowCurriculumDetail(false);
     setIsCopyPickerOpen(false);
     setCopyPickerClassroomId(null);
+    setCopyPickerRecordId(null);
   }, [selectedDate]);
   const activeDateSet = useMemo(
     () => new Set(classroomDateRecords.map((record) => record.date)),
@@ -1232,33 +1235,62 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     setAnnotationLanguageInput('');
     setIsLanguagePopupOpen(false);
   };
-  // 다른 수업의 이론·실습을 이 날짜 '뒤에 이어 붙여' 불러온다(덮어쓰기 아님). 기존 이론/실습은 그대로 두고,
-  // 원본의 이론(덱)·실습을 뒤에 추가한다. 예) 이미 '이론1+실습4'가 있으면 그 뒤에 '이론2+실습3'이 생긴다.
-  // 복사이므로 이후 양쪽은 독립적으로 편집된다.
-  const handleCopyLessonFrom = (sourceRecordId: string) => {
+  // 다른 반 수업의 이론·실습을 이 날짜로 가져온다. 두 가지 방식:
+  //  - 'overwrite'(덮어쓰기): 기존 이론·실습을 원본 내용으로 통째로 교체(출석·메모는 유지).
+  //  - 'append'(뒤에 추가): 기존은 그대로 두고 원본 이론(덱)·실습을 뒤에 이어 붙인다.
+  //    예) 이미 '이론1+실습4'가 있으면 뒤에 '이론2+실습3'이 생겨 번호가 이어진다.
+  // 어느 쪽이든 '복사'이므로 이후 양쪽은 독립적으로 편집된다.
+  const handleCopyLessonFrom = (sourceRecordId: string, mode: 'overwrite' | 'append') => {
     const source = dateRecords.find((record) => record.id === sourceRecordId);
     if (!source) return;
     const base = currentDateRecord ?? createDateRecord();
-    // 실습 flat 목록은 이어 붙이되 중복 id는 제거(기존 순서 유지 + 원본의 새 실습만 뒤에 추가).
-    const mergedContentIds = Array.from(
-      new Set([...(base.contentIds ?? []), ...(source.contentIds ?? [])])
-    );
-    // 이론(덱)은 그대로 이어 붙인다 → 기존 이론 뒤에 원본 이론이 추가돼 "이론2, 이론3…"으로 번호가 이어진다.
-    const appendedPrompts = (source.theoryPrompts ?? []).map((prompt) => ({
+    // 원본 이론(덱)·슬라이드 복제본(참조 공유 방지).
+    const clonedPrompts = (source.theoryPrompts ?? []).map((prompt) => ({
       ...prompt,
       contentIds: prompt.contentIds ? [...prompt.contentIds] : undefined,
     }));
-    const appendedSlides = (source.theorySlides ?? []).map((slide) => ({ ...slide }));
+    const clonedSlides = (source.theorySlides ?? []).map((slide) => ({ ...slide }));
+    const closePicker = () => {
+      setIsCopyPickerOpen(false);
+      setCopyPickerClassroomId(null);
+      setCopyPickerRecordId(null);
+    };
+
+    if (mode === 'overwrite') {
+      const hasExisting =
+        (base.contentIds?.length ?? 0) > 0 || (base.theoryPrompts?.length ?? 0) > 0;
+      if (
+        hasExisting &&
+        !window.confirm(
+          `현재 수업의 이론·실습을 '${source.classroomName || '다른 반'} · ${source.date}'의 내용으로 덮어쓸까요? (출석·메모는 유지)`
+        )
+      ) {
+        return;
+      }
+      onSaveDateRecord({
+        ...base,
+        contentIds: [...(source.contentIds ?? [])],
+        theoryPrompts: clonedPrompts,
+        theorySlides: clonedSlides,
+        theorySlideUrl: source.theorySlideUrl ?? '',
+      });
+      closePicker();
+      return;
+    }
+
+    // append: 실습 flat 목록은 이어 붙이되 중복 id는 제거(기존 순서 유지 + 원본의 새 실습만 뒤에 추가).
+    const mergedContentIds = Array.from(
+      new Set([...(base.contentIds ?? []), ...(source.contentIds ?? [])])
+    );
     onSaveDateRecord({
       ...base,
       contentIds: mergedContentIds,
-      theoryPrompts: [...(base.theoryPrompts ?? []), ...appendedPrompts],
-      theorySlides: [...(base.theorySlides ?? []), ...appendedSlides],
+      theoryPrompts: [...(base.theoryPrompts ?? []), ...clonedPrompts],
+      theorySlides: [...(base.theorySlides ?? []), ...clonedSlides],
       // 레거시 단일 슬라이드 URL은 기존 값을 유지하고, 없을 때만 원본 값으로 채운다.
       theorySlideUrl: base.theorySlideUrl || source.theorySlideUrl || '',
     });
-    setIsCopyPickerOpen(false);
-    setCopyPickerClassroomId(null);
+    closePicker();
   };
 
   // 임시(회차 미배정) 날짜 활성화: 빈 수업기록을 만들어 출석·메모·콘텐츠 입력을 연다.
@@ -2635,7 +2667,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
 
             {onUpdatePublishedLesson && (showTheorySection || showPracticeSection) && (
               <div className="mb-8 rounded-[28px] border border-[#E5E3DD] bg-[#FBFBFA] p-6">
-                {/* 다른 반 수업 불러오기 — 기존 이론·실습을 지우지 않고 뒤에 이어 붙인다(덮어쓰기 아님). 복사이므로 이후 양쪽은 독립. */}
+                {/* 다른 반 수업 불러오기 — 반→수업을 고른 뒤 '덮어쓰기 / 뒤에 추가' 중 선택. 복사이므로 이후 양쪽은 독립. */}
                 <div className="mb-4">
                   <button
                     type="button"
@@ -2644,7 +2676,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                   >
                     <span className="inline-flex items-center gap-2">
                       <Copy size={15} />
-                      다른 반 수업 불러오기 (뒤에 추가)
+                      다른 반 수업 불러오기
                     </span>
                     {isCopyPickerOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                   </button>
@@ -2693,11 +2725,14 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                           </>
                         )
                       ) : (
-                        // 2단계 — 고른 반의 수업 고르기.
+                        // 2단계 — 고른 반의 수업 고르기 → 고르면 '뒤에 추가/덮어쓰기' 버튼을 편다.
                         <>
                           <button
                             type="button"
-                            onClick={() => setCopyPickerClassroomId(null)}
+                            onClick={() => {
+                              setCopyPickerClassroomId(null);
+                              setCopyPickerRecordId(null);
+                            }}
                             className="flex w-full items-center gap-1.5 rounded-xl px-2 py-1.5 text-left text-xs font-bold text-[#2F5EA8] transition-all hover:bg-[#F5F9FF]"
                           >
                             <ChevronLeft size={15} className="shrink-0" />
@@ -2712,28 +2747,70 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                               이 반에 아직 만든 수업이 없습니다.
                             </p>
                           ) : (
-                            lessonCopyOptions.map((option) => (
-                              <button
-                                key={option.recordId}
-                                type="button"
-                                onClick={() => handleCopyLessonFrom(option.recordId)}
-                                className="flex w-full flex-col items-start gap-0.5 rounded-xl border border-[#E5E3DD] bg-white px-3 py-2 text-left transition-all hover:border-[#2F5EA8] hover:bg-[#F5F9FF]"
-                              >
-                                <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm font-bold text-[#4A3728]">
-                                  <span className="shrink-0">{option.dateLabel}</span>
-                                  <span className="text-[#B7AFA4]">·</span>
-                                  <span>{option.sessionLabel || option.curriculumTitle}</span>
-                                </span>
-                                <span className="flex flex-wrap items-center gap-x-2 text-[11px] text-[#8B7E74]">
-                                  {option.sessionLabel && (
-                                    <span className="truncate">{option.curriculumTitle}</span>
+                            lessonCopyOptions.map((option) => {
+                              const isSelected = copyPickerRecordId === option.recordId;
+                              return (
+                                <div
+                                  key={option.recordId}
+                                  className={`overflow-hidden rounded-xl border transition-all ${
+                                    isSelected
+                                      ? 'border-[#2F5EA8] bg-[#F5F9FF]'
+                                      : 'border-[#E5E3DD] bg-white hover:border-[#2F5EA8]'
+                                  }`}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setCopyPickerRecordId((prev) =>
+                                        prev === option.recordId ? null : option.recordId
+                                      )
+                                    }
+                                    className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left"
+                                  >
+                                    <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm font-bold text-[#4A3728]">
+                                      <span className="shrink-0">{option.dateLabel}</span>
+                                      <span className="text-[#B7AFA4]">·</span>
+                                      <span>{option.sessionLabel || option.curriculumTitle}</span>
+                                    </span>
+                                    <span className="flex flex-wrap items-center gap-x-2 text-[11px] text-[#8B7E74]">
+                                      {option.sessionLabel && (
+                                        <span className="truncate">{option.curriculumTitle}</span>
+                                      )}
+                                      <span className="shrink-0 rounded-full bg-[#F3F2EE] px-2 py-0.5 font-bold">
+                                        이론 {option.theoryCount} · 실습 {option.practiceCount}
+                                      </span>
+                                    </span>
+                                  </button>
+                                  {isSelected && (
+                                    <div className="flex flex-wrap items-center gap-2 border-t border-[#CFE0FF] bg-white/60 px-3 py-2">
+                                      <span className="mr-auto text-[11px] font-bold text-[#8B7E74]">
+                                        가져오는 방식
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCopyLessonFrom(option.recordId, 'append')}
+                                        title="기존 이론·실습은 그대로 두고 이 수업을 뒤에 이어 붙입니다."
+                                        className="inline-flex items-center gap-1 rounded-lg bg-[#2F5EA8] px-3 py-1.5 text-xs font-bold text-white transition-all hover:bg-[#254C88]"
+                                      >
+                                        <Plus size={13} />
+                                        뒤에 추가
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleCopyLessonFrom(option.recordId, 'overwrite')
+                                        }
+                                        title="현재 수업의 이론·실습을 이 수업 내용으로 통째로 바꿉니다. (출석·메모는 유지)"
+                                        className="inline-flex items-center gap-1 rounded-lg border border-[#E5B4B0] bg-white px-3 py-1.5 text-xs font-bold text-[#B42318] transition-all hover:bg-[#FDECEC]"
+                                      >
+                                        <RefreshCw size={13} />
+                                        덮어쓰기
+                                      </button>
+                                    </div>
                                   )}
-                                  <span className="shrink-0 rounded-full bg-[#F3F2EE] px-2 py-0.5 font-bold">
-                                    이론 {option.theoryCount} · 실습 {option.practiceCount}
-                                  </span>
-                                </span>
-                              </button>
-                            ))
+                                </div>
+                              );
+                            })
                           )}
                         </>
                       )}
