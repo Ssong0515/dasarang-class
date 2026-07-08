@@ -1232,31 +1232,30 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     setAnnotationLanguageInput('');
     setIsLanguagePopupOpen(false);
   };
-  // 다른 수업의 이론·실습을 이 날짜로 '복사'해온다(덮어쓰기). 복사이므로 이후 양쪽은 독립적으로 편집된다.
-  // 다시 불러오면 그대로 다시 덮어써 똑같아진다.
+  // 다른 수업의 이론·실습을 이 날짜 '뒤에 이어 붙여' 불러온다(덮어쓰기 아님). 기존 이론/실습은 그대로 두고,
+  // 원본의 이론(덱)·실습을 뒤에 추가한다. 예) 이미 '이론1+실습4'가 있으면 그 뒤에 '이론2+실습3'이 생긴다.
+  // 복사이므로 이후 양쪽은 독립적으로 편집된다.
   const handleCopyLessonFrom = (sourceRecordId: string) => {
     const source = dateRecords.find((record) => record.id === sourceRecordId);
     if (!source) return;
     const base = currentDateRecord ?? createDateRecord();
-    const hasExisting =
-      (base.contentIds?.length ?? 0) > 0 || (base.theoryPrompts?.length ?? 0) > 0;
-    if (
-      hasExisting &&
-      !window.confirm(
-        `현재 수업의 이론·실습을 '${source.classroomName || '다른 반'} · ${source.date}'의 내용으로 덮어쓸까요? (출석·메모는 유지)`
-      )
-    ) {
-      return;
-    }
+    // 실습 flat 목록은 이어 붙이되 중복 id는 제거(기존 순서 유지 + 원본의 새 실습만 뒤에 추가).
+    const mergedContentIds = Array.from(
+      new Set([...(base.contentIds ?? []), ...(source.contentIds ?? [])])
+    );
+    // 이론(덱)은 그대로 이어 붙인다 → 기존 이론 뒤에 원본 이론이 추가돼 "이론2, 이론3…"으로 번호가 이어진다.
+    const appendedPrompts = (source.theoryPrompts ?? []).map((prompt) => ({
+      ...prompt,
+      contentIds: prompt.contentIds ? [...prompt.contentIds] : undefined,
+    }));
+    const appendedSlides = (source.theorySlides ?? []).map((slide) => ({ ...slide }));
     onSaveDateRecord({
       ...base,
-      contentIds: [...(source.contentIds ?? [])],
-      theoryPrompts: (source.theoryPrompts ?? []).map((prompt) => ({
-        ...prompt,
-        contentIds: prompt.contentIds ? [...prompt.contentIds] : undefined,
-      })),
-      theorySlides: (source.theorySlides ?? []).map((slide) => ({ ...slide })),
-      theorySlideUrl: source.theorySlideUrl ?? '',
+      contentIds: mergedContentIds,
+      theoryPrompts: [...(base.theoryPrompts ?? []), ...appendedPrompts],
+      theorySlides: [...(base.theorySlides ?? []), ...appendedSlides],
+      // 레거시 단일 슬라이드 URL은 기존 값을 유지하고, 없을 때만 원본 값으로 채운다.
+      theorySlideUrl: base.theorySlideUrl || source.theorySlideUrl || '',
     });
     setIsCopyPickerOpen(false);
     setCopyPickerClassroomId(null);
@@ -2636,7 +2635,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
 
             {onUpdatePublishedLesson && (showTheorySection || showPracticeSection) && (
               <div className="mb-8 rounded-[28px] border border-[#E5E3DD] bg-[#FBFBFA] p-6">
-                {/* 다른 반 수업 복사해오기(덮어쓰기) — 복사이므로 이후 양쪽은 독립. 다시 불러오면 다시 덮어써 똑같아진다. */}
+                {/* 다른 반 수업 불러오기 — 기존 이론·실습을 지우지 않고 뒤에 이어 붙인다(덮어쓰기 아님). 복사이므로 이후 양쪽은 독립. */}
                 <div className="mb-4">
                   <button
                     type="button"
@@ -2645,7 +2644,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                   >
                     <span className="inline-flex items-center gap-2">
                       <Copy size={15} />
-                      다른 반 수업 복사해오기 (덮어쓰기)
+                      다른 반 수업 불러오기 (뒤에 추가)
                     </span>
                     {isCopyPickerOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                   </button>
@@ -2655,12 +2654,12 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                         // 1단계 — 복사해올 반 고르기.
                         copyableClassrooms.length === 0 ? (
                           <p className="px-2 py-3 text-xs text-[#8B7E74]">
-                            복사해올 수 있는 다른 반이 없습니다.
+                            불러올 수 있는 다른 반이 없습니다.
                           </p>
                         ) : (
                           <>
                             <p className="px-2 pb-1 pt-1 text-[11px] font-bold text-[#8B7E74]">
-                              복사해올 반을 먼저 고르세요.
+                              불러올 반을 먼저 고르세요.
                             </p>
                             {copyableClassrooms.map((entry) => {
                               const meta = getClassroomColorMeta(
