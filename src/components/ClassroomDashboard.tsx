@@ -490,6 +490,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const [studentAction, setStudentAction] = useState<StudentAction | null>(null);
   const [studentMoveTargets, setStudentMoveTargets] = useState<Record<string, string>>({});
   const [localMemo, setLocalMemo] = useState('');
+  // '모범 수업' 메모 편집 버퍼(왜 좋은 수업인지 한 줄). 날짜 전환 시 기록값으로 초기화, blur/Enter 때 저장.
+  const [exemplaryNoteDraft, setExemplaryNoteDraft] = useState('');
   const [theoryUrlInput, setTheoryUrlInput] = useState('');
   const [theoryLabelInput, setTheoryLabelInput] = useState('');
   const [isPickingTheorySlide, setIsPickingTheorySlide] = useState(false);
@@ -837,6 +839,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
 
   useEffect(() => {
     setLocalMemo(currentDateRecord?.memo || '');
+    setExemplaryNoteDraft(currentDateRecord?.exemplaryNote || '');
     setTheoryUrlInput('');
     setTheoryLabelInput('');
   }, [currentDateRecord?.id, currentDateRecord?.updatedAt, selectedDate]);
@@ -1291,6 +1294,25 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       theorySlideUrl: base.theorySlideUrl || source.theorySlideUrl || '',
     });
     closePicker();
+  };
+
+  // '모범 수업(잘 만든 수업)' 표시 토글. 기록이 있을 때만. 끄면 메모도 비운다.
+  const handleToggleExemplary = () => {
+    if (!currentDateRecord) return;
+    const turningOn = !currentDateRecord.exemplary;
+    onSaveDateRecord({
+      ...currentDateRecord,
+      exemplary: turningOn,
+      exemplaryNote: turningOn ? currentDateRecord.exemplaryNote ?? '' : '',
+    });
+    if (!turningOn) setExemplaryNoteDraft('');
+  };
+  // 모범 수업 메모 저장(blur/Enter). 값이 그대로면 저장 생략.
+  const handleSaveExemplaryNote = () => {
+    if (!currentDateRecord) return;
+    const next = exemplaryNoteDraft.trim();
+    if ((currentDateRecord.exemplaryNote ?? '') === next) return;
+    onSaveDateRecord({ ...currentDateRecord, exemplary: true, exemplaryNote: next });
   };
 
   // 임시(회차 미배정) 날짜 활성화: 빈 수업기록을 만들어 출석·메모·콘텐츠 입력을 연다.
@@ -2835,6 +2857,45 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                           ? '실습을 공개하면 학생 화면에서 즉시 잠금이 풀립니다. (이 날짜는 실습만 진행합니다.)'
                           : '이론 슬라이드는 강사 화면 전용입니다. (이 날짜는 이론만 진행합니다.)'}
                     </p>
+                    {/* '좋은 수업(모범 수업)' 표시 — 켜면 사이드바 '좋은 수업'에 모이고 새벽 루틴이 참고한다. */}
+                    {isCurrentDateActive && (
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={handleToggleExemplary}
+                          title="이 수업을 '잘 만든 수업'으로 표시하면 사이드바 '좋은 수업'에 모이고, 새벽 루틴이 새 수업을 만들 때 참고합니다."
+                          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-all ${
+                            currentDateRecord?.exemplary
+                              ? 'border-[#E7C200] bg-[#FFF8E1] text-[#8A6D00]'
+                              : 'border-[#E5E3DD] bg-white text-[#8B7E74] hover:border-[#E7C200] hover:text-[#8A6D00]'
+                          }`}
+                        >
+                          <Star
+                            size={13}
+                            className={currentDateRecord?.exemplary ? 'text-[#E7C200]' : ''}
+                            {...(currentDateRecord?.exemplary ? { fill: '#F4C430' } : {})}
+                          />
+                          {currentDateRecord?.exemplary ? '좋은 수업 ✓' : '좋은 수업으로 표시'}
+                        </button>
+                        {currentDateRecord?.exemplary && (
+                          <input
+                            type="text"
+                            value={exemplaryNoteDraft}
+                            onChange={(event) => setExemplaryNoteDraft(event.target.value)}
+                            onBlur={handleSaveExemplaryNote}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') {
+                                event.preventDefault();
+                                handleSaveExemplaryNote();
+                                (event.target as HTMLInputElement).blur();
+                              }
+                            }}
+                            placeholder="왜 좋은 수업인지 한 줄 (선택 · 루틴 참고용)"
+                            className="min-w-[200px] flex-1 rounded-full border border-[#E5E3DD] bg-white px-3 py-1.5 text-xs text-[#4A3728] transition-all focus:border-[#E7C200] focus:outline-none"
+                          />
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     {/* 이 날짜만의 이론/실습 구성 — 클래스 설정과 별개로 날짜별로 빼고 다시 넣을 수 있다. */}

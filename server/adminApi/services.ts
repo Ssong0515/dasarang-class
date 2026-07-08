@@ -888,6 +888,33 @@ export const getOverview = async () => {
     .filter((post) => post.status === 'pending')
     .map((post) => ({ id: post.id, title: post.title, studentName: post.studentName, createdAt: post.createdAt }));
 
+  // 강사가 '모범 수업(잘 만든 수업)'으로 표시한 기록들 — 루틴이 새 수업을 만들 때 톤·구성 참고용.
+  // 본문(이론 프롬프트/실습 HTML)은 무거우므로 여기선 요약만 준다. 상세가 필요하면
+  // get_resource("classroomDateRecords", id)로 이론 프롬프트를, get_resource("contents", contentId)로 실습을 읽는다.
+  const curriculumTitleById = new Map<string, string>(
+    curriculums.map((c) => [c.id, c.title] as [string, string])
+  );
+  const exemplaryLessons = recordsSnap.docs
+    .map((doc) => docToObject(doc.id, doc.data() as DocData))
+    .filter((record) => record.exemplary === true)
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+    .map((record) => ({
+      id: record.id,
+      classroomId: record.classroomId,
+      classroomName: record.classroomName,
+      date: record.date,
+      curriculumTitle: record.curriculumId
+        ? curriculumTitleById.get(String(record.curriculumId)) ?? null
+        : null,
+      note: typeof record.exemplaryNote === 'string' ? record.exemplaryNote : '',
+      theoryPromptLabels: Array.isArray(record.theoryPrompts)
+        ? record.theoryPrompts.map((p: DocData) =>
+            typeof p?.label === 'string' && p.label.trim() ? p.label.trim() : '(제목 없는 이론)'
+          )
+        : [],
+      practiceCount: Array.isArray(record.contentIds) ? record.contentIds.length : 0,
+    }));
+
   return {
     today,
     classrooms,
@@ -896,5 +923,6 @@ export const getOverview = async () => {
     todayLessonRecords: todayRecords,
     recentMemos,
     pendingStudentPosts: pendingPosts,
+    exemplaryLessons,
   };
 };

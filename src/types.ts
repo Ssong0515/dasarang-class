@@ -143,6 +143,10 @@ export interface ClassroomDateRecord {
    */
   showTheory?: boolean;
   showPractice?: boolean;
+  /** 강사가 '잘 만든 수업(모범 수업)'으로 표시했는지. 사이드바 '좋은 수업' 탭에 모이고, 새벽 루틴이 새 수업을 만들 때 참고자료로 읽는다. */
+  exemplary?: boolean;
+  /** 이 수업이 왜 좋은지 한 줄 메모(선택). 모범 수업 표시와 함께 남기며, 루틴이 참고할 때 힌트가 된다. */
+  exemplaryNote?: string;
   createdAt: string;
   updatedAt: string;
   curriculumId?: string;

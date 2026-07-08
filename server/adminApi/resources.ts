@@ -168,6 +168,15 @@ export const RESOURCE_SPECS: Record<ResourceName, ResourceSpec> = {
         description:
           '이 날짜만의 실습 영역 덮어쓰기. 없으면 클래스 설정(classrooms.showPractice)을 따른다. false면 그 날짜는 이론만 진행(실습 생성·공개 대상 아님).',
       },
+      exemplary: {
+        type: 'boolean',
+        description:
+          "강사가 '잘 만든 수업(모범 수업)'으로 표시한 기록. get_overview의 exemplaryLessons에 모이고, 루틴이 새 수업을 만들 때 톤·구성 참고자료로 읽는다.",
+      },
+      exemplaryNote: {
+        type: 'string',
+        description: '이 수업이 왜 좋은지 한 줄 메모(선택). 루틴이 참고할 때 힌트가 된다.',
+      },
     },
     immutableFields: ['classroomId', 'date'],
   },

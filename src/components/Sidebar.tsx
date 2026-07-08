@@ -48,7 +48,8 @@ type AdminTab =
   | 'curriculum-management'
   | 'timetable'
   | 'student-access'
-  | 'student-showcase';
+  | 'student-showcase'
+  | 'good-lessons';
 
 interface SidebarProps {
   classrooms: Classroom[];

@@ -9,6 +9,7 @@ import {
   Users,
   Menu,
   ArrowUpRight,
+  Star,
 } from 'lucide-react';
 
 type AdminTab =
@@ -19,7 +20,8 @@ type AdminTab =
   | 'curriculum-management'
   | 'timetable'
   | 'student-access'
-  | 'student-showcase';
+  | 'student-showcase'
+  | 'good-lessons';
 
 interface HeaderProps {
   user: any;
@@ -80,6 +82,13 @@ export const Header: React.FC<HeaderProps> = ({
       icon: <Library size={17} />,
       isActive: activeTab === 'content-library',
       onClick: () => onTabChange('content-library'),
+    },
+    {
+      key: 'good-lessons',
+      label: '좋은 수업',
+      icon: <Star size={17} />,
+      isActive: activeTab === 'good-lessons',
+      onClick: () => onTabChange('good-lessons'),
     },
     {
       key: 'student-access',

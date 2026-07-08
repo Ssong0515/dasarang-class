@@ -8,6 +8,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { StudentPage } from './components/StudentPage';
 import { StudentAccessManager } from './components/StudentAccessManager';
 import { StudentShowcaseManager } from './components/StudentShowcaseManager';
+import { GoodLessonsManager } from './components/GoodLessonsManager';
 import { TeacherVoiceChat } from './components/TeacherVoiceChat';
 import { TeacherBroadcastButton } from './components/TeacherBroadcastButton';
 import {
@@ -112,7 +113,7 @@ type ContentReorderUpdate = {
   order: number;
 };
 
-type AdminTab = 'home' | 'memo' | 'classroom-management' | 'content-library' | 'curriculum-management' | 'timetable' | 'student-access' | 'student-showcase';
+type AdminTab = 'home' | 'memo' | 'classroom-management' | 'content-library' | 'curriculum-management' | 'timetable' | 'student-access' | 'student-showcase' | 'good-lessons';
 
 const UNCATEGORIZED_CATEGORY_ID = null;
 const MISC_CATEGORY_NAME = '기타';
@@ -264,6 +265,7 @@ const getPathFromAppState = (
     case 'content-library':     return '/content-library';
     case 'student-access':      return '/student-access';
     case 'student-showcase':    return '/student-showcase';
+    case 'good-lessons':        return '/good-lessons';
     default:                    return '/';
   }
 };
@@ -280,6 +282,7 @@ const parsePathToAppState = (
   if (pathname === '/content-library')     return { viewMode: 'admin',    activeTab: 'content-library',       activeClassroomId: null };
   if (pathname === '/student-access')      return { viewMode: 'admin',    activeTab: 'student-access',        activeClassroomId: null };
   if (pathname === '/student-showcase')    return { viewMode: 'admin',    activeTab: 'student-showcase',      activeClassroomId: null };
+  if (pathname === '/good-lessons')        return { viewMode: 'admin',    activeTab: 'good-lessons',          activeClassroomId: null };
   return                                          { viewMode: 'admin',    activeTab: 'home',                  activeClassroomId: null };
 };
 
@@ -893,6 +896,11 @@ export default function App() {
             // 날짜별 이론/실습 덮어쓰기. 빼먹으면 강사가 날짜기록을 저장(setDoc)할 때 통째로 덮어써져 사라진다.
             ...(typeof data.showTheory === 'boolean' ? { showTheory: data.showTheory } : {}),
             ...(typeof data.showPractice === 'boolean' ? { showPractice: data.showPractice } : {}),
+            // '모범 수업' 표시·메모. 빼먹으면 저장(setDoc) 때 사라지고 '좋은 수업' 탭/루틴 참고에서 빠진다.
+            ...(data.exemplary === true ? { exemplary: true as boolean } : {}),
+            ...(typeof data.exemplaryNote === 'string' && data.exemplaryNote.trim()
+              ? { exemplaryNote: data.exemplaryNote.trim() }
+              : {}),
             createdAt: data.createdAt ?? '',
             updatedAt: data.updatedAt ?? '',
           } satisfies ClassroomDateRecord;
@@ -1771,6 +1779,11 @@ export default function App() {
         (candidate) =>
           getClassroomDateRecordId(candidate.classroomId, candidate.date) === recordId
       );
+      // '모범 수업' 표시·메모: 강사가 대시보드에서 켠 값. 통째 setDoc 저장에서 지워지지 않게 보존한다(다른 저장 경로 포함).
+      const keepExemplary = (record.exemplary ?? existingRecord?.exemplary) === true;
+      const exemplaryNote = keepExemplary
+        ? (record.exemplaryNote ?? existingRecord?.exemplaryNote ?? '').trim()
+        : '';
       const nextRecord: ClassroomDateRecord = {
         ...record,
         id: recordId,
@@ -1783,6 +1796,8 @@ export default function App() {
         theorySlides: sanitizeTheorySlidesForStorage(record.theorySlides),
         // 루틴이 써둔 이론 프롬프트를 통째 setDoc 저장에서 잃지 않도록 보존(클라이언트는 편집하지 않음).
         theoryPrompts: sanitizeTheoryPromptsForStorage(record.theoryPrompts ?? existingRecord?.theoryPrompts),
+        ...(keepExemplary ? { exemplary: true } : {}),
+        ...(exemplaryNote ? { exemplaryNote } : {}),
         createdAt: existingRecord?.createdAt || record.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -2140,6 +2155,17 @@ export default function App() {
               posts={studentPosts}
               onReview={handleReviewStudentPost}
               getAuthToken={getUserIdToken}
+            />
+          )}
+          {activeTab === 'good-lessons' && (
+            <GoodLessonsManager
+              classrooms={classroomsWithStudents}
+              dateRecords={classroomDateRecords}
+              curriculums={curriculums}
+              onOpenLesson={handleManageClassroom}
+              onUnmark={(record) =>
+                handleSaveClassroomDateRecord({ ...record, exemplary: false, exemplaryNote: '' })
+              }
             />
           )}
             </>
