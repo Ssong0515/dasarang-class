@@ -545,9 +545,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const [isLanguagePopupOpen, setIsLanguagePopupOpen] = useState(false);
   // 이번 세션에서 '언어 등록'으로 새로 만든 언어들(드롭다운에 계속 뜨도록). 저장돼 다른 반에 쓰이면 union으로도 유지된다.
   const [registeredLanguages, setRegisteredLanguages] = useState<string[]>([]);
-  // 설정 '복사 클래스' 추가 드롭다운(커스텀 — 아이콘·컬러 표시) 열림 여부.
-  const [isCopyClassPickerOpen, setIsCopyClassPickerOpen] = useState(false);
-
   const [calendarClasses, setCalendarClasses] = useState<CalendarClassSummary[]>([]);
   const [calendarClassesLoading, setCalendarClassesLoading] = useState(false);
   const [calendarClassesError, setCalendarClassesError] = useState<string | null>(null);
@@ -597,11 +594,14 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const [showCurriculumDetail, setShowCurriculumDetail] = useState(false);
   // 다른 반 수업 '복사해오기(덮어쓰기)' 드롭다운 열림 여부.
   const [isCopyPickerOpen, setIsCopyPickerOpen] = useState(false);
+  // 복사해오기 1단계에서 고른 원본 클래스 id (null이면 클래스 목록을 먼저 보여준다).
+  const [copyPickerClassroomId, setCopyPickerClassroomId] = useState<string | null>(null);
   // 날짜가 바뀌면 다른 날짜의 이론 index를 가리키지 않도록 담기 대상을 해제하고, 팝업·드롭다운도 닫는다.
   useEffect(() => {
     setActivePromptIndex(null);
     setShowCurriculumDetail(false);
     setIsCopyPickerOpen(false);
+    setCopyPickerClassroomId(null);
   }, [selectedDate]);
   const activeDateSet = useMemo(
     () => new Set(classroomDateRecords.map((record) => record.date)),
@@ -1138,35 +1138,60 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     };
   };
 
-  // 이 반의 복사 그룹(설정에서 지정). 같은 그룹 반끼리만 서로의 수업을 복사 후보로 본다.
-  // 이 반이 복사해올 원본 클래스 id들(설정에서 선택). 대시보드 복사 후보는 이 클래스들의 수업 기록으로 한정한다.
-  const copyFromClassroomIds = classroom.copyFromClassroomIds ?? [];
-  const copyFromClassroomIdSet = useMemo(() => new Set(copyFromClassroomIds), [copyFromClassroomIdsKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  // 복사해올 수 있는 수업 후보 — 선택한 클래스들의, 이론·실습이 담긴 기록(자기 자신 제외). 날짜·반·커리큘럼명으로 판단.
+  // 복사해오기 1단계 — 원본으로 고를 수 있는 반 목록. 자기 자신·숨긴 반은 제외하고 이름순.
+  const copyableClassrooms = useMemo(
+    () =>
+      classrooms
+        .filter((entry) => entry.id !== classroom.id && !entry.hidden)
+        .sort((left, right) => left.name.localeCompare(right.name, 'ko')),
+    [classrooms, classroom.id]
+  );
+  // 복사해오기 2단계 — 1단계에서 고른 반의, 이론·실습이 담긴 수업 기록만.
+  // 각 수업은 날짜·회차·주제(그 반의 커리큘럼+회차 배정으로 해석)로 표시한다. 최근 날짜 순.
   const lessonCopyOptions = useMemo(() => {
-    if (copyFromClassroomIdSet.size === 0) return [];
+    if (!copyPickerClassroomId) return [];
     const selfId = currentDateRecord?.id ?? `${classroom.id}_${selectedDate}`;
-    const classroomById = new Map<string, Classroom>(
-      classrooms.map((entry): [string, Classroom] => [entry.id, entry])
-    );
+    const sourceClassroom = classrooms.find((entry) => entry.id === copyPickerClassroomId);
     const curriculumById = new Map<string, Curriculum>(
       (curriculums || []).map((entry): [string, Curriculum] => [entry.id, entry])
     );
+    // 원본 반의 '날짜 → 회차' 배정 맵. (반별 sessionStates + 연결 커리큘럼의 회차)
+    const linkedCurriculum = curriculumById.get(sourceClassroom?.curriculumId || '');
+    const sessionsByDate = new Map<string, CurriculumSession[]>();
+    for (const session of linkedCurriculum?.sessions || []) {
+      const plannedDate = sourceClassroom?.sessionStates?.[session.id]?.date;
+      if (!plannedDate) continue;
+      const list = sessionsByDate.get(plannedDate) || [];
+      list.push(session);
+      sessionsByDate.set(plannedDate, list);
+    }
+    const formatSessionLabel = (session: CurriculumSession) =>
+      session.topic.trim().startsWith(`${session.order}회차`)
+        ? session.topic.trim()
+        : `${session.order}회차 · ${session.topic}`;
     return dateRecords
       .filter((record) => {
         if (record.id === selfId) return false;
-        if ((record.contentIds?.length ?? 0) === 0 && (record.theoryPrompts?.length ?? 0) === 0)
-          return false;
-        // 선택한 클래스의 기록만.
-        return copyFromClassroomIdSet.has(record.classroomId);
+        if (record.classroomId !== copyPickerClassroomId) return false;
+        return (
+          (record.contentIds?.length ?? 0) > 0 || (record.theoryPrompts?.length ?? 0) > 0
+        );
       })
       .map((record) => {
-        const cls = classroomById.get(record.classroomId);
-        const curr = curriculumById.get(record.curriculumId || cls?.curriculumId || '');
+        const sessions = sessionsByDate.get(record.date) || [];
+        const sessionLabel =
+          sessions.length > 0 ? sessions.map(formatSessionLabel).join(' / ') : null;
+        const curr = curriculumById.get(record.curriculumId || sourceClassroom?.curriculumId || '');
+        // "2026-06-22" → "6/22". ISO 형식이 아니면 원본을 그대로 쓴다.
+        const isoMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(record.date);
+        const dateLabel = isoMatch
+          ? `${Number(isoMatch[2])}/${Number(isoMatch[3])}`
+          : record.date;
         return {
           recordId: record.id,
           date: record.date,
-          className: record.classroomName || cls?.name || '알 수 없는 반',
+          dateLabel,
+          sessionLabel,
           curriculumTitle: curr?.title || '커리큘럼 없음',
           practiceCount: record.contentIds?.length ?? 0,
           theoryCount: record.theoryPrompts?.length ?? 0,
@@ -1180,7 +1205,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     currentDateRecord?.id,
     classroom.id,
     selectedDate,
-    copyFromClassroomIdSet,
+    copyPickerClassroomId,
   ]);
   // 병기 언어 드롭다운 후보: 지금 다른 반들이 실제로 쓰는 언어 + 이번 세션에 등록한 언어만(기본 시드 없음).
   const knownAnnotationLanguages = useMemo(() => {
@@ -1207,22 +1232,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     setAnnotationLanguageInput('');
     setIsLanguagePopupOpen(false);
   };
-  // 복사해올 원본 클래스 추가/제거(설정). 중복 무시.
-  const addCopyFromClassroom = (id: string) => {
-    if (!id) return;
-    setSettingsDraft((prev) =>
-      prev.copyFromClassroomIds.includes(id)
-        ? prev
-        : { ...prev, copyFromClassroomIds: [...prev.copyFromClassroomIds, id] }
-    );
-  };
-  const removeCopyFromClassroom = (id: string) => {
-    setSettingsDraft((prev) => ({
-      ...prev,
-      copyFromClassroomIds: prev.copyFromClassroomIds.filter((entry) => entry !== id),
-    }));
-  };
-
   // 다른 수업의 이론·실습을 이 날짜로 '복사'해온다(덮어쓰기). 복사이므로 이후 양쪽은 독립적으로 편집된다.
   // 다시 불러오면 그대로 다시 덮어써 똑같아진다.
   const handleCopyLessonFrom = (sourceRecordId: string) => {
@@ -1250,6 +1259,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       theorySlideUrl: source.theorySlideUrl ?? '',
     });
     setIsCopyPickerOpen(false);
+    setCopyPickerClassroomId(null);
   };
 
   // 임시(회차 미배정) 날짜 활성화: 빈 수업기록을 만들어 출석·메모·콘텐츠 입력을 연다.
@@ -2641,33 +2651,92 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                   </button>
                   {isCopyPickerOpen && (
                     <div className="mt-2 max-h-[320px] space-y-1.5 overflow-y-auto rounded-2xl border border-[#E5E3DD] bg-white p-2">
-                      {lessonCopyOptions.length === 0 ? (
-                        <p className="px-2 py-3 text-xs text-[#8B7E74]">
-                          {copyFromClassroomIdSet.size > 0
-                            ? '선택한 복사 클래스에 아직 만든 수업이 없습니다.'
-                            : '설정 탭 → 복사 클래스에서 가져올 클래스를 선택하면, 그 클래스의 수업을 불러올 수 있어요.'}
-                        </p>
+                      {!copyPickerClassroomId ? (
+                        // 1단계 — 복사해올 반 고르기.
+                        copyableClassrooms.length === 0 ? (
+                          <p className="px-2 py-3 text-xs text-[#8B7E74]">
+                            복사해올 수 있는 다른 반이 없습니다.
+                          </p>
+                        ) : (
+                          <>
+                            <p className="px-2 pb-1 pt-1 text-[11px] font-bold text-[#8B7E74]">
+                              복사해올 반을 먼저 고르세요.
+                            </p>
+                            {copyableClassrooms.map((entry) => {
+                              const meta = getClassroomColorMeta(
+                                entry.color || DEFAULT_CLASSROOM_COLOR
+                              );
+                              const RowIcon = getClassroomIconComponent(
+                                entry.icon || DEFAULT_CLASSROOM_ICON
+                              );
+                              return (
+                                <button
+                                  key={entry.id}
+                                  type="button"
+                                  onClick={() => setCopyPickerClassroomId(entry.id)}
+                                  className="flex w-full items-center gap-2.5 rounded-xl border border-[#E5E3DD] bg-white px-3 py-2 text-left transition-all hover:border-[#2F5EA8] hover:bg-[#F5F9FF]"
+                                >
+                                  <span
+                                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl"
+                                    style={{ backgroundColor: meta.bg }}
+                                  >
+                                    {RowIcon && (
+                                      <RowIcon size={16} style={{ color: meta.value }} />
+                                    )}
+                                  </span>
+                                  <span className="flex-1 truncate text-sm font-bold text-[#4A3728]">
+                                    {entry.name}
+                                  </span>
+                                  <ChevronRight size={16} className="shrink-0 text-[#C4B6A4]" />
+                                </button>
+                              );
+                            })}
+                          </>
+                        )
                       ) : (
-                        lessonCopyOptions.map((option) => (
+                        // 2단계 — 고른 반의 수업 고르기.
+                        <>
                           <button
-                            key={option.recordId}
                             type="button"
-                            onClick={() => handleCopyLessonFrom(option.recordId)}
-                            className="flex w-full flex-col items-start gap-0.5 rounded-xl border border-[#E5E3DD] bg-white px-3 py-2 text-left transition-all hover:border-[#2F5EA8] hover:bg-[#F5F9FF]"
+                            onClick={() => setCopyPickerClassroomId(null)}
+                            className="flex w-full items-center gap-1.5 rounded-xl px-2 py-1.5 text-left text-xs font-bold text-[#2F5EA8] transition-all hover:bg-[#F5F9FF]"
                           >
-                            <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm font-bold text-[#4A3728]">
-                              <span>{option.date}</span>
-                              <span className="text-[#B7AFA4]">·</span>
-                              <span>{option.className}</span>
+                            <ChevronLeft size={15} className="shrink-0" />
+                            <span className="truncate">
+                              {classrooms.find((entry) => entry.id === copyPickerClassroomId)?.name ||
+                                '다른 반'}
                             </span>
-                            <span className="flex flex-wrap items-center gap-x-2 text-[11px] text-[#8B7E74]">
-                              <span className="truncate">{option.curriculumTitle}</span>
-                              <span className="shrink-0 rounded-full bg-[#F3F2EE] px-2 py-0.5 font-bold">
-                                이론 {option.theoryCount} · 실습 {option.practiceCount}
-                              </span>
-                            </span>
+                            <span className="shrink-0 text-[#B7AFA4]">· 다른 반 고르기</span>
                           </button>
-                        ))
+                          {lessonCopyOptions.length === 0 ? (
+                            <p className="px-2 py-3 text-xs text-[#8B7E74]">
+                              이 반에 아직 만든 수업이 없습니다.
+                            </p>
+                          ) : (
+                            lessonCopyOptions.map((option) => (
+                              <button
+                                key={option.recordId}
+                                type="button"
+                                onClick={() => handleCopyLessonFrom(option.recordId)}
+                                className="flex w-full flex-col items-start gap-0.5 rounded-xl border border-[#E5E3DD] bg-white px-3 py-2 text-left transition-all hover:border-[#2F5EA8] hover:bg-[#F5F9FF]"
+                              >
+                                <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm font-bold text-[#4A3728]">
+                                  <span className="shrink-0">{option.dateLabel}</span>
+                                  <span className="text-[#B7AFA4]">·</span>
+                                  <span>{option.sessionLabel || option.curriculumTitle}</span>
+                                </span>
+                                <span className="flex flex-wrap items-center gap-x-2 text-[11px] text-[#8B7E74]">
+                                  {option.sessionLabel && (
+                                    <span className="truncate">{option.curriculumTitle}</span>
+                                  )}
+                                  <span className="shrink-0 rounded-full bg-[#F3F2EE] px-2 py-0.5 font-bold">
+                                    이론 {option.theoryCount} · 실습 {option.practiceCount}
+                                  </span>
+                                </span>
+                              </button>
+                            ))
+                          )}
+                        </>
                       )}
                     </div>
                   )}
@@ -4655,98 +4724,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
             className="w-full rounded-2xl border-2 border-[#E5E3DD] px-4 py-2.5 text-sm font-medium text-[#4A3728] transition-all focus:border-[#8B5E3C] focus:outline-none"
             placeholder='예: "구로구청 / 디지털배움터" (시간표 연결 시 자동으로 채워질 수 있어요)'
           />
-        </div>
-
-        <div className="mb-5">
-          <div className="mb-3 flex items-center gap-2">
-            <Copy size={16} className="text-[#8B5E3C]" />
-            <h3 className="text-sm font-bold text-[#4A3728]">복사 클래스</h3>
-          </div>
-          {settingsDraft.copyFromClassroomIds.length > 0 && (
-            <div className="mb-3 flex flex-wrap gap-2">
-              {settingsDraft.copyFromClassroomIds.map((id) => {
-                const cls = classrooms.find((entry) => entry.id === id);
-                const meta = getClassroomColorMeta(cls?.color || DEFAULT_CLASSROOM_COLOR);
-                const ChipIcon = getClassroomIconComponent(cls?.icon || DEFAULT_CLASSROOM_ICON);
-                return (
-                  <span
-                    key={id}
-                    className="inline-flex items-center gap-2 rounded-full border border-[#E5E3DD] bg-white py-1 pl-1.5 pr-2 text-sm font-bold text-[#4A3728]"
-                  >
-                    <span
-                      className="flex h-6 w-6 items-center justify-center rounded-lg"
-                      style={{ backgroundColor: meta.bg }}
-                    >
-                      {ChipIcon && <ChipIcon size={13} style={{ color: meta.value }} />}
-                    </span>
-                    {cls?.name || '(삭제된 클래스)'}
-                    <button
-                      type="button"
-                      onClick={() => removeCopyFromClassroom(id)}
-                      className="rounded-full p-0.5 text-[#B7AFA4] transition-colors hover:bg-[#F3F2EE] hover:text-[#D9534F]"
-                      aria-label={`${cls?.name || '클래스'} 제거`}
-                    >
-                      <X size={14} />
-                    </button>
-                  </span>
-                );
-              })}
-            </div>
-          )}
-          {/* 커스텀 드롭다운 — 사이드바처럼 아이콘·컬러로 보여준다. 숨긴 클래스는 제외하고 활성 클래스만. */}
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setIsCopyClassPickerOpen((open) => !open)}
-              className="flex w-full items-center justify-between gap-2 rounded-2xl border-2 border-[#E5E3DD] bg-white px-4 py-2.5 text-sm font-medium text-[#8B7E74] transition-all hover:border-[#8B5E3C]"
-            >
-              복사해올 클래스 선택…
-              {isCopyClassPickerOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-            </button>
-            {isCopyClassPickerOpen && (
-              <div className="mt-2 max-h-[280px] space-y-1 overflow-y-auto rounded-2xl border border-[#E5E3DD] bg-white p-2 shadow-sm">
-                {(() => {
-                  const available = classrooms.filter(
-                    (entry) =>
-                      entry.id !== classroom.id &&
-                      !entry.hidden &&
-                      !settingsDraft.copyFromClassroomIds.includes(entry.id)
-                  );
-                  if (available.length === 0) {
-                    return (
-                      <p className="px-2 py-3 text-xs text-[#8B7E74]">추가할 수 있는 클래스가 없습니다.</p>
-                    );
-                  }
-                  return available.map((entry) => {
-                    const meta = getClassroomColorMeta(entry.color || DEFAULT_CLASSROOM_COLOR);
-                    const RowIcon = getClassroomIconComponent(entry.icon || DEFAULT_CLASSROOM_ICON);
-                    return (
-                      <button
-                        key={entry.id}
-                        type="button"
-                        onClick={() => {
-                          addCopyFromClassroom(entry.id);
-                          setIsCopyClassPickerOpen(false);
-                        }}
-                        className="flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-left transition-all hover:bg-[#F3F2EE]"
-                      >
-                        <span
-                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl"
-                          style={{ backgroundColor: meta.bg }}
-                        >
-                          {RowIcon && <RowIcon size={16} style={{ color: meta.value }} />}
-                        </span>
-                        <span className="truncate text-sm font-bold text-[#4A3728]">{entry.name}</span>
-                      </button>
-                    );
-                  });
-                })()}
-              </div>
-            )}
-          </div>
-          <p className="mt-1.5 px-1 text-[11px] text-[#8B7E74]">
-            여기서 고른 클래스의 수업을 대시보드 '다른 반 수업 복사해오기'에서 가져올 수 있어요. 숨긴 클래스는 목록에 나오지 않아요.
-          </p>
         </div>
 
         <div className="mb-5">
