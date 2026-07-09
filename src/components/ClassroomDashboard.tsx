@@ -88,7 +88,7 @@ import { isAttendanceExcluded } from '../utils/attendance';
 import { deleteField } from '../firebase';
 import { formatWon, getSessionFee } from '../utils/fee';
 import { openDriveSlidePicker, openDriveFolderPicker, requestDriveSyncAccessToken } from '../utils/drivePicker';
-import { SlideEmbed, StudentContentPreviewFrame } from './StudentContentPreview';
+import { ReferenceAnnotationOverlay, SlideEmbed, StudentContentPreviewFrame } from './StudentContentPreview';
 import { SessionDetailModal } from './SessionDetailModal';
 import { ClassroomResultGallery } from './ClassroomResultGallery';
 
@@ -475,6 +475,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   // 수업기록 칩을 누르면 콘텐츠로 이동하지 않고 바로 미리보기 모달을 띄운다.
   const [previewContent, setPreviewContent] = useState<LessonContent | null>(null);
+  // 예제(kind:reference) '번역 병기' 창 전체화면 오버레이 대상. 미리보기 모달 위에 뜬다.
+  const [annotateContent, setAnnotateContent] = useState<LessonContent | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>(categories[0]?.id || '');
   const [selectedDate, setSelectedDate] = useState(initialDate ?? getLocalDateString(new Date()));
   const [students, setStudents] = useState<Student[]>(classroom.students || []);
@@ -5655,6 +5657,20 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 <span className="truncate">{livePreviewContent.title}</span>
               </h3>
               <div className="flex shrink-0 items-center gap-2">
+                {/* 예제(kind:reference)이고 번역 사전(__DSR_TR__)이 있으면 — 강사가 공용 화면에서 여러 언어를
+                    골라 한 화면 병기로 크게 띄울 수 있는 '번역 병기' 창 전체화면 버튼. */}
+                {livePreviewContent.kind === 'reference' &&
+                  livePreviewContent.html?.includes('__DSR_TR__') && (
+                    <button
+                      type="button"
+                      onClick={() => setAnnotateContent(livePreviewContent)}
+                      title="번역 병기 — 언어를 골라 한국어 원문과 함께 한 화면에 크게 띄웁니다."
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-[#6D4FB0] px-3 py-2 text-xs font-bold text-white transition-all hover:bg-[#5A3F97]"
+                    >
+                      <Languages size={14} />
+                      <span className="hidden sm:inline">번역 병기</span>
+                    </button>
+                  )}
                 {onNavigateToContent && (
                   <button
                     type="button"
@@ -5713,6 +5729,15 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* 예제 번역 병기 — 창 전체화면 오버레이(미리보기 모달 위에 뜬다) */}
+      {annotateContent && (
+        <ReferenceAnnotationOverlay
+          title={annotateContent.title ?? '예제'}
+          html={annotateContent.html ?? ''}
+          onClose={() => setAnnotateContent(null)}
+        />
       )}
     </main>
   );

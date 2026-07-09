@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { ChevronDown, FileText, Maximize2, Minimize2, Presentation } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown, FileText, Languages, Maximize2, Minimize2, Presentation, X } from 'lucide-react';
 import { LessonContent } from '../types';
 import { LANGUAGE_ALIASES } from '../utils/studentLanguage';
 import { LANG_MAX_AGE_MS, VOICE_LANG_CHANGED_EVENT } from './StudentVoiceButton';
@@ -419,6 +419,131 @@ const iframeTranslateScriptTag = `
   <\/script>
 `;
 
+// 예제(kind:reference) 공용 화면 전용 '병기' 모드. 학생 화면의 치환 번역과 달리, 한국어 원문은 그대로 두고
+// 선택한 언어들의 번역을 각 한국어 구절 바로 아래에 연한 보라 박스로 덧붙인다(병기). 강사가 빔프로젝터에
+// 예제를 띄우고 여러 언어를 동시에 보여줄 때 쓴다. 부모(ReferenceAnnotationOverlay)와 규약:
+//   iframe→부모: postMessage({type:'dsr-annot-langs', langs})  — 이 예제가 번역 가능한 언어 목록
+//   부모→iframe: postMessage({type:'dsr-annot-set', langs})    — 병기할 언어들(빈 배열이면 원문만)
+//               postMessage({type:'dsr-annot-report'})         — 언어 목록 다시 보고 요청
+// 사전 규약은 학생 번역과 동일: window.__DSR_TR__ = { "러시아어": {원문:번역}, ... }. 사전이 없으면 langs=[].
+const iframeAnnotateScriptTag = `
+  <script>
+  (function () {
+    if (window.__dsrAnnotInit) return; window.__dsrAnnotInit = true;
+
+    var TR = window.__DSR_TR__;
+    var LANGS = (TR && typeof TR === 'object')
+      ? Object.keys(TR).filter(function (k) { return TR[k] && typeof TR[k] === 'object'; })
+      : [];
+    var KO = /[\\uAC00-\\uD7A3]/;   // 한글이 든 텍스트 노드만 병기 대상
+    var selected = [];               // 병기 중인 언어명들
+    var inserted = [];               // 우리가 끼워 넣은 병기 박스(정리용)
+
+    function reportLangs() {
+      try { window.parent.postMessage({ type: 'dsr-annot-langs', langs: LANGS }, '*'); } catch (e) {}
+    }
+    function notifyHeight() { try { window.dispatchEvent(new Event('resize')); } catch (e) {} }
+
+    function isSkippable(node) {
+      var p = node.parentNode;
+      while (p && p.nodeType === 1) {
+        var tag = p.tagName;
+        if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'TEXTAREA' || tag === 'INPUT' || tag === 'NOSCRIPT') return true;
+        if (p.getAttribute && p.getAttribute('data-dsr-skip') === '1') return true;  // 우리가 넣은 병기 박스는 재순회 제외
+        p = p.parentNode;
+      }
+      return false;
+    }
+    function clearAnnots() {
+      for (var i = 0; i < inserted.length; i++) {
+        var el = inserted[i];
+        if (el && el.parentNode) el.parentNode.removeChild(el);
+      }
+      inserted = [];
+    }
+    function buildAnnot(key) {
+      var box = document.createElement('span');
+      box.className = 'dsr-annot';
+      box.setAttribute('data-dsr-skip', '1');
+      var showTag = selected.length > 1;   // 2개 이상 병기할 때만 언어 라벨을 붙인다
+      for (var s = 0; s < selected.length; s++) {
+        var lang = selected[s];
+        var dict = TR[lang];
+        var tr = dict ? dict[key] : null;
+        if (tr == null) continue;
+        var line = document.createElement('span');
+        line.className = 'dsr-annot-line';
+        if (showTag) {
+          var tagEl = document.createElement('span');
+          tagEl.className = 'dsr-annot-tag';
+          tagEl.textContent = lang;
+          line.appendChild(tagEl);
+        }
+        line.appendChild(document.createTextNode(tr));
+        box.appendChild(line);
+      }
+      return box.childNodes.length ? box : null;
+    }
+    function applyAnnots() {
+      clearAnnots();
+      if (!selected.length || !document.body) { notifyHeight(); return; }
+      // 먼저 대상 노드를 모아 두고(순회 중 DOM을 건드리지 않게) 나중에 삽입한다.
+      var w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
+      var n, todo = [];
+      while ((n = w.nextNode())) {
+        if (!n.nodeValue) continue;
+        var key = n.nodeValue.trim();
+        if (!key || !KO.test(key)) continue;
+        if (isSkippable(n)) continue;
+        var has = false;
+        for (var i = 0; i < selected.length; i++) {
+          var d = TR[selected[i]];
+          if (d && d[key] != null) { has = true; break; }
+        }
+        if (has) todo.push({ node: n, key: key });
+      }
+      for (var t = 0; t < todo.length; t++) {
+        var box = buildAnnot(todo[t].key);
+        if (!box) continue;
+        var node = todo[t].node;
+        if (node.parentNode) {
+          node.parentNode.insertBefore(box, node.nextSibling);
+          inserted.push(box);
+        }
+      }
+      notifyHeight();
+    }
+
+    function ensureStyle() {
+      if (document.getElementById('dsr-annot-style')) return;
+      var st = document.createElement('style');
+      st.id = 'dsr-annot-style';
+      st.textContent =
+        '.dsr-annot{display:block;margin:3px 0 5px;}'
+        + '.dsr-annot-line{display:block;background:#ede9fe;color:#4c1d95;border-radius:8px;padding:3px 10px;margin-top:3px;font-size:.85em;font-weight:600;line-height:1.5;}'
+        + '.dsr-annot-tag{display:inline-block;font-size:.72em;font-weight:800;color:#7c3aed;margin-right:6px;opacity:.85;}'
+        + '@media print{.dsr-annot-line{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}';
+      (document.head || document.documentElement).appendChild(st);
+    }
+
+    window.addEventListener('message', function (e) {
+      if (!e.data) return;
+      if (e.data.type === 'dsr-annot-set' && Object.prototype.toString.call(e.data.langs) === '[object Array]') {
+        selected = e.data.langs.filter(function (x) { return typeof x === 'string' && TR && TR[x]; });
+        applyAnnots();
+      } else if (e.data.type === 'dsr-annot-report') {
+        reportLangs();
+      }
+    });
+
+    function init() { ensureStyle(); reportLangs(); }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+    else init();
+    window.addEventListener('load', reportLangs);   // 로드 완료 후 한 번 더 보고(초기 렌더 경합 방지)
+  })();
+  <\/script>
+`;
+
 // 문서의 특정 오프셋 앞에 문자열을 끼워 넣는다. replace()를 쓰지 않는 이유: 주입 문자열에
 // 들어 있는 $&·$1 같은 시퀀스가 특수 치환 패턴으로 해석돼 마크업이 깨질 수 있기 때문.
 const spliceAt = (source: string, index: number, insertion: string): string =>
@@ -469,7 +594,10 @@ window.__DASA_REVIEW__=true;
 })();
 </script>`;
 
-export const buildResponsiveSrcDoc = (html: string, options?: { review?: boolean }) => {
+export const buildResponsiveSrcDoc = (
+  html: string,
+  options?: { review?: boolean; annotate?: boolean }
+) => {
   const trimmedHtml = html.trim();
   if (!trimmedHtml) {
     return '';
@@ -477,10 +605,17 @@ export const buildResponsiveSrcDoc = (html: string, options?: { review?: boolean
 
   // 실습 병기 번역 엔진(이주민 학생용) 주입 여부. 학생 화면은 버튼 없이 우하단 언어 버튼(StudentVoiceButton)을
   // 따라 자동 치환되고, 교사 검토 화면(reviewMode)에서만 수동 🌐 버튼이 뜬다. 끄려면 false로.
+  // annotate 모드(예제 공용 화면 병기)는 치환 엔진 대신 병기 엔진을 넣는다 — 둘이 같은 텍스트 노드를
+  // 두고 다투지 않게 서로 배타적으로 주입하고, 검토 브리지도 붙이지 않는다.
   const ENABLE_INLINE_TRANSLATE = true;
-  const translateTag = ENABLE_INLINE_TRANSLATE ? iframeTranslateScriptTag : '';
+  const translateTag = options?.annotate
+    ? iframeAnnotateScriptTag
+    : ENABLE_INLINE_TRANSLATE
+      ? iframeTranslateScriptTag
+      : '';
   // 브리지는 실습 <script>보다 먼저 실행돼야 하므로 head 쪽에 넣는다.
-  const headTags = (options?.review ? reviewBridgeScriptTag : '') + iframeResponsiveStyleTag;
+  const headTags =
+    (options?.review && !options?.annotate ? reviewBridgeScriptTag : '') + iframeResponsiveStyleTag;
 
   if (/<html[\s>]/i.test(trimmedHtml) || /<body[\s>]/i.test(trimmedHtml) || /<!doctype/i.test(trimmedHtml)) {
     return injectIframeMarkup(trimmedHtml, headTags, iframeHeightScriptTag + translateTag);
@@ -631,6 +766,186 @@ export const StudentContentPreviewFrame: React.FC<StudentContentPreviewFrameProp
           ⏭ 건너뛰기
         </button>
       )}
+    </div>
+  );
+};
+
+interface ReferenceAnnotationOverlayProps {
+  /** 예제(kind:reference)의 제목·HTML. HTML 안 window.__DSR_TR__ 사전으로 병기 언어가 정해진다. */
+  title: string;
+  html: string;
+  onClose: () => void;
+}
+
+/**
+ * 예제 공용 화면(빔프로젝터) 전용 '번역 병기' 창 전체화면 오버레이.
+ * - 상단 바: 이 예제가 번역 가능한 언어들이 칩으로 뜨고, 눌러서 여러 개 고를 수 있다(다중 선택).
+ * - 본문: 고른 언어들의 번역을 한국어 원문 아래에 병기한 예제를, 스크롤 없이 한 화면에 다 보이도록
+ *   높이에 맞춰 자동 축소해 보여준다. (작은 팝업이 아니라 웹브라우저 창 전체를 덮는다.)
+ */
+export const ReferenceAnnotationOverlay: React.FC<ReferenceAnnotationOverlayProps> = ({
+  title,
+  html,
+  onClose,
+}) => {
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const [availableLangs, setAvailableLangs] = useState<string[]>([]);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [contentHeight, setContentHeight] = useState(0);
+  const [stage, setStage] = useState({ w: 0, h: 0 });
+
+  const srcDoc = useMemo(() => buildResponsiveSrcDoc(html, { annotate: true }), [html]);
+
+  // iframe → 부모: 번역 가능한 언어 목록 + 콘텐츠 높이. 다른 iframe(뒤에 깔린 미리보기 등)의 메시지는 무시.
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      const data = event.data as { type?: string; langs?: unknown; height?: unknown } | null;
+      if (!data) return;
+      const frameWindow = iframeRef.current?.contentWindow;
+      if (frameWindow && event.source !== frameWindow) return;
+      if (data.type === 'dsr-annot-langs' && Array.isArray(data.langs)) {
+        setAvailableLangs(data.langs.filter((lang): lang is string => typeof lang === 'string'));
+      } else if (data.type === 'iframe-height' && typeof data.height === 'number' && data.height > 0) {
+        setContentHeight(data.height);
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, []);
+
+  // 무대(본문 영역) 크기 추적 — 여기에 맞춰 예제를 축소한다.
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const update = () => setStage({ w: el.clientWidth, h: el.clientHeight });
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // 고른 언어가 바뀔 때마다 iframe에 병기 언어 집합을 전달한다.
+  useEffect(() => {
+    iframeRef.current?.contentWindow?.postMessage({ type: 'dsr-annot-set', langs: selected }, '*');
+  }, [selected]);
+
+  // Esc로 닫기 + 배경 스크롤 잠금.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [onClose]);
+
+  const toggleLang = (lang: string) =>
+    setSelected((current) =>
+      current.includes(lang) ? current.filter((l) => l !== lang) : [...current, lang]
+    );
+
+  // 한 화면에 다 담기: 무대 여백을 뺀 가용 크기를 재고, 콘텐츠가 세로로 넘치면 그만큼 균일 축소한다.
+  const MARGIN = 20;
+  const availW = Math.max(0, stage.w - MARGIN * 2);
+  const availH = Math.max(0, stage.h - MARGIN * 2);
+  const measured = contentHeight > 0;
+  const logicalWidth = availW;
+  const logicalHeight = measured ? contentHeight : availH;
+  const scale = measured && contentHeight > 0 ? Math.min(1, availH / contentHeight) : 1;
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex flex-col bg-[#1b1a17]">
+      {/* 상단 바 — 번역 가능한 언어 칩(다중 선택) + 닫기 */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-white/10 bg-[#211f1b] px-4 py-3 sm:px-6">
+        <div className="flex items-center gap-2 text-sm font-bold text-white">
+          <Languages size={18} className="text-[#C9B8FF]" />
+          번역 병기
+        </div>
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          {availableLangs.length === 0 ? (
+            <span className="text-sm text-white/50">이 예제에는 번역 사전이 없어요.</span>
+          ) : (
+            <>
+              {availableLangs.map((lang) => {
+                const on = selected.includes(lang);
+                return (
+                  <button
+                    key={lang}
+                    type="button"
+                    onClick={() => toggleLang(lang)}
+                    aria-pressed={on}
+                    className={`rounded-full px-3.5 py-1.5 text-sm font-bold transition-all ${
+                      on
+                        ? 'bg-[#7C5CFF] text-white shadow'
+                        : 'bg-white/10 text-white/80 hover:bg-white/20'
+                    }`}
+                  >
+                    {lang}
+                  </button>
+                );
+              })}
+              {selected.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelected([])}
+                  className="rounded-full px-3 py-1.5 text-sm font-bold text-white/60 transition-all hover:bg-white/10 hover:text-white"
+                >
+                  원문만
+                </button>
+              )}
+            </>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex shrink-0 items-center gap-1.5 rounded-xl bg-white/10 px-3.5 py-2 text-sm font-bold text-white transition-all hover:bg-white/20"
+        >
+          <X size={16} />
+          닫기 <span className="hidden text-white/60 sm:inline">(Esc)</span>
+        </button>
+      </div>
+
+      {/* 본문 — 무대에 맞춰 축소된 예제(한 화면에 스크롤 없이) */}
+      <div ref={stageRef} className="relative flex flex-1 items-center justify-center overflow-hidden">
+        <div
+          className="relative"
+          style={{ width: logicalWidth * scale, height: logicalHeight * scale }}
+        >
+          <iframe
+            ref={iframeRef}
+            srcDoc={srcDoc}
+            sandbox="allow-scripts allow-same-origin"
+            title={`${title} 예제 병기`}
+            scrolling="no"
+            // 로드 완료 시점에 언어 목록을 다시 요청하고 현재 선택을 재전송한다 — 초기 보고가 리스너보다
+            // 먼저 나가는 경합, 그리고 html 핫리로드로 iframe이 다시 뜰 때의 상태 유실을 함께 막는다.
+            onLoad={() => {
+              const win = iframeRef.current?.contentWindow;
+              if (!win) return;
+              win.postMessage({ type: 'dsr-annot-report' }, '*');
+              win.postMessage({ type: 'dsr-annot-set', langs: selected }, '*');
+            }}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: logicalWidth || '100%',
+              height: measured ? contentHeight : availH || '100%',
+              transform: `scale(${scale})`,
+              transformOrigin: 'top left',
+              border: 'none',
+              background: '#fff',
+              borderRadius: 14,
+            }}
+          />
+        </div>
+      </div>
     </div>
   );
 };
