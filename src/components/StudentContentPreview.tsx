@@ -617,7 +617,10 @@ export const buildResponsiveSrcDoc = (
   const headTags =
     (options?.review && !options?.annotate ? reviewBridgeScriptTag : '') + iframeResponsiveStyleTag;
 
-  if (/<html[\s>]/i.test(trimmedHtml) || /<body[\s>]/i.test(trimmedHtml) || /<!doctype/i.test(trimmedHtml)) {
+  // 문서 '시작'이 doctype/html/body일 때만 완전한 문서로 취급한다. 문서 전체에서 <body> 등을
+  // 찾으면 실습 <script>가 문자열로 조립하는 태그 모양 텍스트(저장용 문서 등)에 오판해서,
+  // injectIframeMarkup이 실습 스크립트 한복판에 주입하고 코드가 화면에 raw 텍스트로 새어 나온다.
+  if (/^\s*(<!doctype[\s>]|<html[\s>]|<body[\s>])/i.test(trimmedHtml)) {
     return injectIframeMarkup(trimmedHtml, headTags, iframeHeightScriptTag + translateTag);
   }
 

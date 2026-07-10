@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { Classroom, LessonCategory, LessonContent, PublishedLesson } from '../types';
 import { resolveAppPath } from '../utils/appPaths';
-import { StudentContentCard } from './StudentContentPreview';
+import { StudentContentCard, StudentContentPreviewFrame } from './StudentContentPreview';
 import { StudentVoiceButton } from './StudentVoiceButton';
 import { StudentSubtitleOverlay } from './StudentSubtitleOverlay';
 import {
@@ -548,6 +548,14 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   const hasMultipleVisible = visibleContents.length >= 2;
   const singleVisibleContent = visibleContents.length === 1 ? visibleContents[0] : null;
 
+  // 'dsr-fit-viewport' 마커가 든 실습(코딩반 타이핑 미션 등)은 위아래 페이지 스크롤 없이
+  // 남은 화면 높이에 iframe을 딱 맞춰 꽉 채운다. 마커 없는 기존 콘텐츠는 종전대로 자연 높이 + 스크롤.
+  const fitCandidateContent = singleVisibleContent ?? selectedContent;
+  const isFitViewport = Boolean(
+    (!SHOW_CLASSROOM_SELECTION || activeClassroomId) &&
+      fitCandidateContent?.html?.includes('dsr-fit-viewport')
+  );
+
   // 결과물 저장 대상 반 결정 — 학생은 반을 직접 고르지 않으므로(전체 공개 정책) '오늘 공개된 수업'에서 역으로 찾는다.
   // 우선순위: (1) 강사가 직접 고른 반(미리보기), (2) 지금 보고 있는 실습을 공개한 반,
   //          (3) 가장 최근에 공개한 반. Drive 폴더가 연결된 반을 우선하되, 후보가 있으면 폴더 없는 반이라도 잡아
@@ -745,7 +753,11 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   return (
     <div
       className={`bg-[#FBFBFA] font-sans text-[#4A3728] ${
-        embeddedInAdminShell ? 'flex min-h-0 flex-1 flex-col overflow-y-auto' : 'min-h-screen'
+        embeddedInAdminShell
+          ? `flex min-h-0 flex-1 flex-col ${isFitViewport ? 'overflow-hidden' : 'overflow-y-auto'}`
+          : isFitViewport
+            ? 'flex h-screen flex-col overflow-hidden'
+            : 'min-h-screen'
       }`}
     >
       <header className="sticky top-0 z-50 border-b border-[#E5E3DD] bg-white/95 backdrop-blur">
@@ -1005,29 +1017,57 @@ export const StudentPage: React.FC<StudentPageProps> = ({
           </div>
         </main>
       ) : (
-        <main className="w-full px-4 pb-8 pt-6 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
+        <main
+          className={
+            isFitViewport
+              ? 'flex min-h-0 w-full flex-1 flex-col px-3 pb-3 pt-3 sm:px-4'
+              : 'w-full px-4 pb-8 pt-6 sm:px-6 lg:px-8 xl:px-10 2xl:px-12'
+          }
+        >
           {visibleContents.length > 0 ? (
             singleVisibleContent ? (
               <motion.div
                 key={singleVisibleContent.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
+                className={isFitViewport ? 'min-h-0 flex-1' : undefined}
               >
-                <StudentContentCard
-                  content={singleVisibleContent}
-                  showDescriptionToggle={Boolean(isAdmin)}
-                />
+                {isFitViewport ? (
+                  <StudentContentPreviewFrame
+                    html={singleVisibleContent.html ?? ''}
+                    title={singleVisibleContent.title}
+                    autoHeight={false}
+                    reviewMode={Boolean(isAdmin)}
+                    className="h-full w-full overflow-hidden rounded-[24px] border border-[#E5E3DD] bg-white shadow-sm"
+                  />
+                ) : (
+                  <StudentContentCard
+                    content={singleVisibleContent}
+                    showDescriptionToggle={false}
+                  />
+                )}
               </motion.div>
             ) : selectedContent ? (
               <motion.div
                 key={selectedContent.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
+                className={isFitViewport ? 'min-h-0 flex-1' : undefined}
               >
-                <StudentContentCard
-                  content={selectedContent}
-                  showDescriptionToggle={Boolean(isAdmin)}
-                />
+                {isFitViewport ? (
+                  <StudentContentPreviewFrame
+                    html={selectedContent.html ?? ''}
+                    title={selectedContent.title}
+                    autoHeight={false}
+                    reviewMode={Boolean(isAdmin)}
+                    className="h-full w-full overflow-hidden rounded-[24px] border border-[#E5E3DD] bg-white shadow-sm"
+                  />
+                ) : (
+                  <StudentContentCard
+                    content={selectedContent}
+                    showDescriptionToggle={false}
+                  />
+                )}
               </motion.div>
             ) : (
               <motion.div
@@ -1199,17 +1239,19 @@ export const StudentPage: React.FC<StudentPageProps> = ({
         </div>
       )}
 
-      <footer className="mt-20 border-t border-[#E5E3DD] py-12 text-center">
-        <p className="mb-4 text-sm text-[#8B7E74]">© 2024 다사랑 교실. {currentT.rights}</p>
-        {!isAdmin && onLogin && (
-          <button
-            onClick={onLogin}
-            className="text-[10px] uppercase tracking-widest text-[#E5E3DD] transition-colors hover:text-[#8B7E74]"
-          >
-            {currentT.adminLogin}
-          </button>
-        )}
-      </footer>
+      {!isFitViewport && (
+        <footer className="mt-20 border-t border-[#E5E3DD] py-12 text-center">
+          <p className="mb-4 text-sm text-[#8B7E74]">© 2024 다사랑 교실. {currentT.rights}</p>
+          {!isAdmin && onLogin && (
+            <button
+              onClick={onLogin}
+              className="text-[10px] uppercase tracking-widest text-[#E5E3DD] transition-colors hover:text-[#8B7E74]"
+            >
+              {currentT.adminLogin}
+            </button>
+          )}
+        </footer>
+      )}
 
       {/* 학생 음성 → 한국어 채팅 FAB. 실제 학생 화면에서만(강사 미리보기 제외) 띄운다.
           강사 미리보기에서 눌러 봐도 메시지가 강사 채팅에 섞이지 않도록 isAdmin일 땐 감춘다. */}
