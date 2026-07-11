@@ -492,8 +492,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const [studentAction, setStudentAction] = useState<StudentAction | null>(null);
   const [studentMoveTargets, setStudentMoveTargets] = useState<Record<string, string>>({});
   const [localMemo, setLocalMemo] = useState('');
-  // '모범 수업' 메모 편집 버퍼(왜 좋은 수업인지 한 줄). 날짜 전환 시 기록값으로 초기화, blur/Enter 때 저장.
-  const [exemplaryNoteDraft, setExemplaryNoteDraft] = useState('');
   const [theoryUrlInput, setTheoryUrlInput] = useState('');
   const [theoryLabelInput, setTheoryLabelInput] = useState('');
   const [isPickingTheorySlide, setIsPickingTheorySlide] = useState(false);
@@ -845,7 +843,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
 
   useEffect(() => {
     setLocalMemo(currentDateRecord?.memo || '');
-    setExemplaryNoteDraft(currentDateRecord?.exemplaryNote || '');
     setTheoryUrlInput('');
     setTheoryLabelInput('');
   }, [currentDateRecord?.id, currentDateRecord?.updatedAt, selectedDate]);
@@ -1311,14 +1308,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       exemplary: turningOn,
       exemplaryNote: turningOn ? currentDateRecord.exemplaryNote ?? '' : '',
     });
-    if (!turningOn) setExemplaryNoteDraft('');
-  };
-  // 모범 수업 메모 저장(blur/Enter). 값이 그대로면 저장 생략.
-  const handleSaveExemplaryNote = () => {
-    if (!currentDateRecord) return;
-    const next = exemplaryNoteDraft.trim();
-    if ((currentDateRecord.exemplaryNote ?? '') === next) return;
-    onSaveDateRecord({ ...currentDateRecord, exemplary: true, exemplaryNote: next });
   };
 
   // 임시(회차 미배정) 날짜 활성화: 빈 수업기록을 만들어 출석·메모·콘텐츠 입력을 연다.
@@ -2116,9 +2105,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       selYear && selMonth && selDay
         ? getScheduleStartForDate(new Date(selYear, selMonth - 1, selDay))
         : null;
-    // 아주 좁은 폭(폰)에서 수업 달력을 한 달치 대신 '오늘'만 보여주는 위젯용 값.
-    const todayDate = new Date();
-    const todayStr = getLocalDateString(todayDate);
+    // 아주 좁은 폭(폰) 컴팩트 달력의 '오늘' 비교·이동용 값.
+    const todayStr = getLocalDateString(new Date());
     const assignmentTooltipText =
       '학생 페이지에는 여기에서 배정한 콘텐츠만 보입니다. 날짜를 바꿔도 이 목록은 달라지지 않습니다.';
     const dateStatusTooltipText =
@@ -2175,7 +2163,9 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       return (
         <button
           onClick={() => handleTogglePublishContent(content)}
-          className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+          title={isPublished ? '잠그기' : '공개'}
+          aria-label={isPublished ? '잠그기' : '공개'}
+          className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-4 py-2 text-xs font-bold transition-all max-[639px]:px-2.5 ${
             isPublished
               ? 'bg-[#FDECEC] text-[#B42318] hover:bg-[#FAD4D1]'
               : 'bg-[#8B5E3C] text-white hover:bg-[#724D31]'
@@ -2184,12 +2174,12 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
           {isPublished ? (
             <>
               <EyeOff size={14} />
-              잠그기
+              <span className="max-[639px]:hidden">잠그기</span>
             </>
           ) : (
             <>
               <Eye size={14} />
-              공개
+              <span className="max-[639px]:hidden">공개</span>
             </>
           )}
         </button>
@@ -2201,7 +2191,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     //  · 미리보기·공개 = 실습(있으면). · 예제 = 예제(있으면, 눌러서 강사 공용 화면 미리보기).
     // 개념에 실습·예제가 다 있으면 세 버튼 모두 활성 — 한 항목에 미리보기·공개·예제가 함께 산다.
     const disabledActionCls =
-      'inline-flex h-8 shrink-0 cursor-not-allowed items-center gap-1.5 rounded-xl border border-[#EEEBE5] bg-[#F7F6F3] px-3 text-xs font-bold text-[#C7C0B5]';
+      'inline-flex h-8 shrink-0 cursor-not-allowed items-center gap-1.5 whitespace-nowrap rounded-xl border border-[#EEEBE5] bg-[#F7F6F3] px-3 text-xs font-bold text-[#C7C0B5] max-[639px]:px-2';
     const renderContentActionButtons = ({
       practice,
       example,
@@ -2218,10 +2208,10 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               onClick={() => setPreviewContent(practice)}
               title={`${practice.title} 미리보기`}
               aria-label="미리보기"
-              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-xl border border-[#E5E3DD] bg-white px-3 text-xs font-bold text-[#8B7E74] transition-all hover:border-[#8B5E3C] hover:text-[#8B5E3C]"
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-[#E5E3DD] bg-white px-3 text-xs font-bold text-[#8B7E74] transition-all hover:border-[#8B5E3C] hover:text-[#8B5E3C] max-[639px]:px-2"
             >
               <ScanSearch size={14} />
-              미리보기
+              <span className="max-[639px]:hidden">미리보기</span>
             </button>
           ) : (
             <button
@@ -2232,7 +2222,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               className={disabledActionCls}
             >
               <ScanSearch size={14} />
-              미리보기
+              <span className="max-[639px]:hidden">미리보기</span>
             </button>
           )}
           {/* 공개 — 실습이 있고 실습 영역이 켜져 있을 때만 활성 */}
@@ -2251,7 +2241,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               className={disabledActionCls}
             >
               <Eye size={14} />
-              공개
+              <span className="max-[639px]:hidden">공개</span>
             </button>
           )}
           {/* 예제 — 예제 있으면 활성 (공용 화면 미리보기) */}
@@ -2261,10 +2251,10 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               onClick={() => setPreviewContent(example)}
               title={`${example.title} 예제 보기 (공용 화면 전용, 학생 노트북엔 안 나감)`}
               aria-label="예제 보기"
-              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-xl border border-[#EAD9BF] bg-[#FFF5E9] px-3 text-xs font-bold text-[#8B5E3C] transition-all hover:border-[#8B5E3C] hover:bg-[#FFEFD8]"
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-[#EAD9BF] bg-[#FFF5E9] px-3 text-xs font-bold text-[#8B5E3C] transition-all hover:border-[#8B5E3C] hover:bg-[#FFEFD8] max-[639px]:px-2"
             >
               <FileText size={14} />
-              예제
+              <span className="max-[639px]:hidden">예제</span>
             </button>
           ) : (
             <button
@@ -2275,7 +2265,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               className={disabledActionCls}
             >
               <FileText size={14} />
-              예제
+              <span className="max-[639px]:hidden">예제</span>
             </button>
           )}
         </>
@@ -2624,22 +2614,25 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
           alwaysExpanded
           narrowClassName="order-1 col-span-1"
         >
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="space-y-3">
-              <h2 className="flex items-center gap-2 text-xl font-bold text-[#4A3728]">
-                <Clock className="text-[#8B5E3C]" size={20} />
-                날짜 상태
-                <DashboardInfoTooltip
-                  content={dateStatusTooltipText}
-                  label="날짜 상태 설명 보기"
-                />
-              </h2>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-[#FFF5E9] px-4 py-2 text-xs font-bold text-[#8B5E3C]">
-                  {selectedDate}
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between lg:gap-4">
+            <div className="space-y-3 max-[639px]:space-y-2">
+              {/* 아주 좁은 폭: 제목·툴팁은 생략하고 날짜·시간 칩만 컴팩트하게 보여준다. */}
+              {!isVeryNarrow && (
+                <h2 className="flex items-center gap-2 text-xl font-bold text-[#4A3728]">
+                  <Clock className="text-[#8B5E3C]" size={20} />
+                  날짜 상태
+                  <DashboardInfoTooltip
+                    content={dateStatusTooltipText}
+                    label="날짜 상태 설명 보기"
+                  />
+                </h2>
+              )}
+              <div className="flex flex-wrap items-center gap-2 max-[639px]:justify-center max-[639px]:gap-1.5">
+                <span className="rounded-full bg-[#FFF5E9] px-4 py-2 text-xs font-bold text-[#8B5E3C] max-[639px]:px-3 max-[639px]:py-1.5 max-[639px]:text-[11px]">
+                  {isVeryNarrow ? `${selMonth}월 ${selDay}일` : selectedDate}
                 </span>
                 {(currentSessionId || isCurrentDateActive) && selectedDateStartTime && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-[#FBF4EA] px-4 py-2 text-xs font-bold text-[#B07A3F]">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-[#FBF4EA] px-4 py-2 text-xs font-bold text-[#B07A3F] max-[639px]:px-3 max-[639px]:py-1.5 max-[639px]:text-[11px]">
                     <Clock size={12} />
                     {selectedDateStartTime}
                   </span>
@@ -2647,7 +2640,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               </div>
             </div>
             {currentSessionId ? (
-              <div className="relative flex w-full flex-row gap-1 rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] p-1 max-[639px]:flex-col lg:inline-flex lg:w-auto lg:shrink-0 lg:gap-0">
+              <div className="relative flex w-full flex-row gap-1 rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] p-1 max-[639px]:gap-0.5 lg:inline-flex lg:w-auto lg:shrink-0 lg:gap-0">
                 {STATUS_SEGMENTS.map((segment) => {
                   const SegmentIcon = segment.icon;
                   const isActive = currentDateStatus === segment.value;
@@ -2655,11 +2648,11 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                     <button
                       key={segment.value}
                       onClick={() => setDateStatus(segment.value)}
-                      className={`flex flex-1 items-center justify-center gap-1 rounded-xl px-2.5 py-2 text-sm font-bold transition-all lg:w-auto lg:flex-none lg:justify-start lg:gap-1.5 lg:px-4 ${
+                      className={`flex flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-xl px-2.5 py-2 text-sm font-bold transition-all max-[639px]:px-1 max-[639px]:py-1.5 max-[639px]:text-[11px] lg:w-auto lg:flex-none lg:justify-start lg:gap-1.5 lg:px-4 ${
                         isActive ? segment.activeClass : 'text-[#8B7E74] hover:bg-[#F3F2EE]'
                       }`}
                     >
-                      <SegmentIcon size={15} />
+                      {!isVeryNarrow && <SegmentIcon size={15} />}
                       {segment.label}
                     </button>
                   );
@@ -2685,7 +2678,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
             ) : (
               <button
                 onClick={isCurrentDateActive ? handleDeactivateDate : handleActivateDate}
-                className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl px-6 py-3 text-sm font-bold transition-all ${
+                className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl px-6 py-3 text-sm font-bold transition-all max-[639px]:w-full max-[639px]:px-4 max-[639px]:py-2 max-[639px]:text-xs ${
                   isCurrentDateActive
                     ? 'bg-[#FDECEC] text-[#B42318] hover:bg-[#FAD4D1]'
                     : 'bg-[#8B5E3C] text-white hover:bg-[#724D31]'
@@ -2979,7 +2972,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                   )}
                 </div>
                 <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-                  <div className="space-y-1">
+                  <div className="min-w-0 max-w-full space-y-1">
                     {sessionTopicTitle && (
                       <p className="text-[11px] font-bold uppercase tracking-wider text-[#B7AFA4]">
                         수업 진행 · 학생 공개
@@ -2987,54 +2980,36 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                     )}
                     <h3 className="flex items-center gap-2 text-base font-bold text-[#4A3728]">
                       <Presentation className="shrink-0 text-[#8B5E3C]" size={18} />
-                      {sessionTopicTitle || '수업 진행 · 학생 공개'}
-                    </h3>
-                    <p className="text-xs text-[#8B7E74]">
-                      {showTheorySection && showPracticeSection
-                        ? '이론(슬라이드)은 강사 화면 전용입니다. 실습을 공개하면 학생 화면에서 즉시 잠금이 풀립니다.'
-                        : showPracticeSection
-                          ? '실습을 공개하면 학생 화면에서 즉시 잠금이 풀립니다. (이 날짜는 실습만 진행합니다.)'
-                          : '이론 슬라이드는 강사 화면 전용입니다. (이 날짜는 이론만 진행합니다.)'}
-                    </p>
-                    {/* '좋은 수업(모범 수업)' 표시 — 켜면 사이드바 '좋은 수업'에 모이고 새벽 루틴이 참고한다. */}
-                    {isCurrentDateActive && (
-                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                      {/* 좁은 폭에선 긴 제목을 한 줄 말줄임(…)으로 자른다. */}
+                      <span
+                        className="min-w-0 max-[639px]:truncate"
+                        title={sessionTopicTitle || undefined}
+                      >
+                        {sessionTopicTitle || '수업 진행 · 학생 공개'}
+                      </span>
+                      {/* '좋은 수업(모범 수업)' 토글 — 학생도 보는 화면이라 문구 없이 별 아이콘만. */}
+                      {isCurrentDateActive && (
                         <button
                           type="button"
                           onClick={handleToggleExemplary}
+                          aria-label={
+                            currentDateRecord?.exemplary ? '좋은 수업 표시 해제' : '좋은 수업으로 표시'
+                          }
                           title="이 수업을 '잘 만든 수업'으로 표시하면 사이드바 '좋은 수업'에 모이고, 새벽 루틴이 새 수업을 만들 때 참고합니다."
-                          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-all ${
-                            currentDateRecord?.exemplary
-                              ? 'border-[#E7C200] bg-[#FFF8E1] text-[#8A6D00]'
-                              : 'border-[#E5E3DD] bg-white text-[#8B7E74] hover:border-[#E7C200] hover:text-[#8A6D00]'
-                          }`}
+                          className="shrink-0 rounded-full p-1 transition-all hover:bg-[#FFF8E1]"
                         >
                           <Star
-                            size={13}
-                            className={currentDateRecord?.exemplary ? 'text-[#E7C200]' : ''}
+                            size={15}
+                            className={
+                              currentDateRecord?.exemplary
+                                ? 'text-[#E7C200]'
+                                : 'text-[#D6D0C6] transition-colors hover:text-[#E7C200]'
+                            }
                             {...(currentDateRecord?.exemplary ? { fill: '#F4C430' } : {})}
                           />
-                          {currentDateRecord?.exemplary ? '좋은 수업 ✓' : '좋은 수업으로 표시'}
                         </button>
-                        {currentDateRecord?.exemplary && (
-                          <input
-                            type="text"
-                            value={exemplaryNoteDraft}
-                            onChange={(event) => setExemplaryNoteDraft(event.target.value)}
-                            onBlur={handleSaveExemplaryNote}
-                            onKeyDown={(event) => {
-                              if (event.key === 'Enter') {
-                                event.preventDefault();
-                                handleSaveExemplaryNote();
-                                (event.target as HTMLInputElement).blur();
-                              }
-                            }}
-                            placeholder="왜 좋은 수업인지 한 줄 (선택 · 루틴 참고용)"
-                            className="min-w-[200px] flex-1 rounded-full border border-[#E5E3DD] bg-white px-3 py-1.5 text-xs text-[#4A3728] transition-all focus:border-[#E7C200] focus:outline-none"
-                          />
-                        )}
-                      </div>
-                    )}
+                      )}
+                    </h3>
                   </div>
                   <div className="flex items-center gap-2">
                     {/* 이 날짜만의 이론/실습 구성 — 클래스 설정과 별개로 날짜별로 빼고 다시 넣을 수 있다. */}
@@ -3042,60 +3017,72 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                       className="mr-1 inline-flex items-center gap-1 rounded-xl bg-[#F3F2EE] p-1"
                       title="이 날짜만의 수업 구성입니다. 끄면 이 날짜에서만 그 영역이 빠지고, 클래스 설정은 바뀌지 않아요."
                     >
+                      {/* 좁은 폭에선 체크 아이콘을 숨기고 '이론/실습' 글자만 — 켜짐 여부는 배경색으로 구분된다. */}
                       <button
                         type="button"
                         onClick={() => handleToggleDateArea('theory')}
                         aria-pressed={showTheorySection}
-                        className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all ${
+                        className={`inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all max-[639px]:px-2 ${
                           showTheorySection
                             ? 'bg-white text-[#8B5E3C] shadow-sm'
                             : 'text-[#B7AFA4] hover:text-[#8B7E74]'
                         }`}
                       >
-                        {showTheorySection ? <Check size={12} /> : <X size={12} />}
+                        <span className="flex items-center max-[639px]:hidden">
+                          {showTheorySection ? <Check size={12} /> : <X size={12} />}
+                        </span>
                         이론
                       </button>
                       <button
                         type="button"
                         onClick={() => handleToggleDateArea('practice')}
                         aria-pressed={showPracticeSection}
-                        className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all ${
+                        className={`inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all max-[639px]:px-2 ${
                           showPracticeSection
                             ? 'bg-white text-[#8B5E3C] shadow-sm'
                             : 'text-[#B7AFA4] hover:text-[#8B7E74]'
                         }`}
                       >
-                        {showPracticeSection ? <Check size={12} /> : <X size={12} />}
+                        <span className="flex items-center max-[639px]:hidden">
+                          {showPracticeSection ? <Check size={12} /> : <X size={12} />}
+                        </span>
                         실습
                       </button>
                     </div>
                     {showPracticeSection && publishablePracticeContents.length > 0 && (
                       <>
+                        {/* 좁은 폭에선 아이콘만 — 색(초록 열림/빨강 잠금)으로 구분된다. */}
                         <button
                           onClick={handlePublishAllPractice}
                           disabled={publishedPracticeCount === publishablePracticeContents.length}
-                          className="inline-flex items-center gap-1.5 rounded-xl bg-[#EEF7F0] px-3 py-2 text-xs font-bold text-[#2D7A4D] transition-all hover:bg-[#DCEFE2] disabled:cursor-not-allowed disabled:opacity-50"
+                          title="전체 공개"
+                          aria-label="전체 공개"
+                          className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl bg-[#EEF7F0] px-3 py-2 text-xs font-bold text-[#2D7A4D] transition-all hover:bg-[#DCEFE2] disabled:cursor-not-allowed disabled:opacity-50 max-[639px]:px-2.5"
                         >
                           <Unlock size={14} />
-                          전체 공개
+                          <span className="max-[639px]:hidden">전체 공개</span>
                         </button>
                         <button
                           onClick={handleUnpublishAll}
                           disabled={(currentPublishedLesson?.publishedContentIds?.length ?? 0) === 0}
-                          className="inline-flex items-center gap-1.5 rounded-xl bg-[#FDECEC] px-3 py-2 text-xs font-bold text-[#B42318] transition-all hover:bg-[#FAD4D1] disabled:cursor-not-allowed disabled:opacity-50"
+                          title="전체 잠금"
+                          aria-label="전체 잠금"
+                          className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl bg-[#FDECEC] px-3 py-2 text-xs font-bold text-[#B42318] transition-all hover:bg-[#FAD4D1] disabled:cursor-not-allowed disabled:opacity-50 max-[639px]:px-2.5"
                         >
                           <Lock size={14} />
-                          전체 잠금
+                          <span className="max-[639px]:hidden">전체 잠금</span>
                         </button>
                       </>
                     )}
                     {showPracticeSection && (
                       <button
                         onClick={() => setIsEndLessonModalOpen(true)}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-[#E5C9C6] bg-white px-3 py-2 text-xs font-bold text-[#B42318] transition-all hover:bg-[#FDECEC]"
+                        title="수업 종료"
+                        aria-label="수업 종료"
+                        className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl border border-[#E5C9C6] bg-white px-3 py-2 text-xs font-bold text-[#B42318] transition-all hover:bg-[#FDECEC] max-[639px]:px-2.5"
                       >
                         <Power size={14} />
-                        수업 종료
+                        <span className="max-[639px]:hidden">수업 종료</span>
                       </button>
                     )}
                   </div>
@@ -3891,25 +3878,88 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
             narrowClassName="order-2 col-span-1"
           >
             {isVeryNarrow ? (
-              // 아주 좁은 폭: 한 달치 대신 '오늘'만 보여주는 컴팩트 캘린더 위젯 (탭하면 오늘로 이동)
-              <button
-                type="button"
-                onClick={() => setSelectedDate(todayStr)}
-                className="flex w-full flex-col items-center gap-2 rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] p-4 text-center transition-all hover:border-[#8B5E3C] hover:shadow-sm"
-              >
-                <div className="flex h-16 w-16 flex-col items-center justify-center rounded-2xl bg-[#2F5EA8] text-white shadow-md shadow-[#2F5EA8]/25">
-                  <span className="text-[11px] font-bold leading-none">{todayDate.getMonth() + 1}월</span>
-                  <span className="text-2xl font-extrabold leading-tight">{todayDate.getDate()}</span>
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-[#4A3728]">
-                    오늘 · {weekDays[todayDate.getDay()]}요일
-                  </p>
-                  <p className="text-[11px] font-bold text-[#A89F94]">
-                    {todayDate.getFullYear()}년 {todayDate.getMonth() + 1}월 {todayDate.getDate()}일
-                  </p>
-                </div>
-              </button>
+              // 아주 좁은 폭: 한 달치 그리드 대신 선택한 날짜만 크게 보여주는 컴팩트 위젯.
+              // ◀/▶로 하루씩, 아래 버튼으로 수업일 단위·오늘로 이동한다.
+              (() => {
+                const selectedDateObj = new Date(`${selectedDate}T00:00:00`);
+                const shiftDay = (delta: number) => {
+                  const next = new Date(selectedDateObj);
+                  next.setDate(next.getDate() + delta);
+                  setSelectedDate(getLocalDateString(next));
+                };
+                const isTodaySelected = selectedDate === todayStr;
+                const selectedStatus = dateStatusByDate.get(selectedDate);
+                const plannedOnSelected = plannedSessionsByDate.get(selectedDate);
+                const selectedInfo =
+                  [
+                    plannedOnSelected
+                      ? plannedOnSelected
+                          .map((session) =>
+                            // 주제가 이미 "N회차"로 시작하면 회차를 겹쳐 쓰지 않는다.
+                            session.topic.startsWith(`${session.order}회차`)
+                              ? session.topic
+                              : `${session.order}회차 ${session.topic}`
+                          )
+                          .join(' · ')
+                      : null,
+                    selectedStatus ? SESSION_STATUS_LABELS[selectedStatus] : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ') ||
+                  (activeDateSet.has(selectedDate) ? '수업 기록 있음' : '수업 없음');
+                return (
+                  <div className="flex w-full flex-col gap-2">
+                    <div className="flex w-full flex-col items-center gap-1 rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] p-3 text-center">
+                      <div
+                        className={`flex h-12 w-12 flex-col items-center justify-center rounded-xl text-white shadow-md ${
+                          isTodaySelected
+                            ? 'bg-[#2F5EA8] shadow-[#2F5EA8]/25'
+                            : 'bg-[#8B5E3C] shadow-[#8B5E3C]/20'
+                        }`}
+                      >
+                        <span className="text-[10px] font-bold leading-none">
+                          {selectedDateObj.getMonth() + 1}월
+                        </span>
+                        <span className="text-lg font-extrabold leading-tight">
+                          {selectedDateObj.getDate()}
+                        </span>
+                      </div>
+                      <p className="whitespace-nowrap text-[11px] font-bold text-[#4A3728]">
+                        {weekDays[selectedDateObj.getDay()]}요일{isTodaySelected ? '·오늘' : ''}
+                      </p>
+                      <p className="w-full truncate text-[10px] font-bold text-[#A89F94]">
+                        {selectedInfo}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => shiftDay(-1)}
+                        aria-label="하루 전"
+                        className="flex shrink-0 items-center justify-center rounded-xl border border-[#E5E3DD] bg-white p-2 text-[#8B7E74] transition-all hover:bg-[#F3F2EE] active:scale-95"
+                      >
+                        <ChevronLeft size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isTodaySelected}
+                        onClick={() => setSelectedDate(todayStr)}
+                        className="min-w-0 flex-1 rounded-xl border border-[#E5E3DD] bg-white px-2 py-1.5 text-[11px] font-bold text-[#2F5EA8] transition-all hover:bg-[#F3F2EE] disabled:cursor-default disabled:opacity-40"
+                      >
+                        오늘
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => shiftDay(1)}
+                        aria-label="하루 뒤"
+                        className="flex shrink-0 items-center justify-center rounded-xl border border-[#E5E3DD] bg-white p-2 text-[#8B7E74] transition-all hover:bg-[#F3F2EE] active:scale-95"
+                      >
+                        <ChevronRight size={16} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()
             ) : (
             <>
             <div className="mb-4 flex items-start justify-between gap-3 lg:mb-6">

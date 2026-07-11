@@ -12,8 +12,9 @@ import {
   GraduationCap,
   ChevronLeft,
   ChevronRight,
+  X,
 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 import { ClassroomDiagnosticsBanner } from './ClassroomDiagnosticsBanner';
 import { Classroom, ClassroomDateRecord, ClassroomLoadDiagnostics, LessonContent } from '../types';
 import {
@@ -27,6 +28,7 @@ import {
   formatMan,
   formatWon,
   getMonthDateCells,
+  DayEarningEntry,
 } from '../utils/fee';
 
 const EARNINGS_WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -56,6 +58,8 @@ const MonthlyEarningsCalendar: React.FC<{
     return { year: now.getFullYear(), month: now.getMonth() };
   });
   const [mode, setMode] = useState<CalendarMode>('class');
+  // '+N개 더'를 눌러 그날 수업 전체를 팝업으로 펼친 날짜 (null이면 닫힘).
+  const [expandedDate, setExpandedDate] = useState<string | null>(null);
 
   const earnings = useMemo(
     () => buildMonthEarnings(classrooms, view.year, view.month),
@@ -121,6 +125,108 @@ const MonthlyEarningsCalendar: React.FC<{
   const handleEntryClick = (classroomId: string, date: string) => {
     const classroom = classroomById.get(classroomId);
     if (classroom) onManageClassroom(classroom, date);
+  };
+
+  // 하루치 클래스 칩 — 달력 셀과 '+N개 더' 팝업이 같은 모양을 공유한다.
+  const renderEntryChip = (
+    entry: DayEarningEntry,
+    cell: string,
+    key: React.Key,
+    variant: 'cell' | 'popup' = 'cell'
+  ) => {
+    const readiness = getReadiness(entry.classroomId, cell);
+    const isDone = entry.status === 'done';
+    const memoPresent = hasMemo(entry.classroomId, cell);
+    const statusLabel =
+      entry.status === 'done' ? '완료' : entry.status === 'skipped' ? '건너뜀' : '예정';
+    const inPopup = variant === 'popup';
+    return (
+      <button
+        key={key}
+        type="button"
+        onClick={() => {
+          setExpandedDate(null);
+          handleEntryClick(entry.classroomId, cell);
+        }}
+        title={
+          isDone
+            ? `${entry.classroomName} · 완료 / 메모 ${
+                memoPresent ? '있음' : '없음'
+              } (클릭하면 클래스로 이동)`
+            : `${entry.classroomName} · ${statusLabel} / 이론 ${
+                readiness.theoryReady ? '준비됨' : '준비안됨'
+              } · 실습 ${readiness.practiceReady ? '준비됨' : '준비안됨'} (클릭하면 클래스로 이동)`
+        }
+        className={`flex w-full min-w-0 items-center text-left transition-colors hover:bg-[#F3F2EE] ${
+          inPopup
+            ? 'gap-2 rounded-xl border border-[#F3F2EE] px-2.5 py-2'
+            : 'gap-1 rounded-md px-1 py-0.5'
+        } ${entry.status === 'skipped' ? 'opacity-50' : ''}`}
+      >
+        <span
+          className={`shrink-0 rounded-full ${inPopup ? 'h-2.5 w-2.5' : 'h-1.5 w-1.5'}`}
+          style={{
+            backgroundColor: entry.color || '#A2906F',
+            opacity: entry.status === 'planned' ? 0.6 : 1,
+          }}
+        />
+        <span
+          className={`min-w-0 flex-1 truncate font-bold text-[#4A3728] ${
+            inPopup ? 'text-sm' : 'text-[10px]'
+          }`}
+        >
+          {entry.classroomName}
+        </span>
+        {inPopup && (
+          <span
+            className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${
+              isDone
+                ? 'bg-[#E0EFE4] text-[#2D7A4D]'
+                : entry.status === 'skipped'
+                  ? 'bg-[#F3F2EE] text-[#B7AFA4]'
+                  : 'bg-[#EAF1FB] text-[#2F5EA8]'
+            }`}
+          >
+            {statusLabel}
+          </span>
+        )}
+        {isDone ? (
+          <span
+            className={`shrink-0 items-center gap-0.5 rounded px-1 font-bold ${
+              inPopup ? 'flex text-[10px]' : 'hidden text-[8px] sm:flex'
+            } ${memoPresent ? 'bg-[#E0EFE4] text-[#2D7A4D]' : 'bg-[#F3F2EE] text-[#C2BAAE]'}`}
+          >
+            <StickyNote size={inPopup ? 11 : 9} strokeWidth={2.5} />
+            {memoPresent ? '메모' : '없음'}
+          </span>
+        ) : (
+          <span
+            className={`shrink-0 items-center gap-0.5 ${
+              inPopup ? 'flex' : 'hidden sm:flex'
+            }`}
+          >
+            <span
+              className={`rounded px-1 font-bold ${inPopup ? 'text-[10px]' : 'text-[8px]'} ${
+                readiness.theoryReady
+                  ? 'bg-[#E0EFE4] text-[#2D7A4D]'
+                  : 'bg-[#F3F2EE] text-[#C2BAAE]'
+              }`}
+            >
+              이
+            </span>
+            <span
+              className={`rounded px-1 font-bold ${inPopup ? 'text-[10px]' : 'text-[8px]'} ${
+                readiness.practiceReady
+                  ? 'bg-[#E0EFE4] text-[#2D7A4D]'
+                  : 'bg-[#F3F2EE] text-[#C2BAAE]'
+              }`}
+            >
+              실
+            </span>
+          </span>
+        )}
+      </button>
+    );
   };
 
   const goToMonth = (delta: number) =>
@@ -288,80 +394,17 @@ const MonthlyEarningsCalendar: React.FC<{
               {/* 수업 달력: 클래스별 칩(이론·실습 준비 배지) — 클릭하면 해당 클래스로 이동 */}
               {day && mode === 'class' && (
                 <div className="mt-1 flex flex-col gap-0.5">
-                  {day.entries.slice(0, 3).map((entry, entryIndex) => {
-                    const readiness = getReadiness(entry.classroomId, cell);
-                    const isDone = entry.status === 'done';
-                    const memoPresent = hasMemo(entry.classroomId, cell);
-                    const statusLabel =
-                      entry.status === 'done' ? '완료' : entry.status === 'skipped' ? '건너뜀' : '예정';
-                    return (
-                      <button
-                        key={entryIndex}
-                        type="button"
-                        onClick={() => handleEntryClick(entry.classroomId, cell)}
-                        title={
-                          isDone
-                            ? `${entry.classroomName} · 완료 / 메모 ${
-                                memoPresent ? '있음' : '없음'
-                              } (클릭하면 클래스로 이동)`
-                            : `${entry.classroomName} · ${statusLabel} / 이론 ${
-                                readiness.theoryReady ? '준비됨' : '준비안됨'
-                              } · 실습 ${readiness.practiceReady ? '준비됨' : '준비안됨'} (클릭하면 클래스로 이동)`
-                        }
-                        className={`flex w-full min-w-0 items-center gap-1 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-[#F3F2EE] ${
-                          entry.status === 'skipped' ? 'opacity-50' : ''
-                        }`}
-                      >
-                        <span
-                          className="h-1.5 w-1.5 shrink-0 rounded-full"
-                          style={{
-                            backgroundColor: entry.color || '#A2906F',
-                            opacity: entry.status === 'planned' ? 0.6 : 1,
-                          }}
-                        />
-                        <span className="min-w-0 flex-1 truncate text-[10px] font-bold text-[#4A3728]">
-                          {entry.classroomName}
-                        </span>
-                        {isDone ? (
-                          <span
-                            className={`hidden shrink-0 items-center gap-0.5 rounded px-1 text-[8px] font-bold sm:flex ${
-                              memoPresent
-                                ? 'bg-[#E0EFE4] text-[#2D7A4D]'
-                                : 'bg-[#F3F2EE] text-[#C2BAAE]'
-                            }`}
-                          >
-                            <StickyNote size={9} strokeWidth={2.5} />
-                            {memoPresent ? '메모' : '없음'}
-                          </span>
-                        ) : (
-                          <span className="hidden shrink-0 items-center gap-0.5 sm:flex">
-                            <span
-                              className={`rounded px-1 text-[8px] font-bold ${
-                                readiness.theoryReady
-                                  ? 'bg-[#E0EFE4] text-[#2D7A4D]'
-                                  : 'bg-[#F3F2EE] text-[#C2BAAE]'
-                              }`}
-                            >
-                              이
-                            </span>
-                            <span
-                              className={`rounded px-1 text-[8px] font-bold ${
-                                readiness.practiceReady
-                                  ? 'bg-[#E0EFE4] text-[#2D7A4D]'
-                                  : 'bg-[#F3F2EE] text-[#C2BAAE]'
-                              }`}
-                            >
-                              실
-                            </span>
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
+                  {day.entries.slice(0, 3).map((entry, entryIndex) =>
+                    renderEntryChip(entry, cell, entryIndex)
+                  )}
                   {day.entries.length > 3 && (
-                    <span className="pl-1 text-[9px] font-bold text-[#A89F94]">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedDate(cell)}
+                      className="rounded-md py-0.5 pl-1 text-left text-[9px] font-bold text-[#8B5E3C] transition-colors hover:bg-[#F3F2EE]"
+                    >
                       +{day.entries.length - 3}개 더
-                    </span>
+                    </button>
                   )}
                 </div>
               )}
@@ -429,6 +472,55 @@ const MonthlyEarningsCalendar: React.FC<{
           이번 달에 잡힌 수업이 없어요. 커리큘럼·시간표로 수업일을 배정하면 여기에 모여서 한눈에 보입니다.
         </p>
       )}
+
+      {/* '+N개 더' 팝업 — 셀에 다 못 보여준 그날 수업 전체 목록 */}
+      <AnimatePresence>
+        {expandedDate &&
+          (() => {
+            const day = earnings.byDate.get(expandedDate);
+            if (!day) return null;
+            const dateObj = new Date(`${expandedDate}T00:00:00`);
+            return (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-50 flex items-center justify-center p-4"
+              >
+                <div
+                  className="absolute inset-0 bg-black/30"
+                  onClick={() => setExpandedDate(null)}
+                />
+                <motion.div
+                  initial={{ scale: 0.95, y: 8 }}
+                  animate={{ scale: 1, y: 0 }}
+                  exit={{ scale: 0.95, y: 8 }}
+                  className="relative w-full max-w-sm rounded-3xl border border-[#E5E3DD] bg-white p-5 shadow-xl"
+                >
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <h3 className="text-base font-bold text-[#4A3728]">
+                      {dateObj.getMonth() + 1}월 {dateObj.getDate()}일 (
+                      {EARNINGS_WEEKDAYS[dateObj.getDay()]}) · 수업 {day.entries.length}개
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedDate(null)}
+                      aria-label="닫기"
+                      className="rounded-lg p-1.5 text-[#8B7E74] transition-all hover:bg-[#F3F2EE]"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+                  <div className="flex max-h-[60vh] flex-col gap-1.5 overflow-y-auto">
+                    {day.entries.map((entry, entryIndex) =>
+                      renderEntryChip(entry, expandedDate, entryIndex, 'popup')
+                    )}
+                  </div>
+                </motion.div>
+              </motion.div>
+            );
+          })()}
+      </AnimatePresence>
     </motion.section>
   );
 };
