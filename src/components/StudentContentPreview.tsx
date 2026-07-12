@@ -797,6 +797,9 @@ export const ReferenceAnnotationOverlay: React.FC<ReferenceAnnotationOverlayProp
   const [selected, setSelected] = useState<string[]>([]);
   const [contentHeight, setContentHeight] = useState(0);
   const [stage, setStage] = useState({ w: 0, h: 0 });
+  // 강사가 칩을 직접 만졌는지. 만지기 전까지는 언어 목록이 도착하면 전부 자동 선택해서
+  // '번역 병기'를 누르자마자 병기가 보이게 한다(예전엔 칩을 한 번 더 눌러야 해서 안 뜨는 것처럼 보였음).
+  const userTouchedLangsRef = useRef(false);
 
   const srcDoc = useMemo(() => buildResponsiveSrcDoc(html, { annotate: true }), [html]);
 
@@ -808,7 +811,11 @@ export const ReferenceAnnotationOverlay: React.FC<ReferenceAnnotationOverlayProp
       const frameWindow = iframeRef.current?.contentWindow;
       if (frameWindow && event.source !== frameWindow) return;
       if (data.type === 'dsr-annot-langs' && Array.isArray(data.langs)) {
-        setAvailableLangs(data.langs.filter((lang): lang is string => typeof lang === 'string'));
+        const langs = data.langs.filter((lang): lang is string => typeof lang === 'string');
+        setAvailableLangs(langs);
+        if (!userTouchedLangsRef.current && langs.length > 0) {
+          setSelected((current) => (current.length > 0 ? current : langs));
+        }
       } else if (data.type === 'iframe-height' && typeof data.height === 'number' && data.height > 0) {
         setContentHeight(data.height);
       }
@@ -847,10 +854,12 @@ export const ReferenceAnnotationOverlay: React.FC<ReferenceAnnotationOverlayProp
     };
   }, [onClose]);
 
-  const toggleLang = (lang: string) =>
+  const toggleLang = (lang: string) => {
+    userTouchedLangsRef.current = true;
     setSelected((current) =>
       current.includes(lang) ? current.filter((l) => l !== lang) : [...current, lang]
     );
+  };
 
   // 한 화면에 다 담기: 무대 여백을 뺀 가용 크기를 재고, 콘텐츠가 세로로 넘치면 그만큼 균일 축소한다.
   const MARGIN = 20;
@@ -895,7 +904,10 @@ export const ReferenceAnnotationOverlay: React.FC<ReferenceAnnotationOverlayProp
               {selected.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => setSelected([])}
+                  onClick={() => {
+                    userTouchedLangsRef.current = true;
+                    setSelected([]);
+                  }}
                   className="rounded-full px-3 py-1.5 text-sm font-bold text-white/60 transition-all hover:bg-white/10 hover:text-white"
                 >
                   원문만

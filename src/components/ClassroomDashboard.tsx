@@ -2284,13 +2284,14 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
 
     // 순서상 [실습] 바로 뒤에 오는 [예제]를 그 실습의 예제로 묶어 개념 단위(unit)로 만든다.
     // 앞에 실습이 없는 예제(예: 완성 예시)나 짝 없는 실습은 단독 단위. → 개념 1개 = 행 1개.
+    // 예제가 standalone=true면 실습 뒤에 있어도 묶지 않는다(그 자체가 하나의 개념 — 미션지·안내문 등).
     const buildConceptUnits = (ordered: LessonContent[]) => {
       const units: { key: string; practice: LessonContent | null; example: LessonContent | null }[] = [];
       for (let i = 0; i < ordered.length; i++) {
         const c = ordered[i];
         if (c.kind !== 'reference') {
           const next = ordered[i + 1];
-          if (next && next.kind === 'reference') {
+          if (next && next.kind === 'reference' && !next.standalone) {
             units.push({ key: c.id, practice: c, example: next });
             i++;
           } else {
