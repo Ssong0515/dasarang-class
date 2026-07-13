@@ -861,14 +861,16 @@ export const ReferenceAnnotationOverlay: React.FC<ReferenceAnnotationOverlayProp
     );
   };
 
-  // 한 화면에 다 담기: 무대 여백을 뺀 가용 크기를 재고, 콘텐츠가 세로로 넘치면 그만큼 균일 축소한다.
+  // 가로는 무대 폭에 맞추고(반응형 srcDoc이 그 폭으로 리플로우), 세로로 넘치면 축소하지 말고 스크롤한다.
+  // 예전엔 긴 예제(실전 미션 등)를 한 화면에 욱여넣으려고 세로로 균일 축소해서 글씨가 읽을 수 없이
+  // 작아졌다 — 공용 화면은 읽기가 우선이라, 넘치면 그냥 세로 스크롤로 본다.
   const MARGIN = 20;
   const availW = Math.max(0, stage.w - MARGIN * 2);
   const availH = Math.max(0, stage.h - MARGIN * 2);
   const measured = contentHeight > 0;
   const logicalWidth = availW;
   const logicalHeight = measured ? contentHeight : availH;
-  const scale = measured && contentHeight > 0 ? Math.min(1, availH / contentHeight) : 1;
+  const overflowsHeight = measured && contentHeight > availH;
 
   return (
     <div className="fixed inset-0 z-[9999] flex flex-col bg-[#1b1a17]">
@@ -926,11 +928,16 @@ export const ReferenceAnnotationOverlay: React.FC<ReferenceAnnotationOverlayProp
         </button>
       </div>
 
-      {/* 본문 — 무대에 맞춰 축소된 예제(한 화면에 스크롤 없이) */}
-      <div ref={stageRef} className="relative flex flex-1 items-center justify-center overflow-hidden">
+      {/* 본문 — 무대 폭에 맞춘 예제. 세로로 넘치면 축소하지 않고 스크롤(읽기 우선). */}
+      <div
+        ref={stageRef}
+        className={`relative flex flex-1 justify-center overflow-y-auto overflow-x-hidden ${
+          overflowsHeight ? 'items-start' : 'items-center'
+        }`}
+      >
         <div
-          className="relative"
-          style={{ width: logicalWidth * scale, height: logicalHeight * scale }}
+          className="relative shrink-0"
+          style={{ width: logicalWidth, height: logicalHeight, margin: `${MARGIN}px 0` }}
         >
           <iframe
             ref={iframeRef}
@@ -952,8 +959,6 @@ export const ReferenceAnnotationOverlay: React.FC<ReferenceAnnotationOverlayProp
               left: 0,
               width: logicalWidth || '100%',
               height: measured ? contentHeight : availH || '100%',
-              transform: `scale(${scale})`,
-              transformOrigin: 'top left',
               border: 'none',
               background: '#fff',
               borderRadius: 14,
