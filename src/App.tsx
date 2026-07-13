@@ -958,6 +958,8 @@ export default function App() {
           slideUrl: data.slideUrl ?? '',
           // 콘텐츠 성격(reference=예시·참고 문서). 빼먹으면 스냅샷마다 사라져 배지·판단이 안 먹으므로 보존한다.
           ...(data.kind === 'reference' || data.kind === 'practice' ? { kind: data.kind } : {}),
+          // 단독 개념 예제 표시(실습과 페어링 금지). 빼먹으면 스냅샷마다 사라지므로 보존한다.
+          ...(data.standalone === true ? { standalone: true } : {}),
           // 실습에 묶인 이론 자료 링크. 빼먹으면 스냅샷마다 사라지므로 반드시 보존한다.
           ...(typeof data.theorySlideUrl === 'string' ? { theorySlideUrl: data.theorySlideUrl } : {}),
           createdAt: data.createdAt ?? new Date(0).toISOString(),
@@ -1671,6 +1673,7 @@ export default function App() {
       html: content.html ?? '',
       slideUrl: content.slideUrl ?? '',
       ...(content.kind === 'reference' || content.kind === 'practice' ? { kind: content.kind } : {}),
+      ...(content.standalone === true ? { standalone: true } : {}),
       ...(typeof content.theorySlideUrl === 'string' ? { theorySlideUrl: content.theorySlideUrl } : {}),
       createdAt,
       order,

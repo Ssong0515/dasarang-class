@@ -50,6 +50,12 @@ export interface LessonContent {
    */
   kind?: 'practice' | 'reference';
   /**
+   * true면 이 예제(kind:reference)를 순서상 바로 앞 실습과 개념 단위로 묶지 않고
+   * 대시보드에서 단독 행(자기 개념)으로 표시한다. 실습의 완성 예시가 아니라
+   * 그 자체가 하나의 개념(미션지·안내문 등)인 예제에 지정한다.
+   */
+  standalone?: boolean;
+  /**
    * 이 실습 콘텐츠에 1:1로 묶인 이론 수업 자료 링크(강사 화면 전용).
    * 콘텐츠에 저장하므로 같은 실습을 다른 반·날짜에 쓰면 이론이 자동으로 따라온다.
    * (반별 수업 진행 상태는 classroomDateRecord에 따로 있어 동기화되지 않는다.)

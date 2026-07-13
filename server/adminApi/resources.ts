@@ -199,6 +199,11 @@ export const RESOURCE_SPECS: Record<ResourceName, ResourceSpec> = {
       },
       categoryId: { type: 'stringOrNull', description: '카테고리 id. null이면 미배정(학생에게 숨김)' },
       order: { type: 'number', description: '카테고리 내 정렬 순서' },
+      standalone: {
+        type: 'boolean',
+        description:
+          'true면 이 예제(kind:reference)를 순서상 바로 앞 실습과 개념 단위로 묶지 않고 대시보드에서 단독 행으로 표시한다(실습의 완성 예시가 아니라 그 자체가 하나의 개념인 미션지·안내문용).',
+      },
     },
     listOmitFields: ['html'],
     defaults: ({ nowIso }) => ({ createdAt: nowIso, description: '', html: '', categoryId: null }),
