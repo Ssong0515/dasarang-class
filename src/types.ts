@@ -115,6 +115,16 @@ export interface TheorySlide {
   label?: string;
 }
 
+/** 이론(덱)에 강사가 직접 붙인 외부 자료 링크 한 개(예: NotebookLM에서 만든 슬라이드·문서). 콘텐츠(공개/비공개 실습)와 별개로 URL만 담는다 — 대시보드에서 제목 편집·삭제 가능, 누르면 새 탭으로 이동. */
+export interface TheoryLink {
+  /** 안정적인 로컬 id(정렬·삭제·수정 식별용). */
+  id: string;
+  /** 표시용 제목(강사가 입력·수정). */
+  title: string;
+  /** 이동할 URL(새 탭). */
+  url: string;
+}
+
 /** 이론 슬라이드를 만들기 위해 NotebookLM에 붙여넣는 입력 프롬프트 한 개(이론 덱 1개 = 항목 1개). 새벽 루틴이 자동 생성하고, 대시보드에서는 강사가 복사만 하는 읽기 전용 항목. */
 export interface TheoryPrompt {
   /** 표시용 라벨(예: "이론 19장 · 파일과 저장"). 비우면 순서대로 "N번째 이론수업 프롬프트"로 보인다. */
@@ -125,6 +135,8 @@ export interface TheoryPrompt {
   slideUrl?: string;
   /** 이 이론(덱)에 속한 실습 콘텐츠 id들 — 인터리브 수업(2026-07-03)의 "이론 1 : 개념 실습 N" 묶음 표시용(수업 진행 순서). 비어 있으면 구버전 기록(실습 행과 index 1:1 매칭)으로 표시한다. */
   contentIds?: string[];
+  /** 강사가 직접 추가한 외부 URL 자료들(콘텐츠 실습과 별개). 대시보드에서 +로 추가·제목 수정·삭제, 누르면 새 탭 이동. */
+  links?: TheoryLink[];
 }
 
 export interface ClassroomDateRecord {
@@ -153,6 +165,8 @@ export interface ClassroomDateRecord {
   exemplary?: boolean;
   /** 이 수업이 왜 좋은지 한 줄 메모(선택). 모범 수업 표시와 함께 남기며, 루틴이 참고할 때 힌트가 된다. */
   exemplaryNote?: string;
+  /** 이 수업(날짜) 전용 자세한 설명 — 강사가 직접 작성·수정. 커리큘럼 회차 상세와 별개이며 수업 '내용'만 담는다(디자인·대상 제외). 대시보드에서 팝업으로 보기·편집·복사. */
+  lessonDescription?: string;
   createdAt: string;
   updatedAt: string;
   curriculumId?: string;

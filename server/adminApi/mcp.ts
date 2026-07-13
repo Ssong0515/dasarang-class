@@ -124,6 +124,12 @@ const buildMcpServer = () => {
       classroomId: z.string(),
       date: z.string().describe('YYYY-MM-DD'),
       memo: z.string().optional(),
+      lessonDescription: z
+        .string()
+        .optional()
+        .describe(
+          "이 수업(회차)의 내용 요약. 강사 대시보드 '수업 설명' 팝업에 표시된다. 디자인·대상이 아니라 '오늘 무엇을 어떤 순서로 배우고 무엇을 만드는지' 수업 내용만 쉬운 한국어로. 줄 때마다 이 필드를 통째로 교체한다(보내지 않으면 기존 값 보존)."
+        ),
       contentIds: z.array(z.string()).optional(),
       attendance: z
         .array(
@@ -148,6 +154,20 @@ const buildMcpServer = () => {
                 .describe(
                   '이 이론(덱)에 속한 실습 콘텐츠 id들(수업 진행 순서 = 개념 순서). 대시보드가 "이론 1개 + 그 실습들" 그룹으로 표시한다.'
                 ),
+              slideUrl: z
+                .string()
+                .optional()
+                .describe('강사가 이 이론에 붙인 슬라이드/자료 링크(있으면 보존). 루틴이 새로 만들 땐 비움.'),
+              links: z
+                .array(
+                  z.object({
+                    id: z.string().optional(),
+                    title: z.string().optional(),
+                    url: z.string(),
+                  })
+                )
+                .optional()
+                .describe('강사가 직접 붙인 외부 URL 자료들({title,url}). 기존 값이 있으면 그대로 보존해 다시 보낼 것(루틴이 지우면 안 됨).'),
             })
           ),
           z.string().describe('위 배열의 JSON 문자열도 허용 — 중첩 배열을 문자열로 직렬화하는 클라이언트 대비'),

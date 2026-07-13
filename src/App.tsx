@@ -22,6 +22,7 @@ import {
   DailyReview,
   Memo,
   NotebookLmFolderSyncResult,
+  TheoryLink,
   TheorySlideSyncResult,
   PublishedLesson,
   Student,
@@ -206,9 +207,21 @@ const sanitizeTheorySlidesForStorage = (slides: unknown): { url: string; label?:
 
 // 이론 프롬프트 배열 저장용 정규화: prompt 트리밍·빈 항목 제거, 빈 label 키는 빼서 Firestore undefined를 피한다.
 // 루틴(MCP)이 써넣는 읽기 전용 필드라 클라이언트는 만들지 않지만, 통째 setDoc 저장 시 보존하기 위해 정규화해 다시 쓴다.
+const sanitizeTheoryLinksForStorage = (links: unknown): TheoryLink[] => {
+  if (!Array.isArray(links)) return [];
+  return links
+    .map((link, index) => {
+      const url = typeof link?.url === 'string' ? link.url.trim() : '';
+      const title = typeof link?.title === 'string' ? link.title.trim() : '';
+      const id = typeof link?.id === 'string' && link.id.trim() ? link.id.trim() : `lnk-${index}`;
+      return { id, title, url };
+    })
+    .filter((link) => link.url);
+};
+
 const sanitizeTheoryPromptsForStorage = (
   prompts: unknown
-): { label?: string; prompt: string; slideUrl?: string; contentIds?: string[] }[] => {
+): { label?: string; prompt: string; slideUrl?: string; contentIds?: string[]; links?: TheoryLink[] }[] => {
   if (!Array.isArray(prompts)) return [];
   return prompts
     .map((entry) => {
@@ -220,16 +233,19 @@ const sanitizeTheoryPromptsForStorage = (
       const contentIds = Array.isArray(entry?.contentIds)
         ? (entry.contentIds as unknown[]).filter((id): id is string => typeof id === 'string')
         : undefined;
-      return { label, prompt, slideUrl, contentIds };
+      // links는 강사가 직접 붙인 외부 URL 자료들. 빼먹으면 저장(setDoc) 시 사라진다.
+      const links = sanitizeTheoryLinksForStorage(entry?.links);
+      return { label, prompt, slideUrl, contentIds, links };
     })
     .filter((entry) => entry.prompt.trim())
     .map((entry) => {
-      const next: { label?: string; prompt: string; slideUrl?: string; contentIds?: string[] } = {
+      const next: { label?: string; prompt: string; slideUrl?: string; contentIds?: string[]; links?: TheoryLink[] } = {
         prompt: entry.prompt,
       };
       if (entry.label) next.label = entry.label;
       if (entry.slideUrl !== undefined) next.slideUrl = entry.slideUrl;
       if (entry.contentIds !== undefined) next.contentIds = entry.contentIds;
+      if (entry.links.length > 0) next.links = entry.links;
       return next;
     });
 };
@@ -861,12 +877,13 @@ export default function App() {
               ? {
                   theoryPrompts: data.theoryPrompts
                     .filter((entry) => entry && typeof entry.prompt === 'string' && entry.prompt.trim())
-                    .map((entry): { prompt: string; label?: string; slideUrl?: string; contentIds?: string[] } => {
+                    .map((entry): { prompt: string; label?: string; slideUrl?: string; contentIds?: string[]; links?: TheoryLink[] } => {
                       const normalized: {
                         prompt: string;
                         label?: string;
                         slideUrl?: string;
                         contentIds?: string[];
+                        links?: TheoryLink[];
                       } = {
                         prompt: entry.prompt,
                       };
@@ -882,6 +899,20 @@ export default function App() {
                         normalized.contentIds = (entry.contentIds as unknown[]).filter(
                           (id): id is string => typeof id === 'string'
                         );
+                      }
+                      // 강사가 직접 붙인 외부 URL 자료들. 빼먹으면 새로고침·저장마다 사라진다.
+                      if (Array.isArray(entry.links)) {
+                        const links = (entry.links as unknown[])
+                          .map((link, linkIndex): TheoryLink => {
+                            const l = link as { id?: unknown; title?: unknown; url?: unknown };
+                            return {
+                              id: typeof l?.id === 'string' && l.id.trim() ? l.id.trim() : `lnk-${linkIndex}`,
+                              title: typeof l?.title === 'string' ? l.title.trim() : '',
+                              url: typeof l?.url === 'string' ? l.url.trim() : '',
+                            };
+                          })
+                          .filter((link) => link.url);
+                        if (links.length > 0) normalized.links = links;
                       }
                       return normalized;
                     }),
@@ -900,6 +931,10 @@ export default function App() {
             ...(data.exemplary === true ? { exemplary: true as boolean } : {}),
             ...(typeof data.exemplaryNote === 'string' && data.exemplaryNote.trim()
               ? { exemplaryNote: data.exemplaryNote.trim() }
+              : {}),
+            // 이 수업 전용 설명(강사 작성). 빼먹으면 저장(setDoc) 때 사라진다.
+            ...(typeof data.lessonDescription === 'string' && data.lessonDescription.trim()
+              ? { lessonDescription: data.lessonDescription.trim() }
               : {}),
             createdAt: data.createdAt ?? '',
             updatedAt: data.updatedAt ?? '',
@@ -1801,6 +1836,10 @@ export default function App() {
         theoryPrompts: sanitizeTheoryPromptsForStorage(record.theoryPrompts ?? existingRecord?.theoryPrompts),
         ...(keepExemplary ? { exemplary: true } : {}),
         ...(exemplaryNote ? { exemplaryNote } : {}),
+        // 이 수업 설명(강사 작성): 통째 setDoc 저장에서 지워지지 않게 보존(다른 저장 경로 포함).
+        ...((record.lessonDescription ?? existingRecord?.lessonDescription ?? '').trim()
+          ? { lessonDescription: (record.lessonDescription ?? existingRecord?.lessonDescription ?? '').trim() }
+          : {}),
         createdAt: existingRecord?.createdAt || record.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };

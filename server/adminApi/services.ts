@@ -273,7 +273,17 @@ export interface UpsertLessonRecordInput {
   attendance?: AttendanceRecord[];
   curriculumId?: string;
   curriculumSessionId?: string;
-  theoryPrompts?: Array<{ label?: string; prompt: string; contentIds?: string[] }> | string;
+  theoryPrompts?:
+    | Array<{
+        label?: string;
+        prompt: string;
+        contentIds?: string[];
+        slideUrl?: string;
+        links?: Array<{ id?: string; title?: string; url?: string }>;
+      }>
+    | string;
+  /** 이 수업(회차)의 내용 요약. 강사 대시보드 '수업 설명' 팝업에 표시된다(디자인·대상 제외, 수업 내용만). */
+  lessonDescription?: string;
   /** 이 날짜만의 이론/실습 덮어쓰기. 없으면 클래스 설정(showTheory/showPractice)을 따른다. */
   showTheory?: boolean;
   showPractice?: boolean;
@@ -384,6 +394,12 @@ export const upsertLessonRecord = async (input: UpsertLessonRecordInput) => {
     }
     updates.memo = input.memo;
   }
+  if (input.lessonDescription !== undefined) {
+    if (typeof input.lessonDescription !== 'string') {
+      throw new AdminApiError(400, 'lessonDescription은 문자열이어야 합니다.');
+    }
+    updates.lessonDescription = input.lessonDescription.trim();
+  }
   if (input.contentIds !== undefined) {
     if (!Array.isArray(input.contentIds) || input.contentIds.some((id) => typeof id !== 'string')) {
       throw new AdminApiError(400, 'contentIds는 문자열 배열이어야 합니다.');
@@ -409,17 +425,39 @@ export const upsertLessonRecord = async (input: UpsertLessonRecordInput) => {
     // NotebookLM 이론 프롬프트(이론 덱 1개 = 항목 1개). 빈 prompt는 버리고, 빈 키는 빼서 Firestore undefined를 피한다.
     // contentIds = 이 이론(덱)에 묶인 실습 콘텐츠 id들(인터리브 수업의 "이론 1 : 실습 N" 묶음 — 대시보드가 그룹으로 표시).
     updates.theoryPrompts = (
-      prompts as Array<{ label?: unknown; prompt?: unknown; contentIds?: unknown }>
+      prompts as Array<{ label?: unknown; prompt?: unknown; slideUrl?: unknown; contentIds?: unknown; links?: unknown }>
     )
       .map((entry) => {
         const label = typeof entry?.label === 'string' ? entry.label.trim() : '';
         const prompt = typeof entry?.prompt === 'string' ? entry.prompt : '';
+        // slideUrl·links는 강사가 대시보드에서 붙인 자료. 루틴이 theoryPrompts를 다시 저장할 때 보존한다.
+        const slideUrl = typeof entry?.slideUrl === 'string' ? entry.slideUrl.trim() : '';
         const contentIds = Array.isArray(entry?.contentIds)
           ? (entry.contentIds as unknown[]).filter((id): id is string => typeof id === 'string')
           : undefined;
-        const normalized: { label?: string; prompt: string; contentIds?: string[] } = { prompt };
+        const links = Array.isArray(entry?.links)
+          ? (entry.links as unknown[])
+              .map((link, i) => {
+                const l = (link ?? {}) as { id?: unknown; title?: unknown; url?: unknown };
+                return {
+                  id: typeof l.id === 'string' && l.id.trim() ? l.id.trim() : `lnk-${i}`,
+                  title: typeof l.title === 'string' ? l.title.trim() : '',
+                  url: typeof l.url === 'string' ? l.url.trim() : '',
+                };
+              })
+              .filter((l) => l.url)
+          : [];
+        const normalized: {
+          label?: string;
+          prompt: string;
+          slideUrl?: string;
+          contentIds?: string[];
+          links?: { id: string; title: string; url: string }[];
+        } = { prompt };
         if (label) normalized.label = label;
+        if (slideUrl) normalized.slideUrl = slideUrl;
         if (contentIds && contentIds.length > 0) normalized.contentIds = contentIds;
+        if (links.length > 0) normalized.links = links;
         return normalized;
       })
       .filter((entry) => entry.prompt.trim());

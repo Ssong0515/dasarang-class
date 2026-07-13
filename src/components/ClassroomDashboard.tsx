@@ -499,6 +499,14 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const [copiedPromptIndex, setCopiedPromptIndex] = useState<number | null>(null);
   // 회차 제목(헤딩)의 '제목만 복사' 버튼 눌림 피드백.
   const [copiedSessionTitle, setCopiedSessionTitle] = useState(false);
+  // '수업 설명' 팝업 열림 여부·편집 초안·복사 피드백.
+  const [showLessonDesc, setShowLessonDesc] = useState(false);
+  const [lessonDescDraft, setLessonDescDraft] = useState('');
+  const [copiedLessonDesc, setCopiedLessonDesc] = useState(false);
+  // 이론에 URL 자료 추가/수정 인라인 편집기. null이면 닫힘. linkId null = 새로 추가.
+  const [linkEditor, setLinkEditor] = useState<
+    { promptIndex: number; linkId: string | null; title: string; url: string } | null
+  >(null);
   // 이론 프롬프트(시수) 행에서 자료 링크를 인라인으로 입력 중인 index와 입력값.
   const [slideInputPromptIndex, setSlideInputPromptIndex] = useState<number | null>(null);
   const [slideInputValue, setSlideInputValue] = useState('');
@@ -1655,6 +1663,117 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       idx === index ? { ...item, slideUrl: '' } : item
     );
     onSaveDateRecord({ ...currentDateRecord, theoryPrompts: nextPrompts });
+  };
+
+  // ── '수업 설명'(lessonDescription) 팝업 ──────────────────────────────
+  const openLessonDesc = () => {
+    setLessonDescDraft(currentDateRecord?.lessonDescription ?? '');
+    setCopiedLessonDesc(false);
+    setShowLessonDesc(true);
+  };
+  const saveLessonDesc = () => {
+    const base = currentDateRecord ?? createDateRecord();
+    onSaveDateRecord({ ...base, lessonDescription: lessonDescDraft.trim() });
+    setShowLessonDesc(false);
+  };
+  const handleCopyLessonDesc = () => {
+    const text = lessonDescDraft;
+    const markCopied = () => {
+      setCopiedLessonDesc(true);
+      window.setTimeout(() => setCopiedLessonDesc(false), 1500);
+    };
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).then(markCopied).catch(() => {});
+      return;
+    }
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      markCopied();
+    } catch {
+      // 복사 실패는 조용히 무시
+    }
+  };
+
+  // ── 이론 URL 자료(theoryPrompts[i].links) 추가·수정·삭제 ─────────────
+  const saveLinkEditor = () => {
+    if (!currentDateRecord || !linkEditor) return;
+    const rawUrl = linkEditor.url.trim();
+    if (!rawUrl) return;
+    const url = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
+    const title = linkEditor.title.trim() || url;
+    const nextPrompts = effectiveTheoryPrompts.map((item, idx) => {
+      if (idx !== linkEditor.promptIndex) return item;
+      const links = item.links ? [...item.links] : [];
+      if (linkEditor.linkId) {
+        const i = links.findIndex((l) => l.id === linkEditor.linkId);
+        if (i >= 0) links[i] = { ...links[i], title, url };
+      } else {
+        const id = `lnk-${Date.now().toString(36)}-${Math.floor(Math.random() * 46656).toString(36)}`;
+        links.push({ id, title, url });
+      }
+      return { ...item, links };
+    });
+    onSaveDateRecord({ ...currentDateRecord, theoryPrompts: nextPrompts });
+    setLinkEditor(null);
+  };
+  const deleteTheoryLink = (promptIndex: number, linkId: string) => {
+    if (!currentDateRecord) return;
+    const nextPrompts = effectiveTheoryPrompts.map((item, idx) =>
+      idx === promptIndex ? { ...item, links: (item.links ?? []).filter((l) => l.id !== linkId) } : item
+    );
+    onSaveDateRecord({ ...currentDateRecord, theoryPrompts: nextPrompts });
+  };
+  // URL 자료 추가/수정 인라인 폼 (제목 + URL). linkEditor가 열려 있을 때만 그린다.
+  const renderLinkEditorForm = () => {
+    if (!linkEditor) return null;
+    return (
+      <div className="flex flex-col gap-2 rounded-2xl border-2 border-[#8B5E3C] bg-[#FFF7EE] p-3">
+        <input
+          type="text"
+          value={linkEditor.title}
+          onChange={(e) => setLinkEditor({ ...linkEditor, title: e.target.value })}
+          placeholder="자료 제목 (예: 이론 슬라이드)"
+          className="w-full rounded-xl border border-[#E5E3DD] bg-white px-3 py-2 text-sm text-[#4A3728] outline-none transition-all focus:border-[#8B5E3C] focus:ring-2 focus:ring-[#8B5E3C]"
+        />
+        <input
+          type="url"
+          value={linkEditor.url}
+          onChange={(e) => setLinkEditor({ ...linkEditor, url: e.target.value })}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              saveLinkEditor();
+            }
+          }}
+          placeholder="URL 붙여넣기 (NotebookLM 등)"
+          className="w-full rounded-xl border border-[#E5E3DD] bg-white px-3 py-2 text-sm text-[#4A3728] outline-none transition-all focus:border-[#8B5E3C] focus:ring-2 focus:ring-[#8B5E3C]"
+        />
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => setLinkEditor(null)}
+            className="inline-flex items-center rounded-xl border border-[#E5E3DD] bg-white px-3 py-2 text-xs font-bold text-[#8B7E74] transition-all hover:text-[#4A3728]"
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            onClick={saveLinkEditor}
+            disabled={!linkEditor.url.trim()}
+            className="inline-flex items-center rounded-xl bg-[#8B5E3C] px-3 py-2 text-xs font-bold text-white transition-all hover:bg-[#724D31] disabled:cursor-not-allowed disabled:bg-[#B8AA9A]"
+          >
+            저장
+          </button>
+        </div>
+      </div>
+    );
   };
 
   // 이론 자료 링크를 "실습 콘텐츠"에 저장한다. 콘텐츠에 묶이므로 같은 실습을 쓰는 모든 반·날짜에 자동으로 따라온다.
@@ -2824,6 +2943,71 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
           </div>
         )}
 
+        {/* 이 수업 설명(lessonDescription) — 강사가 직접 쓰는 수업 내용 설명. 보기·편집·복사. */}
+        {showLessonDesc && (
+          <div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) setShowLessonDesc(false);
+            }}
+          >
+            <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-[28px] bg-white p-7 shadow-2xl">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#FFF5E9]">
+                    <FileText size={20} className="text-[#8B5E3C]" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-lg font-bold text-[#4A3728]">수업 설명</h3>
+                    <p className="truncate text-xs text-[#8B7E74]">{sessionTopicTitle || '이 수업'}</p>
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handleCopyLessonDesc}
+                    title={copiedLessonDesc ? '복사됨' : '설명 복사'}
+                    aria-label={copiedLessonDesc ? '복사됨' : '설명 복사'}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[#E5E3DD] bg-white text-[#4A3728] transition-all hover:border-[#8B5E3C]"
+                  >
+                    {copiedLessonDesc ? <Check size={16} className="text-[#3A7D44]" /> : <Copy size={16} />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowLessonDesc(false)}
+                    aria-label="닫기"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-[#8B7E74] transition-all hover:bg-[#F3F2EE]"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+              <textarea
+                value={lessonDescDraft}
+                onChange={(event) => setLessonDescDraft(event.target.value)}
+                placeholder="이 수업의 자세한 설명을 적어요 — 무엇을 다루고 어떻게 진행하는지(수업 내용 중심). 디자인·대상 같은 건 빼도 됩니다."
+                className="min-h-[280px] flex-1 resize-none overflow-auto whitespace-pre-wrap rounded-2xl border border-[#E5E3DD] bg-[#FBFBFA] px-4 py-3 text-sm leading-relaxed text-[#4A3728] outline-none transition-all focus:border-[#8B5E3C] focus:ring-2 focus:ring-[#8B5E3C]"
+              />
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowLessonDesc(false)}
+                  className="inline-flex items-center rounded-xl border border-[#E5E3DD] bg-white px-4 py-2.5 text-sm font-bold text-[#8B7E74] transition-all hover:text-[#4A3728]"
+                >
+                  닫기
+                </button>
+                <button
+                  type="button"
+                  onClick={saveLessonDesc}
+                  className="inline-flex items-center rounded-xl bg-[#8B5E3C] px-4 py-2.5 text-sm font-bold text-white transition-all hover:bg-[#724D31]"
+                >
+                  저장
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {isDateOpen && (
           <div className="order-3 col-span-2 rounded-[40px] border border-[#E5E3DD] bg-white p-5 shadow-sm sm:p-10">
             {missingCurrentDateContentCount > 0 && (
@@ -3207,20 +3391,17 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                             <div className="flex flex-col gap-2 px-1 pb-1 sm:flex-row sm:items-center sm:justify-between">
                               <div className="flex min-w-0 items-center gap-2">
                                 <Presentation size={15} className="shrink-0 text-[#8B5E3C]" />
-                                <span className="truncate text-sm font-bold text-[#4A3728]">
-                                  {prompt.label?.trim() || `${promptIndex + 1}번째 이론수업`}
-                                </span>
-                                {curriculumSession && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setShowCurriculumDetail(true)}
-                                    title="이 회차 커리큘럼 상세 보기"
-                                    aria-label="커리큘럼 회차 상세 보기"
-                                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[#8B7E74] transition-all hover:bg-[#F3F2EE] hover:text-[#8B5E3C]"
-                                  >
-                                    <Info size={14} />
-                                  </button>
-                                )}
+                                {/* 이론 제목·커리큘럼 상세(!)는 위 회차 제목 옆으로 이동. 여기선 '이 수업 설명'을 연다. */}
+                                <button
+                                  type="button"
+                                  onClick={openLessonDesc}
+                                  title="이 수업 설명 보기·편집"
+                                  aria-label="수업 설명"
+                                  className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-[#E5E3DD] bg-white px-2.5 text-xs font-bold text-[#8B7E74] transition-all hover:border-[#8B5E3C] hover:text-[#8B5E3C]"
+                                >
+                                  <FileText size={13} />
+                                  수업 설명
+                                </button>
                                 {showPracticeSection && groupPublishableContents.length > 0 && (
                                   <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-[#8B7E74]">
                                     실습 {groupPublishedCount}/{groupPublishableContents.length}
@@ -3376,6 +3557,77 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                                 <p className="rounded-xl border border-dashed border-[#E5E3DD] bg-white px-3 py-2 text-xs text-[#8B7E74]">
                                   이 이론에 연결된 실습이 없습니다.
                                 </p>
+                              )}
+                            </div>
+                            {/* 수동 URL 자료 — 콘텐츠(공개/비공개 실습)와 별개. +로 추가, 제목 수정·삭제, 누르면 새 탭(NotebookLM 등). */}
+                            <div className="mt-2 space-y-2">
+                              {(prompt.links ?? []).map((link) =>
+                                linkEditor &&
+                                linkEditor.promptIndex === promptIndex &&
+                                linkEditor.linkId === link.id ? (
+                                  <div key={link.id}>{renderLinkEditorForm()}</div>
+                                ) : (
+                                  <div
+                                    key={link.id}
+                                    className="flex items-center gap-1.5 rounded-2xl border border-[#E5E3DD] bg-white px-4 py-2.5"
+                                  >
+                                    <FileText size={15} className="shrink-0 text-[#8B5E3C]" />
+                                    <span className="min-w-0 flex-1 truncate text-sm font-bold text-[#4A3728]">
+                                      {link.title || link.url}
+                                    </span>
+                                    <a
+                                      href={link.url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      title={`${link.title || link.url} 열기 (새 탭)`}
+                                      aria-label="자료 열기"
+                                      className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-xl border border-[#EAD9BF] bg-[#FFF5E9] px-3 text-xs font-bold text-[#8B5E3C] transition-all hover:border-[#8B5E3C] hover:bg-[#FFEFD8] max-[639px]:px-2"
+                                    >
+                                      <ExternalLink size={14} />
+                                      <span className="max-[639px]:hidden">열기</span>
+                                    </a>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setLinkEditor({
+                                          promptIndex,
+                                          linkId: link.id,
+                                          title: link.title,
+                                          url: link.url,
+                                        })
+                                      }
+                                      title="자료 수정"
+                                      aria-label="자료 수정"
+                                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[#E5E3DD] bg-white text-[#8B7E74] transition-all hover:border-[#8B5E3C] hover:text-[#8B5E3C]"
+                                    >
+                                      <Edit3 size={14} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => deleteTheoryLink(promptIndex, link.id)}
+                                      title="자료 삭제"
+                                      aria-label="자료 삭제"
+                                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[#E5E3DD] bg-white text-[#B7AFA4] transition-all hover:border-[#D9534F] hover:text-[#D9534F]"
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
+                                )
+                              )}
+                              {linkEditor &&
+                              linkEditor.promptIndex === promptIndex &&
+                              linkEditor.linkId === null ? (
+                                renderLinkEditorForm()
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setLinkEditor({ promptIndex, linkId: null, title: '', url: '' })
+                                  }
+                                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-2xl border border-dashed border-[#D8CFC2] bg-white px-4 py-2.5 text-xs font-bold text-[#8B7E74] transition-all hover:border-[#8B5E3C] hover:text-[#8B5E3C]"
+                                >
+                                  <Plus size={14} /> URL 자료 추가
+                                </button>
                               )}
                             </div>
                           </div>
