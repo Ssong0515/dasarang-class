@@ -5817,9 +5817,14 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               )}
 
               {livePreviewContent.description?.trim() && (
-                <div className="mt-3 whitespace-pre-wrap rounded-2xl border border-[#E5E3DD] bg-white p-4 text-sm leading-7 text-[#4A3728]">
-                  {livePreviewContent.description}
-                </div>
+                <details className="mt-3 rounded-2xl border border-[#E5E3DD] bg-white text-sm text-[#4A3728]">
+                  <summary className="cursor-pointer select-none px-4 py-2.5 font-bold text-[#8B7E74] transition-colors hover:text-[#4A3728]">
+                    실습 설명
+                  </summary>
+                  <div className="whitespace-pre-wrap border-t border-[#E5E3DD] px-4 py-3 leading-7">
+                    {livePreviewContent.description}
+                  </div>
+                </details>
               )}
             </div>
           </div>
