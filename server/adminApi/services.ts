@@ -2,8 +2,10 @@ import crypto from 'crypto';
 import type {
   AttendanceRecord,
   CurriculumSession,
+  Student,
 } from '../../src/types';
 import { getClassroomDateRecordId } from '../../src/utils/classroomDomain';
+import { isStudentDeleted, isStudentInactive } from '../../src/utils/students';
 import { getAdminDb } from '../firebaseAdmin';
 import { resolveAdminUid } from './auth';
 import { removeCalendarEventForRecord, syncRecordToCalendarSafe } from './calendarSync';
@@ -299,6 +301,29 @@ const validateAttendance = (attendance: unknown): AttendanceRecord[] => {
   return attendance as AttendanceRecord[];
 };
 
+/**
+ * 새 수업기록을 만들 때 그 시점의 반 학생 명단으로 기본 출석부를 만든다.
+ * 반 명단 = students 컬렉션에서 classroomId가 일치하고 삭제되지 않은(deletedAt 없음) 학생.
+ * 비활성(inactiveAt) 학생은 명단엔 남기되 출석 대상에서 빠지도록 isExcluded로 담는다.
+ * 프론트의 buildInitialAttendance(ClassroomDashboard)와 규칙을 맞춘다 — 루틴이 만든 수업도
+ * 강사 화면과 똑같이 그날 명단이 채워져 '0명 대상'으로 뜨지 않는다.
+ */
+const buildInitialAttendanceForClassroom = async (
+  db: ReturnType<typeof getAdminDb>,
+  classroomId: string
+): Promise<AttendanceRecord[]> => {
+  const snap = await db.collection('students').where('classroomId', '==', classroomId).get();
+  const students = snap.docs
+    .map((doc) => ({ id: doc.id, ...(doc.data() as DocData) }) as unknown as Student)
+    .filter((student) => !isStudentDeleted(student))
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  return students.map((student) => ({
+    studentId: student.id,
+    status: 'Present',
+    ...(isStudentInactive(student) ? { isExcluded: true } : {}),
+  }));
+};
+
 export const upsertLessonRecord = async (input: UpsertLessonRecordInput) => {
   if (!input.classroomId?.trim()) {
     throw new AdminApiError(400, 'classroomId가 필요합니다.');
@@ -421,10 +446,13 @@ export const upsertLessonRecord = async (input: UpsertLessonRecordInput) => {
   if (existing.exists) {
     await ref.set(updates, { merge: true });
   } else {
+    // 새 수업기록: 호출자가 attendance를 명시하지 않았으면 그 시점의 반 명단으로 출석부를 채운다.
+    // (input.attendance가 있으면 위에서 updates.attendance로 잡혀 아래 스프레드가 이 기본값을 덮는다.)
+    const initialAttendance = await buildInitialAttendanceForClassroom(db, input.classroomId.trim());
     await ref.set({
       memo: '',
       contentIds: [],
-      attendance: [],
+      attendance: initialAttendance,
       ...updates,
       ownerUid,
       createdAt: iso,
