@@ -85,6 +85,7 @@ import {
   splitStudentsByStatus,
 } from '../utils/students';
 import { isAttendanceExcluded } from '../utils/attendance';
+import { formatSessionLabel } from '../utils/sessionLabel';
 import { deleteField } from '../firebase';
 import { formatWon, getSessionFee } from '../utils/fee';
 import { openDriveSlidePicker, openDriveFolderPicker, requestDriveSyncAccessToken } from '../utils/drivePicker';
@@ -496,6 +497,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const [theoryLabelInput, setTheoryLabelInput] = useState('');
   const [isPickingTheorySlide, setIsPickingTheorySlide] = useState(false);
   const [copiedPromptIndex, setCopiedPromptIndex] = useState<number | null>(null);
+  // 회차 제목(헤딩)의 '제목만 복사' 버튼 눌림 피드백.
+  const [copiedSessionTitle, setCopiedSessionTitle] = useState(false);
   // 이론 프롬프트(시수) 행에서 자료 링크를 인라인으로 입력 중인 index와 입력값.
   const [slideInputPromptIndex, setSlideInputPromptIndex] = useState<number | null>(null);
   const [slideInputValue, setSlideInputValue] = useState('');
@@ -1174,10 +1177,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       list.push(session);
       sessionsByDate.set(plannedDate, list);
     }
-    const formatSessionLabel = (session: CurriculumSession) =>
-      session.topic.trim().startsWith(`${session.order}회차`)
-        ? session.topic.trim()
-        : `${session.order}회차 · ${session.topic}`;
     return dateRecords
       .filter((record) => {
         if (record.id === selfId) return false;
@@ -1189,7 +1188,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       .map((record) => {
         const sessions = sessionsByDate.get(record.date) || [];
         const sessionLabel =
-          sessions.length > 0 ? sessions.map(formatSessionLabel).join(' / ') : null;
+          sessions.length > 0 ? sessions.map((session) => formatSessionLabel(session)).join(' / ') : null;
         const curr = curriculumById.get(record.curriculumId || sourceClassroom?.curriculumId || '');
         // "2026-06-22" → "6/22". ISO 형식이 아니면 원본을 그대로 쓴다.
         const isoMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(record.date);
@@ -1470,6 +1469,31 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
         () => setCopiedPromptIndex((current) => (current === index ? null : current)),
         1500
       );
+    };
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).then(markCopied).catch(() => {});
+      return;
+    }
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      markCopied();
+    } catch {
+      // 복사 실패는 조용히 무시
+    }
+  };
+
+  // 회차 헤딩의 '제목만 복사'. 회차 라벨(예: "4회차 · Google Maps …") 한 줄을 클립보드로.
+  const handleCopySessionTitle = (text: string) => {
+    const markCopied = () => {
+      setCopiedSessionTitle(true);
+      window.setTimeout(() => setCopiedSessionTitle(false), 1500);
     };
     if (navigator.clipboard?.writeText) {
       navigator.clipboard.writeText(text).then(markCopied).catch(() => {});
@@ -2133,20 +2157,17 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     const showPracticeSection =
       currentDateRecord?.showPractice ?? classroom.showPractice !== false;
     // 카드 헤더 = 선택 날짜에 배정된 커리큘럼 회차 주제. 여러 회차면 이어 붙이고, 배정 없으면 기본 문구로 폴백.
+    // 회차 라벨은 formatSessionLabel로만 만든다(topic에 회차가 박혀 있어도 중복 안 되게).
     const daySessions = plannedSessionsByDate.get(selectedDate) || [];
     const sessionTopicTitle =
       daySessions.length > 0
-        ? daySessions.map((session) => `${session.order}회차 · ${session.topic}`).join(' / ')
+        ? daySessions.map((session) => formatSessionLabel(session)).join(' / ')
         : null;
     // 이 날짜에 매칭되는 커리큘럼 회차(상세 팝업용). currentSessionId로 정확히 찾고, 없으면 첫 회차로 폴백.
     const curriculumSession =
       daySessions.find((session) => session.id === currentSessionId) ?? daySessions[0] ?? null;
-    // 팝업 제목. topic에 이미 "N회차"가 들어 있으면(이 커리큘럼 관행) 접두사를 빼 중복을 막는다.
-    const curriculumSessionHeading = curriculumSession
-      ? curriculumSession.topic.trim().startsWith(`${curriculumSession.order}회차`)
-        ? curriculumSession.topic.trim()
-        : `${curriculumSession.order}회차 · ${curriculumSession.topic}`
-      : '';
+    // 팝업 제목.
+    const curriculumSessionHeading = curriculumSession ? formatSessionLabel(curriculumSession) : '';
     // 이론 슬라이드 소구간 / 콘텐츠 목록의 표시 여부. 둘 다 안 보이면 빈 안내를 띄운다.
     // (콘텐츠 목록은 이론·실습 중 하나라도 켜져 있으면 보여서, 이론만 반에서도 이론 버튼이 사라지지 않는다.)
     const theorySlidesVisible = showTheorySection && recordedSlideContents.length > 0;
@@ -2988,6 +3009,34 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                       >
                         {sessionTopicTitle || '수업 진행 · 학생 공개'}
                       </span>
+                      {/* ! 상세 — 이 회차 커리큘럼 details 팝업 (제목 옆에서 바로 확인). */}
+                      {curriculumSession && (
+                        <button
+                          type="button"
+                          onClick={() => setShowCurriculumDetail(true)}
+                          title="이 회차 커리큘럼 상세 보기"
+                          aria-label="커리큘럼 회차 상세 보기"
+                          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[#8B7E74] transition-all hover:bg-[#F3F2EE] hover:text-[#8B5E3C]"
+                        >
+                          <Info size={14} />
+                        </button>
+                      )}
+                      {/* 제목만 복사 — 헤딩에 보이는 회차 라벨 한 줄을 클립보드로. */}
+                      {sessionTopicTitle && (
+                        <button
+                          type="button"
+                          onClick={() => handleCopySessionTitle(sessionTopicTitle)}
+                          title="제목만 복사"
+                          aria-label={copiedSessionTitle ? '제목 복사됨' : '제목만 복사'}
+                          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[#8B7E74] transition-all hover:bg-[#F3F2EE] hover:text-[#8B5E3C]"
+                        >
+                          {copiedSessionTitle ? (
+                            <Check size={14} className="text-[#2D7A4D]" />
+                          ) : (
+                            <Copy size={14} />
+                          )}
+                        </button>
+                      )}
                       {/* '좋은 수업(모범 수업)' 토글 — 학생도 보는 화면이라 문구 없이 별 아이콘만. */}
                       {isCurrentDateActive && (
                         <button
@@ -3895,12 +3944,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                   [
                     plannedOnSelected
                       ? plannedOnSelected
-                          .map((session) =>
-                            // 주제가 이미 "N회차"로 시작하면 회차를 겹쳐 쓰지 않는다.
-                            session.topic.startsWith(`${session.order}회차`)
-                              ? session.topic
-                              : `${session.order}회차 ${session.topic}`
-                          )
+                          .map((session) => formatSessionLabel(session, ' '))
                           .join(' · ')
                       : null,
                     selectedStatus ? SESSION_STATUS_LABELS[selectedStatus] : null,
@@ -4034,7 +4078,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                     title={
                       [
                         plannedSessions
-                          ? plannedSessions.map((session) => `${session.order}회차 ${session.topic}`).join(', ')
+                          ? plannedSessions.map((session) => formatSessionLabel(session, ' ')).join(', ')
                           : null,
                         status ? SESSION_STATUS_LABELS[status] : null,
                       ]

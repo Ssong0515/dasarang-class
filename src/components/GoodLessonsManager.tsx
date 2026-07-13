@@ -7,6 +7,7 @@ import {
   getClassroomColorMeta,
   getClassroomIconComponent,
 } from '../utils/classroomAppearance';
+import { formatSessionLabel } from '../utils/sessionLabel';
 
 interface GoodLessonsManagerProps {
   classrooms: Classroom[];
@@ -23,12 +24,6 @@ const toDateLabel = (date: string): string => {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
   return match ? `${Number(match[2])}/${Number(match[3])}` : date;
 };
-
-// topic에 이미 "N회차"가 들어 있으면 접두사 중복을 막는다.
-const formatSessionLabel = (session: CurriculumSession): string =>
-  session.topic.trim().startsWith(`${session.order}회차`)
-    ? session.topic.trim()
-    : `${session.order}회차 · ${session.topic}`;
 
 export const GoodLessonsManager: React.FC<GoodLessonsManagerProps> = ({
   classrooms,
@@ -59,7 +54,7 @@ export const GoodLessonsManager: React.FC<GoodLessonsManagerProps> = ({
           if (classroom?.sessionStates?.[session.id]?.date === record.date) sessions.push(session);
         }
         const sessionLabel =
-          sessions.length > 0 ? sessions.map(formatSessionLabel).join(' / ') : null;
+          sessions.length > 0 ? sessions.map((session) => formatSessionLabel(session)).join(' / ') : null;
         return {
           record,
           classroom,
