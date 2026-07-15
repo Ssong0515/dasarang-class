@@ -11,7 +11,7 @@ import {
 } from '../firebase';
 import type { TeacherBroadcastMessage } from '../types';
 import { TEACHER_BROADCAST_MESSAGES_COLLECTION } from '../utils/classroomDomain';
-import { VOICE_LANG_CHANGED_EVENT } from './StudentVoiceButton';
+import { SUBTITLE_OFF_OPTION, VOICE_LANG_CHANGED_EVENT } from './StudentVoiceButton';
 
 // 학생이 StudentVoiceButton에서 고른 언어(iso)를 읽는 곳 — 같은 localStorage 키를 공유한다.
 const VOICE_LANG_STORAGE_KEY = 'dsr_voice_lang';
@@ -34,8 +34,9 @@ const readStoredIso = (): string | null => {
 };
 
 // 이 학생에게 보여줄 자막. 자기 언어 번역이 있으면 번역(primary) + 한국어 원문(korean)을 병기한다 —
-// 한국어 노출이 곧 학습이라 원문을 숨기지 않는다. 번역이 없거나(언어 미선택·이 메시지에 내 언어 없음)
+// 한국어 노출이 곧 학습이라 원문을 숨기지 않는다. 번역이 없거나(언어 미선택·한국어 선택·이 메시지에 내 언어 없음)
 // 번역이 원문과 같으면(번역 실패 폴백) 한국어만 한 줄로 보여준다.
+// 단, '자막 끄기'(iso 'off')를 고른 학생에게만 아무 자막도 띄우지 않는다(null). 미선택·한국어는 한국어 자막이 뜬다.
 interface SubtitleText {
   primary: string;
   korean: string | null; // primary가 번역일 때만 채워지는 한국어 원문 병기 줄
@@ -44,6 +45,9 @@ interface SubtitleText {
 const pickSubtitle = (message: TeacherBroadcastMessage): SubtitleText | null => {
   const korean = message.koreanText?.trim() ?? '';
   const iso = readStoredIso();
+  // '자막 끄기'를 고른 학생에게는 아무 자막도 띄우지 않는다.
+  // (언어 미선택 iso=null·한국어 iso='ko'는 아래로 내려가 한국어 원문 자막을 그대로 보여준다.)
+  if (iso === SUBTITLE_OFF_OPTION.iso) return null;
   const translated = iso ? message.translations?.[iso] : undefined;
   const translatedText = typeof translated === 'string' ? translated.trim() : '';
 
@@ -137,7 +141,11 @@ export const StudentSubtitleOverlay: React.FC<StudentSubtitleOverlayProps> = ({ 
       const message = lastMessageRef.current;
       if (!message) return;
       const subtitle = pickSubtitle(message);
-      if (!subtitle) return;
+      // '자막 끄기'로 바꾸면 이제 이 학생에겐 자막이 없다 — 지금 떠 있는 자막도 즉시 내린다.
+      if (!subtitle) {
+        setVisible(false);
+        return;
+      }
       // 표시 중인 그 자막일 때만 교체(id 동일 → 재애니메이션 없이 텍스트만 스왑). 숨김 타이머는 그대로 둔다.
       setCurrent((prev) => (prev && prev.id === message.id ? { id: message.id, ...subtitle } : prev));
     };

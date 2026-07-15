@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Mic, Globe, Check } from 'lucide-react';
+import { Mic, Globe, Check, CaptionsOff } from 'lucide-react';
 import { db, collection, addDoc, handleFirestoreError, OperationType } from '../firebase';
 import { STUDENT_VOICE_MESSAGES_COLLECTION } from '../utils/classroomDomain';
 import { translateToKorean } from '../utils/translateToKorean';
@@ -26,6 +26,13 @@ export const VOICE_LANG_OPTIONS: VoiceLangOption[] = [
 // 그 배열은 교사 방송 번역 대상·학생 언어 매핑의 단일 출처라 한국어가 섞이면 안 된다.
 // 이 모드에선 번역 자막·마이크 없이 조용한 언어 버튼만 남는다(자막 오버레이는 iso 'ko' 번역이 없어 한국어 원문 폴백).
 export const KOREAN_LANG_OPTION: VoiceLangOption = { label: '한국어', stt: 'ko-KR', iso: 'ko' };
+
+// '자막 끄기' 선택지 — 교사 방송 자막을 아예 받지 않으려는 학생용(CaptionsOff 아이콘 = CC에 취소선).
+// 한국어 모드(자막은 한국어로 뜸)와 다른 점은 '자막을 전혀 안 띄운다'는 것 하나뿐이다.
+// 언어 미선택·한국어 선택은 한국어 원문 자막이 뜨고, 이 옵션만 자막을 끈다(StudentSubtitleOverlay에서 iso로 분기).
+// VOICE_LANG_OPTIONS에 넣지 않는 이유는 KOREAN_LANG_OPTION과 동일 — 번역·매핑의 단일 출처를 오염시키지 않으려고.
+// 이 모드도 마이크·번역을 안 쓴다(iso 'off'는 번역 사전에 없어 실습 병기 번역도 자동으로 꺼진다).
+export const SUBTITLE_OFF_OPTION: VoiceLangOption = { label: '자막 끄기', stt: '', iso: 'off' };
 
 // ── 푸시투토크 안전장치 상수 ─────────────────────────────────────────────────
 // 이보다 짧게 누르면 '누른 채 말하기'를 모르는 것으로 보고 사용법 힌트를 띄운다.
@@ -261,8 +268,9 @@ export const StudentVoiceButton: React.FC<StudentVoiceButtonProps> = ({
     } catch {
       /* 무시 */
     }
-    // 한국어(번역 없음) 모드는 마이크를 안 쓰므로 권한 프롬프트를 띄우지 않는다.
-    if (option.iso !== KOREAN_LANG_OPTION.iso) {
+    // 마이크로 말하는 실제 음성 언어(VOICE_LANG_OPTIONS)일 때만 권한을 미리 확보한다.
+    // 한국어(번역 없음)·자막 끄기 모드는 마이크를 안 쓰므로 권한 프롬프트를 띄우지 않는다.
+    if (VOICE_LANG_OPTIONS.some((voiceOption) => voiceOption.iso === option.iso)) {
       void warmUpMic(); // 언어 고른 김에 마이크 권한 미리 확보 → 첫 녹음이 안 끊김
     }
   };
@@ -476,10 +484,12 @@ export const StudentVoiceButton: React.FC<StudentVoiceButtonProps> = ({
     );
   }
 
-  // ── 렌더: 한국어(번역 없음) 모드 — 강조·마이크 없이 조용한 언어 칩만 남긴다 ────
+  // ── 렌더: 마이크 없는 조용한 모드 — 한국어(번역 없음) / 자막 끄기 ──────────────
   // 외국어를 골랐다가 되돌린 학생이 다시 '언어 고르라'는 강조 애니메이션에 시달리지 않게,
-  // 미선택 상태로 돌리지 않고 '한국어 선택됨'을 저장해 둔다(TTL·수업 종료 리셋은 다른 언어와 동일).
-  if (lang.iso === KOREAN_LANG_OPTION.iso) {
+  // 미선택 상태로 돌리지 않고 선택 상태를 저장해 둔다(TTL·수업 종료 리셋은 다른 언어와 동일).
+  // 한국어는 자막이 한국어로 뜨고, 자막 끄기는 자막을 전혀 안 띄운다 — 칩 아이콘·글자로 구분한다.
+  if (lang.iso === KOREAN_LANG_OPTION.iso || lang.iso === SUBTITLE_OFF_OPTION.iso) {
+    const isSubtitleOff = lang.iso === SUBTITLE_OFF_OPTION.iso;
     return (
       <div className={`${FAB_WRAPPER_CLASS} flex flex-col items-end gap-2`}>
         {isPickerOpen && <LangPicker onChoose={chooseLang} onClose={() => setIsPickerOpen(false)} />}
@@ -489,8 +499,8 @@ export const StudentVoiceButton: React.FC<StudentVoiceButtonProps> = ({
           aria-label="언어 선택 · Choose language"
           className="flex items-center gap-1.5 rounded-full bg-white px-3 py-2 text-xs font-bold text-[#8B5E3C] shadow-lg ring-1 ring-[#EADBC8] transition-transform hover:scale-105"
         >
-          <Globe className="h-4 w-4" />
-          한국어
+          {isSubtitleOff ? <CaptionsOff className="h-4 w-4" /> : <Globe className="h-4 w-4" />}
+          {isSubtitleOff ? '자막 끄기' : '한국어'}
         </button>
       </div>
     );
@@ -604,13 +614,22 @@ const LangPicker: React.FC<{
           {option.label}
         </button>
       ))}
-      {/* 되돌리기용 한국어 — 외국어를 잘못 골랐던 학생이 번역·자막을 끄는 선택지 */}
+      {/* 되돌리기용 한국어 — 외국어를 잘못 골랐던 학생이 번역·마이크를 끄는 선택지(자막은 한국어로 뜬다) */}
       <button
         type="button"
         onClick={() => onChoose(KOREAN_LANG_OPTION)}
         className="col-span-2 rounded-xl bg-white px-3 py-2 text-sm font-semibold text-[#8B7E74] ring-1 ring-[#EADBC8] transition-colors hover:bg-[#F9F7F3]"
       >
         한국어 · 번역 없음
+      </button>
+      {/* 자막 끄기 — 교사 방송 자막을 아예 안 받고 싶은 학생용(CC 취소선). 맨 끝에 둔다. */}
+      <button
+        type="button"
+        onClick={() => onChoose(SUBTITLE_OFF_OPTION)}
+        className="col-span-2 flex items-center justify-center gap-1.5 rounded-xl bg-white px-3 py-2 text-sm font-semibold text-[#8B7E74] ring-1 ring-[#EADBC8] transition-colors hover:bg-[#F9F7F3]"
+      >
+        <CaptionsOff className="h-4 w-4" />
+        자막 끄기
       </button>
     </div>
   </div>

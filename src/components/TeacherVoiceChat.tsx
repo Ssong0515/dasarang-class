@@ -25,6 +25,12 @@ const formatTime = (iso: string): string => {
 // 이미 확인한 오늘치 메시지가 안읽음 뱃지로 다시 뜨지 않는다. (SSR/차단 환경 안전)
 const VOICE_CHAT_SEEN_KEY = 'dsr_voice_chat_seen_at';
 
+// 채팅 오버레이의 z-계층. 실습 미리보기 모달(z-[100])·예제 '번역 병기' 창 전체화면 오버레이(z-[9999]) 위에 뜬다 —
+// 실습 수업 중 학생 질문을 확인하려고 그 창들을 내리지 않아도, 어느 창 위에서든 우하단에 독립적으로 떠 있어야 한다(사용자 요청).
+// 교사 전용이라(App: user && isAdmin) 학생 페이지의 언어 FAB(z-[10010])와는 절대 동시에 렌더되지 않는다
+// — StudentVoiceButton·자막은 !isAdmin에서만 뜨므로 그 계층과 충돌하지 않는다.
+const CHAT_OVERLAY_WRAPPER = 'fixed bottom-4 right-4 z-[10050]';
+
 const readSeenAt = (): string => {
   if (typeof window === 'undefined') return '';
   try {
@@ -101,7 +107,7 @@ export const TeacherVoiceChat: React.FC<TeacherVoiceChatProps> = ({
 
   if (!isOpen) {
     return (
-      <div className="fixed bottom-4 right-4 z-50">
+      <div className={CHAT_OVERLAY_WRAPPER}>
         <button
           type="button"
           onClick={() => {
@@ -125,7 +131,7 @@ export const TeacherVoiceChat: React.FC<TeacherVoiceChatProps> = ({
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-[#EADBC8]">
+    <div className={`${CHAT_OVERLAY_WRAPPER} flex w-80 max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-[#EADBC8]`}>
       <div className="flex items-center justify-between bg-[#8B5E3C] px-4 py-3 text-white">
         <div className="flex items-center gap-2">
           <MessageCircle className="h-4 w-4" />
