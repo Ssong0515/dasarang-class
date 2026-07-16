@@ -1,11 +1,6 @@
 import express from 'express';
 import { requireApiKey } from './auth';
-import {
-  deleteCalendarEvent,
-  fullResync,
-  listCalendarEvents,
-  upsertCalendarEvent,
-} from './calendarSync';
+import { listCalendarEvents } from './calendarEvents';
 import { assignCurriculumDatesFromCalendar, listCalendarClasses } from './calendarClasses';
 import { buildOpenApiDocument } from './openapi';
 import { AdminApiError, isResourceName } from './resources';
@@ -167,31 +162,6 @@ export const createAdminApiRouter = () => {
       });
     } catch (error) {
       sendError(res, error, '달력 이벤트 조회에 실패했습니다.');
-    }
-  });
-
-  router.put('/calendar/events', async (req, res) => {
-    try {
-      res.json(await upsertCalendarEvent(req.body || {}));
-    } catch (error) {
-      sendError(res, error, '달력 이벤트 저장에 실패했습니다.');
-    }
-  });
-
-  router.delete('/calendar/events/:id', async (req, res) => {
-    try {
-      await deleteCalendarEvent(req.params.id);
-      res.json({ deleted: true, id: req.params.id });
-    } catch (error) {
-      sendError(res, error, '달력 이벤트 삭제에 실패했습니다.');
-    }
-  });
-
-  router.post('/calendar/resync', async (_req, res) => {
-    try {
-      res.json(await fullResync());
-    } catch (error) {
-      sendError(res, error, '달력 재동기화에 실패했습니다.');
     }
   });
 

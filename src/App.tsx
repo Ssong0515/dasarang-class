@@ -1848,7 +1848,6 @@ export default function App() {
       await deleteDuplicateClassroomDateRecordDocs(record.classroomId, record.date, recordId);
 
       upsertLocalClassroomDateRecord(nextRecord);
-      void postAdminRequest('api/calendar/sync-record', { recordId }).catch(() => {});
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `classroomDateRecords/${record.id}`);
     }
@@ -1929,7 +1928,6 @@ export default function App() {
       }
 
       removeLocalClassroomDateRecord(recordId);
-      void postAdminRequest('api/calendar/sync-record', { recordId }).catch(() => {});
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `classroomDateRecords/${recordId}`);
     }

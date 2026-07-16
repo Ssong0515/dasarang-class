@@ -15,7 +15,6 @@ import {
 } from './server/notebookLmSync';
 import { createAdminApiRouter } from './server/adminApi/router';
 import { handleMcpDeleteRequest, handleMcpGetRequest, handleMcpPostRequest } from './server/adminApi/mcp';
-import { syncRecordToCalendarSafe } from './server/adminApi/calendarSync';
 import {
   assignCurriculumDatesFromCalendar,
   listCalendarClasses,
@@ -374,17 +373,6 @@ async function startServer() {
       }
     }
   );
-
-  // 브라우저(관리자 UI)에서 수업 기록 저장/삭제 후 달력 동기화를 트리거
-  app.post(withBasePath(APP_BASE_PATH, '/api/calendar/sync-record'), requireAdmin, async (req, res) => {
-    const { recordId } = (req.body || {}) as { recordId?: string };
-    if (!recordId?.trim()) {
-      res.status(400).json({ error: 'recordId가 필요합니다.' });
-      return;
-    }
-    const result = await syncRecordToCalendarSafe(recordId.trim());
-    res.json({ ok: result !== null, result });
-  });
 
   // calendar의 참고 시간표 목록 (교실 연결 드롭다운용)
   app.get(withBasePath(APP_BASE_PATH, '/api/calendar/classes'), requireAdmin, async (_req, res) => {

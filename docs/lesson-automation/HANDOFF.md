@@ -55,7 +55,7 @@ adminApi 레이어: **MCP**(`POST /mcp`) + **REST**(`/api/gpt/*`). 인증 = Bear
   - `list_resource` / `get_resource` — 리소스 조회(curriculums, classrooms, contents 등). contents 목록은 html 생략.
   - **`create_practice_content`** — 실습 HTML을 학생 콘텐츠로 등록(게이팅됨). title/description/html/categoryName. → 실습 저장에 사용.
   - **`mutate_curriculum_sessions`** — 회차 추가/수정. session.contentIds에 생성한 콘텐츠 id append, status 변경. → 회차 연결에 사용.
-  - 기타: `upsert_lesson_record`, `list_calendar_classes`, `assign_curriculum_dates`, `sync_calendar`, `review_student_post`, `create/update/delete_resource`.
+  - 기타: `upsert_lesson_record`, `list_calendar_classes`, `assign_curriculum_dates`, `list_calendar_events`(달력은 읽기 전용), `review_student_post`, `create/update/delete_resource`.
 - 서버 코드 위치: `server/adminApi/` (router.ts=REST, mcp.ts=MCP 툴, services.ts=구현, calendarClasses.ts=시간표→회차날짜).
 
 ## 6. 남은 할 일 (TODO — 여기서 시작)

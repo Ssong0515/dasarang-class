@@ -5,12 +5,7 @@ import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import type express from 'express';
 import { z } from 'zod';
 import { extractBearerToken, isValidApiKey } from './auth';
-import {
-  deleteCalendarEvent,
-  fullResync,
-  listCalendarEvents,
-  upsertCalendarEvent,
-} from './calendarSync';
+import { listCalendarEvents } from './calendarEvents';
 import { assignCurriculumDatesFromCalendar, listCalendarClasses } from './calendarClasses';
 import { AdminApiError, RESOURCE_NAMES } from './resources';
 import {
@@ -260,41 +255,14 @@ const buildMcpServer = () => {
   );
 
   server.tool(
-    'sync_calendar',
-    'calendar.damuna.org 달력 조작. action=list/upsert/delete는 일반 이벤트 CRUD, action=resync는 수업 기록 전체 재동기화.',
+    'list_calendar_events',
+    'calendar.damuna.org 달력 이벤트(직접 입력 일정) 목록 조회. 달력 데이터는 읽기 전용 — 일정 추가·수정은 calendar.damuna.org에서 직접 한다.',
     {
-      action: z.enum(['list', 'upsert', 'delete', 'resync']),
-      event: z
-        .object({
-          id: z.string().optional(),
-          date: z.string().optional().describe('YYYY-MM-DD'),
-          title: z.string().optional(),
-          time: z.string().optional(),
-        })
-        .optional(),
-      dateFrom: z.string().optional(),
-      dateTo: z.string().optional(),
+      dateFrom: z.string().optional().describe('YYYY-MM-DD'),
+      dateTo: z.string().optional().describe('YYYY-MM-DD'),
     },
-    async ({ action, event, dateFrom, dateTo }) =>
-      run(async () => {
-        switch (action) {
-          case 'list':
-            return { items: await listCalendarEvents({ dateFrom, dateTo }) };
-          case 'upsert':
-            if (!event?.date || !event?.title) {
-              throw new AdminApiError(400, 'upsert에는 event.date와 event.title이 필요합니다.');
-            }
-            return upsertCalendarEvent({ id: event.id, date: event.date, title: event.title, time: event.time });
-          case 'delete':
-            if (!event?.id) {
-              throw new AdminApiError(400, 'delete에는 event.id가 필요합니다.');
-            }
-            await deleteCalendarEvent(event.id);
-            return { deleted: true, id: event.id };
-          case 'resync':
-            return fullResync();
-        }
-      })
+    async ({ dateFrom, dateTo }) =>
+      run(async () => ({ items: await listCalendarEvents({ dateFrom, dateTo }) }))
   );
 
   server.tool(

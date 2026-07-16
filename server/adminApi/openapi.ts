@@ -76,7 +76,7 @@ export const buildOpenApiDocument = () => {
         '## 리소스 안내',
         buildResourceGuide(),
         '## 달력 연동',
-        '수업 기록은 calendar.damuna.org에 자동 반영된다. 별도 일정(행사 등)은 calendar/events로 직접 관리한다.',
+        'calendar.damuna.org 데이터(참고 시간표·일정)는 읽기 전용으로만 가져온다. 일정 추가·수정은 calendar.damuna.org에서 직접 한다.',
       ].join('\n'),
     },
     servers: [{ url: serverUrl }],
@@ -205,7 +205,7 @@ export const buildOpenApiDocument = () => {
       '/api/gpt/lesson-records/upsert': {
         post: {
           operationId: 'upsertLessonRecord',
-          summary: '수업 기록 생성/수정 (반+날짜 단위, 달력 자동 동기화)',
+          summary: '수업 기록 생성/수정 (반+날짜 단위)',
           description:
             '특정 반의 특정 날짜 수업 기록을 만들거나 수정한다. 이미 있으면 보낸 필드만 병합된다. curriculumSessionId를 주면 해당 커리큘럼 회차에 연결된다.',
           requestBody: {
@@ -293,62 +293,13 @@ export const buildOpenApiDocument = () => {
       '/api/gpt/calendar/events': {
         get: {
           operationId: 'listCalendarEvents',
-          summary: 'calendar.damuna.org 달력 이벤트 목록',
+          summary: 'calendar.damuna.org 달력 이벤트 목록 (읽기 전용)',
           parameters: [
             { name: 'dateFrom', in: 'query', schema: { type: 'string' } },
             { name: 'dateTo', in: 'query', schema: { type: 'string' } },
           ],
           responses: {
             '200': { description: '이벤트 목록', content: { 'application/json': { schema: genericObjectSchema } } },
-            '401': errorResponse,
-          },
-        },
-        put: {
-          operationId: 'upsertCalendarEvent',
-          summary: 'calendar.damuna.org 달력 이벤트 생성/수정',
-          description: 'clsrec_ 접두사(수업 기록 자동 동기화) 이벤트는 직접 수정할 수 없다.',
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['date', 'title'],
-                  properties: {
-                    id: { type: 'string', description: '기존 이벤트 수정 시에만' },
-                    date: { type: 'string', description: 'YYYY-MM-DD' },
-                    title: { type: 'string' },
-                    time: { type: 'string', description: '예: 14:00 (선택)' },
-                  },
-                },
-              },
-            },
-          },
-          responses: {
-            '200': { description: '저장된 이벤트', content: { 'application/json': { schema: genericObjectSchema } } },
-            '400': errorResponse,
-            '401': errorResponse,
-          },
-        },
-      },
-      '/api/gpt/calendar/events/{id}': {
-        delete: {
-          operationId: 'deleteCalendarEvent',
-          summary: 'calendar.damuna.org 달력 이벤트 삭제',
-          parameters: [idParam],
-          responses: {
-            '200': { description: '삭제 결과', content: { 'application/json': { schema: genericObjectSchema } } },
-            '400': errorResponse,
-            '401': errorResponse,
-          },
-        },
-      },
-      '/api/gpt/calendar/resync': {
-        post: {
-          operationId: 'resyncCalendar',
-          summary: '수업 기록 전체를 calendar.damuna.org에 재동기화',
-          responses: {
-            '200': { description: '동기화 결과 {upserted, removed}', content: { 'application/json': { schema: genericObjectSchema } } },
             '401': errorResponse,
           },
         },

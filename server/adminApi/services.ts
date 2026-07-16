@@ -8,7 +8,6 @@ import { getClassroomDateRecordId } from '../../src/utils/classroomDomain';
 import { isStudentDeleted, isStudentInactive } from '../../src/utils/students';
 import { getAdminDb } from '../firebaseAdmin';
 import { resolveAdminUid } from './auth';
-import { removeCalendarEventForRecord, syncRecordToCalendarSafe } from './calendarSync';
 import {
   AdminApiError,
   RESOURCE_SPECS,
@@ -233,10 +232,6 @@ export const updateResource = async (resource: ResourceName, id: string, patch: 
 
   await ref.set(updateData, { merge: true });
 
-  if (resource === 'classroomDateRecords') {
-    await syncRecordToCalendarSafe(id);
-  }
-
   const updated = await ref.get();
   return docToObject(updated.id, updated.data() as DocData);
 };
@@ -249,14 +244,6 @@ export const deleteResource = async (resource: ResourceName, id: string) => {
     throw new AdminApiError(404, `'${resource}'에서 id '${id}' 문서를 찾을 수 없습니다.`);
   }
   await ref.delete();
-
-  if (resource === 'classroomDateRecords') {
-    try {
-      await removeCalendarEventForRecord(id);
-    } catch (error) {
-      console.warn(`[calendarSync] record ${id} 이벤트 삭제 실패:`, error);
-    }
-  }
 
   return { deleted: true, id };
 };
@@ -496,8 +483,6 @@ export const upsertLessonRecord = async (input: UpsertLessonRecordInput) => {
       createdAt: iso,
     });
   }
-
-  await syncRecordToCalendarSafe(recordId);
 
   const saved = await ref.get();
   return docToObject(saved.id, saved.data() as DocData);
