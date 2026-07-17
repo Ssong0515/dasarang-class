@@ -626,6 +626,8 @@ export interface CreatePracticeContentInput {
   categoryName?: string;
   /** 콘텐츠 성격. 'reference'면 외부 도구 실습용 예시·참고 문서(비인터랙티브). 없으면 practice(기본). */
   kind?: 'practice' | 'reference';
+  /** 공개 시 학생 화면에 뜨는 카운트다운(분). 만료되면 실습이 자동으로 잠기고 전환 카드가 뜬다. 없으면 타이머 없음. */
+  timerMinutes?: number;
 }
 
 export const createPracticeContent = async (input: CreatePracticeContentInput) => {
@@ -686,6 +688,10 @@ export const createPracticeContent = async (input: CreatePracticeContentInput) =
     order: maxOrder + 1,
     // reference일 때만 필드를 남긴다(없으면 practice로 취급 — 하위호환).
     ...(input.kind === 'reference' ? { kind: 'reference' as const } : {}),
+    // 공개 시 학생 화면 카운트다운(분). 양수일 때만 남긴다(0/없음 = 타이머 없음).
+    ...(typeof input.timerMinutes === 'number' && input.timerMinutes > 0
+      ? { timerMinutes: Math.round(input.timerMinutes) }
+      : {}),
   };
   await contentRef.set(contentData);
 

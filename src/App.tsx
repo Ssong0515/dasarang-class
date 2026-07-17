@@ -995,6 +995,10 @@ export default function App() {
           ...(data.kind === 'reference' || data.kind === 'practice' ? { kind: data.kind } : {}),
           // 단독 개념 예제 표시(실습과 페어링 금지). 빼먹으면 스냅샷마다 사라지므로 보존한다.
           ...(data.standalone === true ? { standalone: true } : {}),
+          // 공개 시 학생 화면 카운트다운(분). 빼먹으면 스냅샷마다 사라지므로 보존한다.
+          ...(typeof data.timerMinutes === 'number' && data.timerMinutes > 0
+            ? { timerMinutes: data.timerMinutes }
+            : {}),
           // 실습에 묶인 이론 자료 링크. 빼먹으면 스냅샷마다 사라지므로 반드시 보존한다.
           ...(typeof data.theorySlideUrl === 'string' ? { theorySlideUrl: data.theorySlideUrl } : {}),
           createdAt: data.createdAt ?? new Date(0).toISOString(),
@@ -1028,6 +1032,13 @@ export default function App() {
             ownerUid: data.ownerUid ?? '',
             updatedAt: data.updatedAt ?? '',
             endNoticeAt: typeof data.endNoticeAt === 'string' ? data.endNoticeAt : undefined,
+            // 실습 타이머 만료 시각(contentId → ISO). 빼먹으면 스냅샷마다 사라져 카운트다운·자동 잠금이 안 먹는다.
+            practiceTimers:
+              data.practiceTimers && typeof data.practiceTimers === 'object' && !Array.isArray(data.practiceTimers)
+                ? Object.fromEntries(
+                    Object.entries(data.practiceTimers).filter(([, value]) => typeof value === 'string')
+                  )
+                : undefined,
           } satisfies PublishedLesson;
         });
         setPublishedLessons(publishedData);
@@ -1709,6 +1720,9 @@ export default function App() {
       slideUrl: content.slideUrl ?? '',
       ...(content.kind === 'reference' || content.kind === 'practice' ? { kind: content.kind } : {}),
       ...(content.standalone === true ? { standalone: true } : {}),
+      ...(typeof content.timerMinutes === 'number' && content.timerMinutes > 0
+        ? { timerMinutes: content.timerMinutes }
+        : {}),
       ...(typeof content.theorySlideUrl === 'string' ? { theorySlideUrl: content.theorySlideUrl } : {}),
       createdAt,
       order,
@@ -1755,6 +1769,16 @@ export default function App() {
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, 'categories/reorder');
       throw error;
+    }
+  };
+
+  // 실습 행의 ⏱ 스테퍼로 타이머(분)만 가볍게 저장한다 — html 전체를 다시 쓰지 않도록 별도 merge 쓰기.
+  const handleSetContentTimer = async (contentId: string, timerMinutes: number) => {
+    if (!user) return;
+    try {
+      await setDoc(doc(db, 'contents', contentId), { timerMinutes }, { merge: true });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `contents/${contentId}`);
     }
   };
 
@@ -1872,6 +1896,22 @@ export default function App() {
         return;
       }
 
+      // 실습 타이머: 공개 순간 콘텐츠의 timerMinutes로 만료 시각을 찍는다.
+      // 이미 돌던 타이머는 유지하고, 잠근(공개 해제된) 실습의 엔트리는 버린다 — 다시 공개하면 리셋.
+      const existingTimers =
+        publishedLessons.find((lesson) => lesson.id === lessonId)?.practiceTimers ?? {};
+      const practiceTimers: Record<string, string> = {};
+      publishedContentIds.forEach((contentId) => {
+        if (existingTimers[contentId]) {
+          practiceTimers[contentId] = existingTimers[contentId];
+          return;
+        }
+        const timerMinutes = contents.find((content) => content.id === contentId)?.timerMinutes;
+        if (typeof timerMinutes === 'number' && timerMinutes > 0) {
+          practiceTimers[contentId] = new Date(Date.now() + timerMinutes * 60_000).toISOString();
+        }
+      });
+
       const nextLesson: PublishedLesson = {
         id: lessonId,
         classroomId,
@@ -1880,6 +1920,7 @@ export default function App() {
         publishedContentIds,
         ownerUid: user.uid,
         updatedAt: new Date().toISOString(),
+        ...(Object.keys(practiceTimers).length > 0 ? { practiceTimers } : {}),
       };
       await setDoc(lessonRef, nextLesson);
     } catch (error) {
@@ -2140,6 +2181,7 @@ export default function App() {
               onSaveDateRecord={handleSaveClassroomDateRecord}
               onDeleteDateRecord={handleDeleteClassroomDateRecord}
               onSaveContent={handleSaveContent}
+              onSetContentTimer={handleSetContentTimer}
               onUpdatePublishedLesson={handleUpdatePublishedLesson}
               onEndLesson={handleEndLesson}
               onSyncTheorySlide={handleSyncTheorySlide}

@@ -204,6 +204,11 @@ export const RESOURCE_SPECS: Record<ResourceName, ResourceSpec> = {
         description:
           'true면 이 예제(kind:reference)를 순서상 바로 앞 실습과 개념 단위로 묶지 않고 대시보드에서 단독 행으로 표시한다(실습의 완성 예시가 아니라 그 자체가 하나의 개념인 미션지·안내문용).',
       },
+      timerMinutes: {
+        type: 'number',
+        description:
+          '공개 시 학생 화면에 뜨는 카운트다운(분). 만료되면 학생 화면에서 실습이 자동으로 잠기고 "선생님 화면을 보세요" 전환 카드가 뜬다. 외부도구 회차 완충 실습=3~5, 일반 실습=8~10 기준. 0/없음 = 타이머 없음.',
+      },
     },
     listOmitFields: ['html'],
     defaults: ({ nowIso }) => ({ createdAt: nowIso, description: '', html: '', categoryId: null }),

@@ -99,6 +99,19 @@ const END_NOTICE_LANGS: { code: string; label: string; dir?: 'rtl' | 'ltr'; titl
   },
 ];
 
+// 실습 타이머 만료 후 전환 카드를 보여주는 시간 — 이 시간이 지나면(늦게 접속한 학생 포함) 카드가 뜨지 않는다.
+const TIMER_NOTICE_MAX_AGE_MS = 2 * 60 * 1000;
+
+// 실습 타이머 만료 전환 카드 — 실습이 잠기는 순간 전원에게 같은 신호. 여러 나라 학생이라 언어를 순환 표시한다.
+const TIMER_NOTICE_LANGS: { code: string; label: string; dir?: 'rtl' | 'ltr'; title: string; line: string }[] = [
+  { code: 'ko', label: '한국어', title: '실습 시간 끝!', line: '이제 선생님 화면을 보세요 👀' },
+  { code: 'ru', label: 'Русский', title: 'Время вышло!', line: 'Теперь посмотрите на экран учителя 👀' },
+  { code: 'vi', label: 'Tiếng Việt', title: 'Hết giờ thực hành!', line: 'Bây giờ hãy nhìn màn hình của thầy/cô 👀' },
+  { code: 'zh', label: '中文', title: '练习时间到！', line: '现在请看老师的屏幕 👀' },
+  { code: 'en', label: 'English', title: "Time's up!", line: "Now look at the teacher's screen 👀" },
+  { code: 'ur', label: 'اردو', dir: 'rtl', title: 'مشق کا وقت ختم!', line: 'اب استاد کی اسکرین دیکھیں 👀' },
+];
+
 interface StudentPageProps {
   onBackToAdmin?: () => void;
   onLogin?: () => void;
@@ -325,6 +338,9 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isEndNoticeOpen, setIsEndNoticeOpen] = useState(false);
   const [endNoticeLang, setEndNoticeLang] = useState(0);
+  // 실습 타이머용 현재 시각 — 타이머가 돌거나 방금 만료된 동안만 1초씩 갱신된다(아래 효과).
+  const [timerNow, setTimerNow] = useState(() => Date.now());
+  const [timerNoticeLang, setTimerNoticeLang] = useState(0);
   // 이미 닫은 종료 안내의 endNoticeAt. 교사가 다시 종료(새 시각)하면 값이 달라져 안내가 다시 뜬다.
   const [dismissedEndNoticeAt, setDismissedEndNoticeAt] = useState<string | null>(null);
   const [uploadStudentName, setUploadStudentName] = useState('');
@@ -507,11 +523,46 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   // 학생: 실제 오늘 공개분만. 강사 미리보기: previewDate 기준(테스트용 — 실제 학생 화면엔 영향 없음).
   const realTodayString = getLocalDateString(new Date());
   const gatingDateString = isAdmin ? previewDate : realTodayString;
+  // 실습 타이머(공개 순간 시작된 카운트다운) — 오늘 publishedLessons의 practiceTimers를 합쳐 본다.
+  const activePracticeTimers: Record<string, string> = {};
+  publishedLessons
+    .filter((lesson) => lesson.date === gatingDateString && lesson.practiceTimers)
+    .forEach((lesson) => {
+      Object.entries(lesson.practiceTimers as Record<string, string>).forEach(([contentId, endsAt]) => {
+        activePracticeTimers[contentId] = endsAt;
+      });
+    });
+  // 만료된 타이머의 실습은 교사가 잠그지 않아도 학생 화면에서 자동으로 잠긴다.
+  const expiredTimerContentIds = new Set(
+    Object.entries(activePracticeTimers)
+      .filter(([, endsAt]) => new Date(endsAt).getTime() <= timerNow)
+      .map(([contentId]) => contentId)
+  );
   const publishedContentIdSet = new Set(
     publishedLessons
       .filter((lesson) => lesson.date === gatingDateString)
       .flatMap((lesson) => lesson.publishedContentIds)
+      .filter((contentId) => !expiredTimerContentIds.has(contentId))
   );
+  // 화면에 띄울 카운트다운 — 아직 안 끝난(공개 중) 타이머 중 가장 빨리 끝나는 것.
+  const runningTimerEndsAt =
+    Object.entries(activePracticeTimers)
+      .filter(
+        ([contentId, endsAt]) =>
+          publishedContentIdSet.has(contentId) && new Date(endsAt).getTime() > timerNow
+      )
+      .map(([, endsAt]) => endsAt)
+      .sort()[0] ?? null;
+  // 방금(2분 안) 만료된 타이머 → 전환 카드. 늦게 접속한 학생에겐 이미 지난 신호라 뜨지 않는다.
+  const recentTimerExpiryAt =
+    Object.values(activePracticeTimers)
+      .filter((endsAt) => {
+        const endMs = new Date(endsAt).getTime();
+        return endMs <= timerNow && timerNow - endMs < TIMER_NOTICE_MAX_AGE_MS;
+      })
+      .sort()
+      .pop() ?? null;
+  const isTimerNoticeOpen = Boolean(recentTimerExpiryAt);
   // 교사가 대시보드에서 '수업 종료'를 누르면 publishedLessons에 endNoticeAt가 찍힌다 → 모든 학생 화면에 종료 안내를 띄운다.
   const activeEndNoticeAt =
     publishedLessons
@@ -536,6 +587,25 @@ export const StudentPage: React.FC<StudentPageProps> = ({
     const timer = window.setTimeout(() => setIsEndNoticeOpen(false), remainingMs);
     return () => window.clearTimeout(timer);
   }, [activeEndNoticeAt, dismissedEndNoticeAt]);
+
+  // 실습 타이머 1초 시계 — 타이머가 돌고 있거나 방금 만료(전환 카드 표시 중)인 동안만 돈다.
+  // 멈추면 timerNow가 고정되지만, 만료 판정(endMs <= timerNow)은 이미 참이라 잠금 상태는 유지된다.
+  const needsTimerTick = runningTimerEndsAt !== null || recentTimerExpiryAt !== null;
+  useEffect(() => {
+    if (!needsTimerTick) return;
+    const id = setInterval(() => setTimerNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [needsTimerTick]);
+
+  // 전환 카드가 떠 있는 동안 언어를 순환한다(종료 안내와 같은 패턴).
+  useEffect(() => {
+    if (!isTimerNoticeOpen) return;
+    setTimerNoticeLang(0);
+    const id = setInterval(() => {
+      setTimerNoticeLang((i) => (i + 1) % TIMER_NOTICE_LANGS.length);
+    }, 3500);
+    return () => clearInterval(id);
+  }, [isTimerNoticeOpen]);
 
   const getAssignedContentIdsForClassroom = (_classroom?: Classroom) =>
     Array.from(categorizedContentIds);
@@ -1267,6 +1337,60 @@ export const StudentPage: React.FC<StudentPageProps> = ({
       {/* 교사 통역 자막 방송 수신 — 실제 학생 화면에서만(강사 미리보기 제외).
           반·수업 공개 여부와 무관하게 오늘의 최신 방송을 내 언어 자막으로 상단 중앙에 띄운다. */}
       {!isAdmin && <StudentSubtitleOverlay date={gatingDateString} />}
+
+      {/* 실습 타이머 카운트다운 — 실습이 닫히기까지 남은 시간. 닫히는 시각이 미리 보여서 학생이 스스로
+          페이스를 조절한다. 실습 팝업(z-[9999/10000]) 위, 교사 자막(z-[10005])·언어 버튼(z-[10010]) 아래. */}
+      {runningTimerEndsAt &&
+        (() => {
+          const totalSec = Math.max(
+            0,
+            Math.ceil((new Date(runningTimerEndsAt).getTime() - timerNow) / 1000)
+          );
+          return (
+            <div className="pointer-events-none fixed left-1/2 top-16 z-[10001] -translate-x-1/2">
+              <div
+                className={`rounded-full px-5 py-2 text-xl font-bold text-white shadow-lg backdrop-blur-sm tabular-nums ${
+                  totalSec <= 60 ? 'bg-[#B42318]/90' : 'bg-[#141414]/80'
+                }`}
+              >
+                ⏰ {Math.floor(totalSec / 60)}:{String(totalSec % 60).padStart(2, '0')}
+              </div>
+            </div>
+          );
+        })()}
+
+      {/* 실습 타이머 만료 전환 카드 — 실습이 잠기는 순간 전원(못 끝낸 학생 포함)에게 같은 신호.
+          약 2분 뒤 자동으로 사라지고, 늦게 접속한 학생에겐 뜨지 않는다(신선도 창).
+          실습 팝업(z-[9999/10000])보다 위, 교사 자막(z-[10005])·언어 버튼(z-[10010])보다 아래. */}
+      {isTimerNoticeOpen && (
+        <div className="fixed inset-0 z-[10002] flex select-none flex-col items-center justify-center gap-5 bg-[#141414]/85 p-6 backdrop-blur-sm">
+          <div className="animate-bounce text-7xl">🖥️</div>
+          <h2
+            className="text-center font-serif text-4xl font-bold text-white sm:text-5xl"
+            dir={TIMER_NOTICE_LANGS[timerNoticeLang].dir || 'ltr'}
+          >
+            {TIMER_NOTICE_LANGS[timerNoticeLang].title}
+          </h2>
+          <p
+            className="text-center text-2xl font-medium text-white/90"
+            dir={TIMER_NOTICE_LANGS[timerNoticeLang].dir || 'ltr'}
+          >
+            {TIMER_NOTICE_LANGS[timerNoticeLang].line}
+          </p>
+          <div className="mt-1 flex flex-wrap items-center justify-center gap-2" dir="ltr">
+            {TIMER_NOTICE_LANGS.map((langItem, idx) => (
+              <span
+                key={langItem.code}
+                className={`rounded-full px-3 py-1 text-xs font-bold transition-colors ${
+                  idx === timerNoticeLang ? 'bg-white text-[#141414]' : 'bg-white/15 text-white/60'
+                }`}
+              >
+                {langItem.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 수업 종료 안내 — 교사가 대시보드에서 '수업 종료'를 누르면 실시간 신호로 모든 학생 화면에 뜬다. 학생은 띄우거나 닫을 수만 있다. */}
       {isEndNoticeOpen && (

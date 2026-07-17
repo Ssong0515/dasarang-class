@@ -56,6 +56,13 @@ export interface LessonContent {
    */
   standalone?: boolean;
   /**
+   * 공개 시 학생 화면에 뜨는 카운트다운(분). 공개 순간 만료 시각이 계산되어
+   * publishedLessons.practiceTimers에 기록되고, 만료되면 학생 화면에서 이 실습이 자동으로 잠기며
+   * '선생님 화면을 보세요' 전환 카드가 뜬다. 0 또는 없음 = 타이머 없음.
+   * 루틴이 생성 시 산정해 넣고(완충 3~5분·일반 8~10분), 교사가 대시보드 ⏱ 스테퍼로 조정한다.
+   */
+  timerMinutes?: number;
+  /**
    * 이 실습 콘텐츠에 1:1로 묶인 이론 수업 자료 링크(강사 화면 전용).
    * 콘텐츠에 저장하므로 같은 실습을 다른 반·날짜에 쓰면 이론이 자동으로 따라온다.
    * (반별 수업 진행 상태는 classroomDateRecord에 따로 있어 동기화되지 않는다.)
@@ -189,6 +196,12 @@ export interface PublishedLesson {
   updatedAt: string;
   /** 교사가 '수업 종료'를 누른 시각(ISO). 설정되면 학생 화면에 종료 안내가 뜬다. 다시 공개하면 새 문서로 덮여 해제된다. */
   endNoticeAt?: string;
+  /**
+   * 공개 순간 시작된 실습 타이머의 만료 시각(contentId → ISO). 콘텐츠의 timerMinutes로 계산되어 기록되고,
+   * 만료되면 학생 화면에서 그 실습이 잠기고 '선생님 화면을 보세요' 전환 카드가 뜬다.
+   * 잠그면(공개 해제) 엔트리가 제거되므로 다시 공개하면 타이머가 리셋된다.
+   */
+  practiceTimers?: Record<string, string>;
 }
 
 /**

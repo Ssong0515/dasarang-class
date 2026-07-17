@@ -219,6 +219,15 @@ const buildMcpServer = () => {
         .enum(['practice', 'reference'])
         .optional()
         .describe("콘텐츠 성격. 'reference'=외부 도구 실습용 예시·참고 문서(비인터랙티브). 생략 시 practice."),
+      timerMinutes: z
+        .number()
+        .int()
+        .min(1)
+        .max(60)
+        .optional()
+        .describe(
+          '공개 시 학생 화면에 뜨는 카운트다운(분). 만료되면 학생 화면에서 실습이 자동으로 잠기고 "선생님 화면을 보세요" 전환 카드가 뜬다. 외부도구 회차 완충 실습=3~5, 일반 실습=8~10 기준으로 스테이지 수·타이핑 양을 보고 산정. 생략 시 타이머 없음(예제 kind:reference에는 넣지 말 것).'
+        ),
     },
     async (input) => run(() => createPracticeContent(input))
   );

@@ -47,6 +47,8 @@ import {
   Coins,
   Languages,
   ScanSearch,
+  Timer,
+  Minus,
 } from 'lucide-react';
 import {
   AssignCurriculumDatesResult,
@@ -117,6 +119,8 @@ interface ClassroomDashboardProps {
   onDeleteDateRecord: (recordId: string) => void;
   /** 실습 콘텐츠에 묶인 이론 자료 링크(theorySlideUrl) 저장용. 콘텐츠 문서에 merge 저장된다. */
   onSaveContent?: (content: Partial<LessonContent>) => Promise<LessonContent>;
+  /** 실습 행 ⏱ 스테퍼 — 콘텐츠의 timerMinutes(공개 순간 시작되는 학생 카운트다운, 분)만 merge 저장한다. */
+  onSetContentTimer?: (contentId: string, timerMinutes: number) => Promise<void>;
   onUpdatePublishedLesson?: (
     classroomId: string,
     classroomName: string,
@@ -144,6 +148,33 @@ interface ClassroomDashboardProps {
 }
 
 type Tab = 'dashboard' | 'results' | 'students' | 'curriculum' | 'settings';
+
+// 공개 중 실습 타이머의 남은 시간(교사용). 1초마다 자체 갱신 — 대시보드 전체를 리렌더하지 않고 이 칩만 다시 그린다.
+const PracticeTimerCountdown: React.FC<{ endsAt: string }> = ({ endsAt }) => {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const totalSec = Math.max(0, Math.ceil((new Date(endsAt).getTime() - now) / 1000));
+  const label =
+    totalSec > 0 ? `${Math.floor(totalSec / 60)}:${String(totalSec % 60).padStart(2, '0')}` : '끝!';
+  return (
+    <span
+      title={
+        totalSec > 0
+          ? '타이머가 끝나면 학생 화면에서 이 실습이 잠기고 "선생님 화면을 보세요" 카드가 떠요'
+          : '타이머 종료 — 학생 화면은 잠겼어요 (잠갔다가 다시 공개하면 타이머 리셋)'
+      }
+      className={`inline-flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-xl px-2.5 text-xs font-bold tabular-nums ${
+        totalSec > 0 ? 'bg-[#FFF1DC] text-[#B45309]' : 'bg-[#FDECEC] text-[#B42318]'
+      }`}
+    >
+      <Timer size={14} />
+      {label}
+    </span>
+  );
+};
 
 const DOW_LABELS = ['월', '화', '수', '목', '금', '토'];
 
@@ -463,6 +494,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   onSaveDateRecord,
   onDeleteDateRecord,
   onSaveContent,
+  onSetContentTimer,
   onUpdatePublishedLesson,
   onEndLesson,
   onSyncTheorySlide,
@@ -2384,6 +2416,49 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               <span className="max-[639px]:hidden">공개</span>
             </button>
           )}
+          {/* ⏱ 실습 타이머 — 공개 순간 시작될 카운트다운(분). 수업 준비 때 −/+로 미리 설정, 0 = 타이머 없음.
+              공개 중이고 타이머가 돌고 있으면 남은 시간을 보여준다. */}
+          {practice &&
+            showPracticeSection &&
+            (publishedContentIdSet.has(practice.id) &&
+            currentPublishedLesson?.practiceTimers?.[practice.id] ? (
+              <PracticeTimerCountdown endsAt={currentPublishedLesson.practiceTimers[practice.id]} />
+            ) : onSetContentTimer ? (
+              <span
+                title="실습 타이머 — 공개하면 이 시간부터 카운트다운되고, 끝나면 학생 화면에서 실습이 잠기며 '선생님 화면을 보세요' 카드가 떠요. 0분 = 타이머 없음"
+                className="inline-flex h-8 shrink-0 items-center overflow-hidden whitespace-nowrap rounded-xl border border-[#E5E3DD] bg-white text-xs font-bold text-[#8B7E74]"
+              >
+                <button
+                  type="button"
+                  aria-label="타이머 1분 줄이기"
+                  onClick={() =>
+                    void onSetContentTimer(practice.id, Math.max(0, (practice.timerMinutes ?? 0) - 1))
+                  }
+                  disabled={(practice.timerMinutes ?? 0) <= 0}
+                  className="inline-flex h-8 w-6 items-center justify-center text-[#8B7E74] transition-all hover:bg-[#F7F6F3] hover:text-[#8B5E3C] disabled:cursor-not-allowed disabled:text-[#DAD5CC]"
+                >
+                  <Minus size={12} />
+                </button>
+                <span className="inline-flex items-center gap-1 px-1 tabular-nums">
+                  <Timer
+                    size={14}
+                    className={(practice.timerMinutes ?? 0) > 0 ? 'text-[#B45309]' : 'text-[#C7C0B5]'}
+                  />
+                  {(practice.timerMinutes ?? 0) > 0 ? `${practice.timerMinutes}분` : '없음'}
+                </span>
+                <button
+                  type="button"
+                  aria-label="타이머 1분 늘리기"
+                  onClick={() =>
+                    void onSetContentTimer(practice.id, Math.min(60, (practice.timerMinutes ?? 0) + 1))
+                  }
+                  disabled={(practice.timerMinutes ?? 0) >= 60}
+                  className="inline-flex h-8 w-6 items-center justify-center text-[#8B7E74] transition-all hover:bg-[#F7F6F3] hover:text-[#8B5E3C] disabled:cursor-not-allowed disabled:text-[#DAD5CC]"
+                >
+                  <Plus size={12} />
+                </button>
+              </span>
+            ) : null)}
           {/* 예제 — 예제 있으면 활성 (공용 화면 미리보기) */}
           {example ? (
             <button
