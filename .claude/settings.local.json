@@ -30,7 +30,12 @@
       "Bash(firebase apphosting:rollouts:create dasarang-class-1 --project gen-lang-client-0507712225 --help)",
       "Bash(firebase apphosting:rollouts:create dasarang-class-1 --project gen-lang-client-0507712225 --git-branch main --force)",
       "Bash(grep -iE \"firebase|setDoc|collection|^import \\\\{|doc,\")",
-      "mcp__e813776e-7a16-4f45-9bf0-683a36397a69__get_overview"
+      "mcp__e813776e-7a16-4f45-9bf0-683a36397a69__get_overview",
+      "mcp__dasarang-class__edit_content_html",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "mcp__dasarang-class__update_resource"
     ]
   }
 }
