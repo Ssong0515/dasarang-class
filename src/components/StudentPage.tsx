@@ -15,7 +15,7 @@ import {
 import { Classroom, LessonCategory, LessonContent, PublishedLesson } from '../types';
 import { resolveAppPath } from '../utils/appPaths';
 import { StudentContentCard, StudentContentPreviewFrame } from './StudentContentPreview';
-import { StudentVoiceButton } from './StudentVoiceButton';
+import { StudentVoiceButton, VOICE_LANG_CHANGED_EVENT } from './StudentVoiceButton';
 import { StudentSubtitleOverlay } from './StudentSubtitleOverlay';
 import {
   getClassroomCardColors,
@@ -102,7 +102,10 @@ const END_NOTICE_LANGS: { code: string; label: string; dir?: 'rtl' | 'ltr'; titl
 // 실습 타이머 만료 후 전환 카드를 보여주는 시간 — 이 시간이 지나면(늦게 접속한 학생 포함) 카드가 뜨지 않는다.
 const TIMER_NOTICE_MAX_AGE_MS = 2 * 60 * 1000;
 
-// 실습 타이머 만료 전환 카드 — 실습이 잠기는 순간 전원에게 같은 신호. 여러 나라 학생이라 언어를 순환 표시한다.
+// 실습 타이머 만료 전환 카드 — 실습이 잠기는 순간 전원에게 같은 신호.
+// 우하단 언어 버튼(StudentVoiceButton)으로 언어를 고른 학생에겐 그 언어로 바로 고정해 띄우고,
+// 안 고른 학생에겐(언어를 특정할 수 없어) 종전처럼 몇 초마다 순환 표시한다.
+// code는 StudentVoiceButton의 iso와 같은 값이어야 고정 매칭이 된다(ko 포함, 'off'는 순환 폴백).
 const TIMER_NOTICE_LANGS: { code: string; label: string; dir?: 'rtl' | 'ltr'; title: string; line: string }[] = [
   { code: 'ko', label: '한국어', title: '실습 시간 끝!', line: '이제 선생님 화면을 보세요 👀' },
   { code: 'ru', label: 'Русский', title: 'Время вышло!', line: 'Теперь посмотрите на экран учителя 👀' },
@@ -110,7 +113,23 @@ const TIMER_NOTICE_LANGS: { code: string; label: string; dir?: 'rtl' | 'ltr'; ti
   { code: 'zh', label: '中文', title: '练习时间到！', line: '现在请看老师的屏幕 👀' },
   { code: 'en', label: 'English', title: "Time's up!", line: "Now look at the teacher's screen 👀" },
   { code: 'ur', label: 'اردو', dir: 'rtl', title: 'مشق کا وقت ختم!', line: 'اب استاد کی اسکرین دیکھیں 👀' },
+  { code: 'tl', label: 'Tagalog', title: 'Tapos na ang oras!', line: 'Tingnan na ang screen ng guro 👀' },
 ];
+
+// 학생이 우하단 언어 버튼(StudentVoiceButton)에서 고른 언어(iso) — 같은 localStorage 키를 공유한다
+// (StudentSubtitleOverlay와 같은 패턴). 만료 정리는 StudentVoiceButton이 마운트 시 해 준다.
+const VOICE_LANG_STORAGE_KEY = 'dsr_voice_lang';
+const readStudentVoiceIso = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(VOICE_LANG_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { iso?: unknown };
+    return typeof parsed?.iso === 'string' && parsed.iso ? parsed.iso : null;
+  } catch {
+    return null;
+  }
+};
 
 interface StudentPageProps {
   onBackToAdmin?: () => void;
@@ -597,14 +616,34 @@ export const StudentPage: React.FC<StudentPageProps> = ({
     return () => clearInterval(id);
   }, [needsTimerTick]);
 
-  // 전환 카드가 떠 있는 동안 언어를 순환한다(종료 안내와 같은 패턴).
+  // 전환 카드 언어 — 학생이 언어 버튼으로 고른 언어가 카드에 있으면 그 언어로 바로 고정해 띄운다
+  // (실습 병기 번역·교사 자막과 같은 감각). 미선택·자막 끄기('off') 등 카드에 없는 언어면
+  // 종전대로 몇 초마다 순환한다(종료 안내와 같은 패턴). 카드가 떠 있는 중에 언어를 바꿔도 즉시 따라간다.
   useEffect(() => {
     if (!isTimerNoticeOpen) return;
-    setTimerNoticeLang(0);
-    const id = setInterval(() => {
-      setTimerNoticeLang((i) => (i + 1) % TIMER_NOTICE_LANGS.length);
-    }, 3500);
-    return () => clearInterval(id);
+    let intervalId: number | null = null;
+    const applyLang = () => {
+      if (intervalId !== null) {
+        window.clearInterval(intervalId);
+        intervalId = null;
+      }
+      const iso = readStudentVoiceIso();
+      const pinnedIndex = iso ? TIMER_NOTICE_LANGS.findIndex((l) => l.code === iso) : -1;
+      if (pinnedIndex >= 0) {
+        setTimerNoticeLang(pinnedIndex);
+        return;
+      }
+      setTimerNoticeLang(0);
+      intervalId = window.setInterval(() => {
+        setTimerNoticeLang((i) => (i + 1) % TIMER_NOTICE_LANGS.length);
+      }, 3500);
+    };
+    applyLang();
+    window.addEventListener(VOICE_LANG_CHANGED_EVENT, applyLang);
+    return () => {
+      if (intervalId !== null) window.clearInterval(intervalId);
+      window.removeEventListener(VOICE_LANG_CHANGED_EVENT, applyLang);
+    };
   }, [isTimerNoticeOpen]);
 
   const getAssignedContentIdsForClassroom = (_classroom?: Classroom) =>
