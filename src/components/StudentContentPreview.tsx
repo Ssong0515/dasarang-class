@@ -329,7 +329,6 @@ const iframeTranslateScriptTag = `
       root = document.createElement('div');
       root.id = 'dsr-tr';
       root.setAttribute('data-dsr-skip', '1');
-      root.style.top = '46px'; // 검토 화면 전용 UI — ⏭ 건너뛰기 배지(우상단)와 겹침 방지
       document.body.appendChild(root);
     }
     // 접힌 🌐 원형 버튼 + 눌렀을 때만 열리는 패널 — 교사 검토 화면 전용(강사가 사전 번역을 확인).
@@ -577,22 +576,11 @@ const injectIframeMarkup = (html: string, styleTag: string, scriptTag: string) =
   return nextHtml;
 };
 
-// 교사 검토 화면(대시보드·콘텐츠 라이브러리 미리보기)에서만 head에 주입되는 검토 브리지.
-// 학생 화면에는 절대 주입하지 않는다. 실습 HTML은 버튼을 직접 만들지 않고
-// window.__reviewSkip = () => { ...다음 단계로... } 한 줄만 정의하면, 프레임의 공용
-// ⏭ 버튼이 postMessage로 그 훅을 호출한다. 훅이 없는 콘텐츠에는 버튼이 안 뜬다.
-const reviewBridgeScriptTag = `<script>
-window.__DASA_REVIEW__=true;
-(function(){
-  function report(){
-    try{parent.postMessage({type:'dasa-review-skip-available',available:typeof window.__reviewSkip==='function'},'*');}catch(e){}
-  }
-  window.addEventListener('message',function(e){
-    if(e.data&&e.data.type==='dasa-review-skip'&&typeof window.__reviewSkip==='function'){try{window.__reviewSkip();}catch(err){}}
-  });
-  window.addEventListener('load',function(){report();setTimeout(report,800);});
-})();
-</script>`;
+// 교사 검토 화면(대시보드·콘텐츠 라이브러리 미리보기)에서만 head에 주입되는 검토 플래그.
+// 학생 화면에는 절대 주입하지 않는다. 번역 엔진이 이 값으로 수동 🌐 버튼을 띄운다.
+// (⏭ 건너뛰기 버튼·window.__reviewSkip 훅은 2026-07-18 폐지 — 미리보기 모달의 ◀ ▶ 콘텐츠
+// 이동으로 충분해졌다. 기존 콘텐츠에 남은 훅은 아무도 호출하지 않아 무해.)
+const reviewFlagScriptTag = `<script>window.__DASA_REVIEW__=true;</script>`;
 
 export const buildResponsiveSrcDoc = (
   html: string,
@@ -613,9 +601,9 @@ export const buildResponsiveSrcDoc = (
     : ENABLE_INLINE_TRANSLATE
       ? iframeTranslateScriptTag
       : '';
-  // 브리지는 실습 <script>보다 먼저 실행돼야 하므로 head 쪽에 넣는다.
+  // 플래그는 실습 <script>보다 먼저 실행돼야 하므로 head 쪽에 넣는다.
   const headTags =
-    (options?.review && !options?.annotate ? reviewBridgeScriptTag : '') + iframeResponsiveStyleTag;
+    (options?.review && !options?.annotate ? reviewFlagScriptTag : '') + iframeResponsiveStyleTag;
 
   // 문서 '시작'이 doctype/html/body일 때만 완전한 문서로 취급한다. 문서 전체에서 <body> 등을
   // 찾으면 실습 <script>가 문자열로 조립하는 태그 모양 텍스트(저장용 문서 등)에 오판해서,
@@ -644,9 +632,9 @@ interface StudentContentPreviewFrameProps {
   title: string;
   autoHeight?: boolean;
   className?: string;
-  /** 교사 검토 화면에서 true — 검토 브리지를 주입하고, 콘텐츠가 __reviewSkip 훅을 정의하면 공용 ⏭ 버튼을 띄운다.
-   *  번역도 이 값을 따른다: true면 실습 안 수동 🌐 번역 버튼을 띄우고 자동 번역을 끈다(원문 검토용),
-   *  false(학생 화면·학생 화면 미리보기)면 버튼 없이 우하단 언어 버튼(localStorage/postMessage)을 따라 자동 치환. */
+  /** 교사 검토 화면에서 true — 번역이 이 값을 따른다: true면 실습 안 수동 🌐 번역 버튼을 띄우고
+   *  자동 번역을 끈다(원문 검토용), false(학생 화면·학생 화면 미리보기)면 버튼 없이
+   *  우하단 언어 버튼(localStorage/postMessage)을 따라 자동 치환. */
   reviewMode?: boolean;
 }
 
@@ -658,7 +646,6 @@ export const StudentContentPreviewFrame: React.FC<StudentContentPreviewFrameProp
   reviewMode = false,
 }) => {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const [skipAvailable, setSkipAvailable] = useState(false);
   const srcDoc = buildResponsiveSrcDoc(html, { review: reviewMode });
 
   useEffect(() => {
@@ -682,30 +669,6 @@ export const StudentContentPreviewFrame: React.FC<StudentContentPreviewFrameProp
     return () => window.removeEventListener('message', handleIframeHeightMessage);
   }, [autoHeight]);
 
-  useEffect(() => {
-    if (!reviewMode) {
-      return;
-    }
-
-    const handleSkipAvailableMessage = (event: MessageEvent) => {
-      if (event.data?.type !== 'dasa-review-skip-available' || !iframeRef.current) {
-        return;
-      }
-      if (iframeRef.current.contentWindow && event.source !== iframeRef.current.contentWindow) {
-        return;
-      }
-      setSkipAvailable(Boolean(event.data.available));
-    };
-
-    window.addEventListener('message', handleSkipAvailableMessage);
-    return () => window.removeEventListener('message', handleSkipAvailableMessage);
-  }, [reviewMode]);
-
-  // srcDoc이 바뀌면(핫리로드) iframe이 새로 뜨므로 지원 여부도 다시 보고받는다.
-  useEffect(() => {
-    setSkipAvailable(false);
-  }, [srcDoc]);
-
   // 학생이 음성 버튼에서 언어를 바꾸면 iframe 안 번역 스크립트에 전달해 실습 병기 번역도 같은 언어로 맞춘다.
   // (iframe 로드 시점의 초기 언어는 스크립트가 localStorage에서 직접 읽는다 — 여기는 '변경'만 중계.)
   useEffect(() => {
@@ -718,7 +681,7 @@ export const StudentContentPreviewFrame: React.FC<StudentContentPreviewFrameProp
     return () => window.removeEventListener(VOICE_LANG_CHANGED_EVENT, handleVoiceLangChanged);
   }, []);
 
-  const iframeElement = (
+  return (
     <iframe
       ref={iframeRef}
       srcDoc={srcDoc}
@@ -747,29 +710,6 @@ export const StudentContentPreviewFrame: React.FC<StudentContentPreviewFrameProp
         }
       } : undefined}
     />
-  );
-
-  if (!reviewMode) {
-    return iframeElement;
-  }
-
-  // 검토 모드: 콘텐츠 위에 공용 컨트롤을 얹기 위해 relative 래퍼로 감싼다.
-  // 래퍼가 기존 className(폭·높이)을 이어받고 iframe이 래퍼를 가득 채운다.
-  return (
-    <div className={`relative ${className}`.trim()}>
-      {React.cloneElement(iframeElement, { className: 'h-full w-full' })}
-      {skipAvailable && (
-        <button
-          type="button"
-          onClick={() =>
-            iframeRef.current?.contentWindow?.postMessage({ type: 'dasa-review-skip' }, '*')
-          }
-          className="absolute right-2 top-2 z-10 rounded-lg bg-black/55 px-2.5 py-1.5 text-xs font-bold text-white shadow transition-all hover:bg-black/75"
-        >
-          ⏭ 건너뛰기
-        </button>
-      )}
-    </div>
   );
 };
 

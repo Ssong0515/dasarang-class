@@ -119,6 +119,10 @@ const TIMER_NOTICE_LANGS: { code: string; label: string; dir?: 'rtl' | 'ltr'; ti
   { code: 'tl', label: 'Tagalog', title: 'Tapos na ang oras!', line: 'Tingnan na ang screen ng guro 👀' },
 ];
 
+// 실습 완료 기록(localStorage 키 접두) — 실습 HTML이 완료 화면에서 보내는 {type:'dasa-practice-done'}
+// postMessage를 콘텐츠 id별로 남긴다. 새로고침해도 ◀ ▶ 이동 권한이 유지되게 하기 위함(기기 로컬).
+const PRACTICE_DONE_STORAGE_PREFIX = 'dsr_practice_done:';
+
 // 학생이 우하단 언어 버튼(StudentVoiceButton)에서 고른 언어(iso) — 같은 localStorage 키를 공유한다
 // (StudentSubtitleOverlay와 같은 패턴). 만료 정리는 StudentVoiceButton이 마운트 시 해 준다.
 const VOICE_LANG_STORAGE_KEY = 'dsr_voice_lang';
@@ -355,6 +359,11 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   // 학생은 ◀ ▶·번호 칩으로 공개된 페이지 안에서 자유롭게 앞뒤로 오갈 수 있다.
   const [currentPageId, setCurrentPageId] = useState<string | null>(null);
   const prevPageIdsRef = useRef<string[] | null>(null);
+  // 이 학생이 완료 화면까지 간(=다 끝낸) 실습 콘텐츠 id들. ◀ ▶·번호 칩은 공개된 실습을
+  // 전부 끝낸 학생에게만 열린다(그 전에는 교사 따라가기로만 이동).
+  const [completedContentIds, setCompletedContentIds] = useState<ReadonlySet<string>>(
+    () => new Set()
+  );
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [contentDropdownPosition, setContentDropdownPosition] = useState<ContentDropdownPosition | null>(null);
   // 강사 미리보기 전용: 이 날짜 기준으로 '공개된 실습'을 본다. 실제 학생(isAdmin=false)은 항상 실제 오늘만 본다.
@@ -625,6 +634,53 @@ export const StudentPage: React.FC<StudentPageProps> = ({
     );
   }, [unlockedPageIdsKey]);
 
+  // 완료 기록 복원 — 새로고침해도 이미 끝낸 실습은 localStorage에서 되살린다.
+  useEffect(() => {
+    const currentIds = unlockedPageIdsKey ? unlockedPageIdsKey.split('|') : [];
+    const stored = currentIds.filter((contentId) => {
+      try {
+        return window.localStorage.getItem(`${PRACTICE_DONE_STORAGE_PREFIX}${contentId}`) === '1';
+      } catch {
+        return false;
+      }
+    });
+    if (stored.length === 0) return;
+    setCompletedContentIds((prev) => {
+      if (stored.every((contentId) => prev.has(contentId))) return prev;
+      const next = new Set(prev);
+      stored.forEach((contentId) => next.add(contentId));
+      return next;
+    });
+  }, [unlockedPageIdsKey]);
+
+  // 완료 신호 수신 — 실습 HTML이 완료 화면에서 {type:'dasa-practice-done'}을 postMessage로 보낸다.
+  // 화면에 떠 있는 실습 iframe은 현재 페이지 하나뿐이라 currentPageId(ref)로 어느 실습인지 정한다.
+  const currentPageIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    currentPageIdRef.current = currentPageId;
+  }, [currentPageId]);
+  useEffect(() => {
+    const handlePracticeDone = (event: MessageEvent) => {
+      const data = event.data as { type?: unknown } | null;
+      if (!data || data.type !== 'dasa-practice-done') return;
+      const contentId = currentPageIdRef.current;
+      if (!contentId) return;
+      try {
+        window.localStorage.setItem(`${PRACTICE_DONE_STORAGE_PREFIX}${contentId}`, '1');
+      } catch {
+        /* 저장 실패해도 이번 세션 상태로는 동작 */
+      }
+      setCompletedContentIds((prev) => {
+        if (prev.has(contentId)) return prev;
+        const next = new Set(prev);
+        next.add(contentId);
+        return next;
+      });
+    };
+    window.addEventListener('message', handlePracticeDone);
+    return () => window.removeEventListener('message', handlePracticeDone);
+  }, []);
+
   // ◀ ▶ 페이지 이동 — 잠긴(타이머 만료) 페이지는 건너뛴다.
   const movePage = (direction: 1 | -1) => {
     let index = currentPageIndex >= 0 ? currentPageIndex : direction === 1 ? -1 : practicePages.length;
@@ -641,6 +697,14 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   const hasUnlockedAfter =
     currentPageIndex >= 0 &&
     practicePages.some((page, index) => index > currentPageIndex && !page.locked);
+  // ◀ ▶·번호 칩은 '다 끝낸 학생'에게만 — 공개 중(잠기지 않은) 실습을 전부 완료해야 열린다.
+  // 예제(kind:reference)는 완료 개념이 없어 제외, 잠긴 실습은 더 할 수 없어 제외.
+  // 아직인 학생은 교사 따라가기(새 공개 시 자동 이동)로만 움직인다. 강사 미리보기는 항상 보인다.
+  const hasFinishedAllPractices = practicePages.every(
+    (page) =>
+      page.locked || page.content.kind === 'reference' || completedContentIds.has(page.content.id)
+  );
+  const showPageNav = practicePages.length > 1 && (Boolean(isAdmin) || hasFinishedAllPractices);
   // 화면에 띄울 카운트다운 — 아직 안 끝난(공개 중) 타이머 중 가장 빨리 끝나는 것.
   const runningTimerEndsAt =
     Object.entries(activePracticeTimers)
@@ -1230,7 +1294,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
                 <div
                   className={`flex min-h-0 flex-1 flex-col gap-2 ${isSplitView ? 'lg:basis-1/2' : ''}`}
                 >
-                  {practicePages.length > 1 && (
+                  {showPageNav && (
                     <div className="flex flex-wrap items-center justify-center gap-1.5 rounded-2xl border border-[#E5E3DD] bg-white px-3 py-2 shadow-sm">
                       <button
                         type="button"
