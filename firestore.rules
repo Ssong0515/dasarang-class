@@ -306,10 +306,12 @@ service cloud.firestore {
              data.koreanText is string && data.koreanText.size() < 5000 &&
              data.translationOk is bool &&
              data.createdAt is string &&
-             (!('classroomName' in data) || data.classroomName is string);
+             (!('classroomName' in data) || data.classroomName is string) &&
+             (!('kind' in data) || data.kind in ['voice', 'text']);
     }
 
     // 외국인 학생이 말한 걸 한국어로 번역해 강사에게 보내는 실시간 채팅.
+    // kind 'text'는 학생 채팅 패널에서 타이핑해 보낸 메시지(제출 링크 등) — 권한 모델은 음성과 동일.
     // 공용 학생 계정이 create, 읽기·수정·삭제는 강사(관리자)만 — 학생끼리 서로 못 읽는다.
     match /studentVoiceMessages/{messageId} {
       allow create: if canReadStudentPage() && isValidStudentVoiceMessage(request.resource.data);
@@ -330,10 +332,12 @@ service cloud.firestore {
              data.koreanText is string && data.koreanText.size() > 0 && data.koreanText.size() < 5000 &&
              data.translations is map &&
              data.createdAt is string &&
-             (!('classroomName' in data) || data.classroomName is string);
+             (!('classroomName' in data) || data.classroomName is string) &&
+             (!('kind' in data) || data.kind in ['subtitle', 'chat']);
     }
 
     // 교사가 한국어로 말한 걸 출석 학생 언어로 번역해 학생 자막으로 뿌리는 실시간 방송 — studentVoiceMessages와 방향이 반대다.
+    // kind 'chat'은 교사 채팅 입력창에서 보낸 메시지 — 자막 대신 학생 채팅 패널에 영구 표시된다(권한 모델 동일).
     // 강사(관리자)만 create/update/delete, 학생(공용 계정)은 read만(반 구분은 클라이언트 쿼리로 — publishedLessons와 같은 방식).
     match /teacherBroadcastMessages/{messageId} {
       allow read: if canReadStudentPage();

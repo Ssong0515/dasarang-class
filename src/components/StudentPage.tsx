@@ -19,6 +19,7 @@ import { resolveAppPath } from '../utils/appPaths';
 import { StudentContentCard, StudentContentPreviewFrame } from './StudentContentPreview';
 import { StudentVoiceButton, VOICE_LANG_CHANGED_EVENT } from './StudentVoiceButton';
 import { StudentSubtitleOverlay } from './StudentSubtitleOverlay';
+import { StudentChatPanel } from './StudentChatPanel';
 import {
   getClassroomCardColors,
   getClassroomIconComponent,
@@ -1491,6 +1492,16 @@ export const StudentPage: React.FC<StudentPageProps> = ({
           classroomName={effectiveClassroom?.name}
           date={gatingDateString}
           endNoticeAt={activeEndNoticeAt}
+        />
+      )}
+
+      {/* 선생님과 텍스트 채팅 FAB — 언어 FAB 왼쪽 옆. 교사가 보낸 링크를 열거나 제출 링크를 보낸다.
+          음성 버튼과 같은 이유로 강사 미리보기에서는 감춘다. */}
+      {!isAdmin && (
+        <StudentChatPanel
+          classroomId={effectiveClassroom?.id}
+          classroomName={effectiveClassroom?.name}
+          date={gatingDateString}
         />
       )}
 

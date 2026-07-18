@@ -79,7 +79,8 @@ const ensureMic = async (): Promise<boolean> => {
 // 방송 번역 대상 — 출석 기록·학생 프로필과 무관하게 항상 '지원 언어 전부 + 한국어'.
 // 학생이 어떤 언어를 골라도(또는 출석 체크 전이라도) 즉시 그 언어 자막이 나오게 한다.
 // 온디바이스 번역이라 비용이 없고, 언어별 8초 타임아웃 폴백이 있어 발화당 병렬 번역 부담도 작다.
-const BROADCAST_TARGET_CODES = ['ko', ...VOICE_LANG_OPTIONS.map((option) => option.iso)];
+// TeacherVoiceChat의 채팅 전송도 같은 대상으로 번역하므로 export해 공유한다.
+export const BROADCAST_TARGET_CODES = ['ko', ...VOICE_LANG_OPTIONS.map((option) => option.iso)];
 
 // 긴 발화를 자막 크기로 끊어 보내기 위한 임계값. 교사가 쉼표 없이 길게 말해도 아래 조건이면 강제로 끊어 확정·전송하고 이어서 다시 인식한다.
 const MAX_INTERIM_CHARS = 60; // 확정 안 된 미리보기가 이 글자 수를 넘으면 끊는다.

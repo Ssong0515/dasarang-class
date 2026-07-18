@@ -415,6 +415,8 @@ export interface StudentVoiceMessage {
   koreanText: string;   // 번역 결과; 번역 불가 시 sourceText와 동일
   translationOk: boolean;
   createdAt: string;    // ISO 문자열
+  /** 'text' = 학생이 채팅 입력창으로 타이핑해 보낸 메시지(제출 링크 등). 없으면 기존 음성(STT) 메시지. */
+  kind?: 'voice' | 'text';
 }
 
 /**
@@ -431,6 +433,8 @@ export interface TeacherBroadcastMessage {
   /** 그 시점 출석 언어만 번역해 담는다. 예: { ru: '...', vi: '...' }. 번역 불가 언어는 한국어 원문으로 폴백될 수 있다. */
   translations: Record<string, string>;
   createdAt: string;     // ISO 문자열
+  /** 'chat' = 교사가 채팅 입력창으로 보낸 메시지 — 자막으로 흘리지 않고 학생 채팅 패널에 영구 표시. 없으면 기존 음성 자막 방송. */
+  kind?: 'subtitle' | 'chat';
 }
 
 export interface AccessLog {

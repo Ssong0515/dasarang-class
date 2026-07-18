@@ -1144,6 +1144,8 @@ export default function App() {
                 : '',
             translationOk: typeof data.translationOk === 'boolean' ? data.translationOk : true,
             createdAt: typeof data.createdAt === 'string' ? data.createdAt : '',
+            // 'text' = 학생 채팅 입력창에서 타이핑한 메시지 — TeacherVoiceChat이 언어 라벨 대신 입력 칩을 보여준다.
+            kind: data.kind === 'text' ? ('text' as const) : undefined,
           } satisfies StudentVoiceMessage;
         });
         setVoiceMessages(voiceData);
@@ -2290,6 +2292,8 @@ export default function App() {
         <TeacherVoiceChat
           messages={voiceMessages}
           activeClassroomId={activeClassroomId || undefined}
+          activeClassroomName={activeClassroom?.name}
+          date={broadcastTodayString}
         />
       )}
       {/* 교사 실시간 통역 자막 방송 토글 — 로그인한 강사에게 항상 띄운다.

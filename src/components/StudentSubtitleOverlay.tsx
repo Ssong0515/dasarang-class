@@ -57,7 +57,8 @@ const pickSubtitle = (message: TeacherBroadcastMessage): SubtitleText | null => 
   return korean ? { primary: korean, korean: null } : null;
 };
 
-const normalizeBroadcastDoc = (id: string, data: Partial<TeacherBroadcastMessage>): TeacherBroadcastMessage => ({
+// TeacherVoiceChat·StudentChatPanel(채팅)도 같은 컬렉션을 구독하므로 정규화를 공유한다.
+export const normalizeBroadcastDoc = (id: string, data: Partial<TeacherBroadcastMessage>): TeacherBroadcastMessage => ({
   id,
   classroomId: typeof data.classroomId === 'string' ? data.classroomId : '',
   classroomName: typeof data.classroomName === 'string' ? data.classroomName : '',
@@ -68,6 +69,7 @@ const normalizeBroadcastDoc = (id: string, data: Partial<TeacherBroadcastMessage
       ? (data.translations as Record<string, string>)
       : {},
   createdAt: typeof data.createdAt === 'string' ? data.createdAt : '',
+  kind: data.kind === 'chat' ? 'chat' : undefined,
 });
 
 export interface StudentSubtitleOverlayProps {
@@ -94,9 +96,13 @@ export const StudentSubtitleOverlay: React.FC<StudentSubtitleOverlayProps> = ({ 
       broadcastQuery,
       (snapshot) => {
         if (snapshot.empty) return;
-        const messages = snapshot.docs.map((docSnap) =>
-          normalizeBroadcastDoc(docSnap.id, docSnap.data() as Partial<TeacherBroadcastMessage>)
-        );
+        const messages = snapshot.docs
+          .map((docSnap) =>
+            normalizeBroadcastDoc(docSnap.id, docSnap.data() as Partial<TeacherBroadcastMessage>)
+          )
+          // 채팅 메시지(kind 'chat')는 학생 채팅 패널(StudentChatPanel)이 영구 표시한다 — 자막으로는 흘리지 않는다.
+          .filter((message) => message.kind !== 'chat');
+        if (messages.length === 0) return;
         const newest = messages.reduce((latest, candidate) =>
           candidate.createdAt > latest.createdAt ? candidate : latest
         );

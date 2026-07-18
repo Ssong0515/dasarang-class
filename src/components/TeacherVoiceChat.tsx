@@ -1,8 +1,23 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { History, MessageCircle, X } from 'lucide-react';
-import type { StudentVoiceMessage } from '../types';
+import { History, Keyboard, MessageCircle, Send, X } from 'lucide-react';
+import {
+  db,
+  collection,
+  addDoc,
+  query,
+  where,
+  onSnapshot,
+  handleFirestoreError,
+  OperationType,
+} from '../firebase';
+import type { StudentVoiceMessage, TeacherBroadcastMessage } from '../types';
+import { TEACHER_BROADCAST_MESSAGES_COLLECTION } from '../utils/classroomDomain';
 import { VOICE_LANG_OPTIONS } from './StudentVoiceButton';
+import { BROADCAST_TARGET_CODES } from './TeacherBroadcastButton';
+import { normalizeBroadcastDoc } from './StudentSubtitleOverlay';
+import { translateFromKorean } from '../utils/translateFromKorean';
+import { LinkifiedText, containsUrl } from './LinkifiedText';
 
 // STT BCP-47(sourceLang) → 자기 문자 표기 라벨. 없으면 원본 코드를 그대로 쓴다.
 const labelForSourceLang = (sourceLang: string): string => {
@@ -49,14 +64,24 @@ const writeSeenAt = (iso: string): void => {
   }
 };
 
+// 학생 메시지(음성·타이핑)와 교사가 보낸 채팅을 한 스레드로 섞어 그리기 위한 항목.
+type ThreadEntry =
+  | { side: 'student'; key: string; createdAt: string; student: StudentVoiceMessage }
+  | { side: 'teacher'; key: string; createdAt: string; teacher: TeacherBroadcastMessage };
+
 export interface TeacherVoiceChatProps {
   messages: StudentVoiceMessage[];
   activeClassroomId?: string;
+  activeClassroomName?: string;
+  /** 오늘 날짜('YYYY-MM-DD', 로컬) — 교사 채팅 구독·전송에 쓴다. 학생 쪽 날짜 규칙과 동일해야 한다. */
+  date: string;
 }
 
 export const TeacherVoiceChat: React.FC<TeacherVoiceChatProps> = ({
   messages,
   activeClassroomId,
+  activeClassroomName,
+  date,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   // 기본은 '새 메시지'만 보여주고, 헤더의 시계(히스토리) 버튼으로 오늘 전체를 오간다.
@@ -64,17 +89,43 @@ export const TeacherVoiceChat: React.FC<TeacherVoiceChatProps> = ({
   // 마지막으로 확인한 메시지의 createdAt. 이보다 뒤에 온 메시지 수 = 안읽음.
   // localStorage에서 초기화해 새로고침해도 "봤음" 상태가 유지된다.
   const [seenAt, setSeenAt] = useState<string>(() => readSeenAt());
+  // 내가(교사가) 오늘 보낸 채팅 — 학생 메시지와 한 스레드로 섞어 보여준다.
+  const [teacherChats, setTeacherChats] = useState<TeacherBroadcastMessage[]>([]);
+  const [draft, setDraft] = useState('');
+  const [sending, setSending] = useState(false);
   // 패널을 '이번에 연 시점'의 seenAt 기준선. 열려 있는 동안 seenAt이 최신으로 갱신돼도
   // 이 기준선보다 뒤에 온 메시지는 계속 '새 메시지'로 보인다(열자마자 목록이 비는 것 방지).
   const openBaselineRef = useRef<string>('');
   const listRef = useRef<HTMLDivElement | null>(null);
 
-  // 오래된→최신 정렬. activeClassroomId가 있으면 해당 반을 뒤(가까운 곳)로 안정 정렬해 살짝 강조하되 전부 보여준다.
+  // 교사 채팅 구독 — 자막 방송과 같은 컬렉션에서 kind 'chat'만 골라낸다.
+  // 등호 필터 1개뿐이라 복합 색인 없이 동작한다(자막 오버레이와 동일 규칙, kind 분리는 클라이언트에서).
+  useEffect(() => {
+    const chatQuery = query(
+      collection(db, TEACHER_BROADCAST_MESSAGES_COLLECTION),
+      where('date', '==', date)
+    );
+    const unsubscribe = onSnapshot(
+      chatQuery,
+      (snapshot) => {
+        const chats = snapshot.docs
+          .map((docSnap) =>
+            normalizeBroadcastDoc(docSnap.id, docSnap.data() as Partial<TeacherBroadcastMessage>)
+          )
+          .filter((message) => message.kind === 'chat');
+        setTeacherChats(chats);
+      },
+      (error) =>
+        handleFirestoreError(error, OperationType.LIST, TEACHER_BROADCAST_MESSAGES_COLLECTION)
+    );
+    return () => unsubscribe();
+  }, [date]);
+
+  // 오래된→최신 정렬(학생 메시지만) — 안읽음 뱃지·'봤음' 기준선 계산용.
   const ordered = useMemo(() => {
-    const sorted = [...messages].sort(
+    return [...messages].sort(
       (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
     );
-    return sorted;
   }, [messages]);
 
   const total = ordered.length;
@@ -84,11 +135,30 @@ export const TeacherVoiceChat: React.FC<TeacherVoiceChatProps> = ({
     ? 0
     : ordered.reduce((n, m) => (m.createdAt > seenAt ? n + 1 : n), 0);
 
+  // 학생 메시지 + 내 채팅을 시간순 한 스레드로 합친다.
+  const thread = useMemo<ThreadEntry[]>(() => {
+    const entries: ThreadEntry[] = [
+      ...messages.map((message) => ({
+        side: 'student' as const,
+        key: `s_${message.id}`,
+        createdAt: message.createdAt,
+        student: message,
+      })),
+      ...teacherChats.map((message) => ({
+        side: 'teacher' as const,
+        key: `t_${message.id}`,
+        createdAt: message.createdAt,
+        teacher: message,
+      })),
+    ];
+    return entries.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }, [messages, teacherChats]);
+
   // '새 메시지' 뷰 = 이번에 열었을 때 기준선(openBaseline) 이후 도착분만. 히스토리 뷰 = 오늘 전체.
-  const visibleMessages =
+  const visibleEntries =
     view === 'history'
-      ? ordered
-      : ordered.filter((message) => message.createdAt > openBaselineRef.current);
+      ? thread
+      : thread.filter((entry) => entry.createdAt > openBaselineRef.current);
 
   // 열려 있으면 현재 최신까지 확인한 것으로 간주하고 영구 저장. (열려 있는 동안 새로 와도 계속 갱신)
   useEffect(() => {
@@ -103,7 +173,43 @@ export const TeacherVoiceChat: React.FC<TeacherVoiceChatProps> = ({
     if (isOpen && listRef.current) {
       listRef.current.scrollTop = listRef.current.scrollHeight;
     }
-  }, [visibleMessages.length, view, isOpen]);
+  }, [visibleEntries.length, view, isOpen]);
+
+  // 채팅 전송 — 오늘 학생 화면 전체로 나간다(자막 방송과 같은 날짜 단위 전달, 반 정보는 메타데이터).
+  // 학생 채팅 패널이 자기 언어 병기로 보여줄 수 있게 자막과 같은 대상으로 번역해 담는다.
+  const handleSendChat = useCallback(
+    async (event: React.FormEvent) => {
+      event.preventDefault();
+      const text = draft.trim();
+      if (!text || sending) return;
+      setSending(true);
+      try {
+        // URL이 든 메시지는 번역하지 않는다 — 기계번역이 주소를 변형해 링크가 깨질 수 있다.
+        const translations = containsUrl(text)
+          ? {}
+          : await translateFromKorean(text, BROADCAST_TARGET_CODES);
+        await addDoc(collection(db, TEACHER_BROADCAST_MESSAGES_COLLECTION), {
+          classroomId: activeClassroomId ?? '',
+          classroomName: activeClassroomName ?? '',
+          date,
+          koreanText: text,
+          translations,
+          kind: 'chat',
+          createdAt: new Date().toISOString(),
+        });
+        setDraft('');
+      } catch (error) {
+        try {
+          handleFirestoreError(error, OperationType.CREATE, TEACHER_BROADCAST_MESSAGES_COLLECTION);
+        } catch {
+          /* 전송 실패 — 입력을 남겨 다시 보낼 수 있게 한다 */
+        }
+      } finally {
+        setSending(false);
+      }
+    },
+    [draft, sending, activeClassroomId, activeClassroomName, date]
+  );
 
   if (!isOpen) {
     return (
@@ -116,7 +222,7 @@ export const TeacherVoiceChat: React.FC<TeacherVoiceChatProps> = ({
             setView('new');
             setIsOpen(true);
           }}
-          aria-label="학생 음성 채팅 열기"
+          aria-label="수업 채팅 열기"
           className="relative flex h-14 w-14 items-center justify-center rounded-full bg-[#8B5E3C] text-white shadow-lg transition-transform hover:scale-105"
         >
           <MessageCircle className="h-6 w-6" />
@@ -136,7 +242,7 @@ export const TeacherVoiceChat: React.FC<TeacherVoiceChatProps> = ({
         <div className="flex items-center gap-2">
           <MessageCircle className="h-4 w-4" />
           <span className="text-sm font-semibold">
-            {view === 'history' ? '학생 음성 · 오늘 전체' : '학생 음성 · 새 메시지'}
+            {view === 'history' ? '수업 채팅 · 오늘 전체' : '수업 채팅 · 새 메시지'}
           </span>
         </div>
         <div className="flex items-center gap-1">
@@ -163,11 +269,11 @@ export const TeacherVoiceChat: React.FC<TeacherVoiceChatProps> = ({
         </div>
       </div>
 
-      <div ref={listRef} className="flex max-h-[60vh] flex-col gap-2 overflow-y-auto p-3">
-        {visibleMessages.length === 0 ? (
+      <div ref={listRef} className="flex max-h-[55vh] flex-col gap-2 overflow-y-auto p-3">
+        {visibleEntries.length === 0 ? (
           <p className="py-8 text-center text-sm text-[#A89F94]">
             {view === 'history' ? (
-              '아직 온 음성 메시지가 없어요.'
+              '아직 주고받은 메시지가 없어요.'
             ) : (
               <>
                 새로 온 메시지가 없어요.
@@ -180,34 +286,76 @@ export const TeacherVoiceChat: React.FC<TeacherVoiceChatProps> = ({
           </p>
         ) : (
           <AnimatePresence initial={false}>
-            {visibleMessages.map((message) => {
+            {visibleEntries.map((entry) => {
+              if (entry.side === 'teacher') {
+                const message = entry.teacher;
+                return (
+                  <motion.div
+                    key={entry.key}
+                    layout
+                    initial={{ opacity: 0, scale: 0.96, y: 6 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.96 }}
+                    transition={{ duration: 0.18 }}
+                    className="max-w-[85%] self-end rounded-xl rounded-br-sm bg-[#8B5E3C] px-3 py-2 text-white"
+                  >
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="text-[10px] font-semibold text-white/70">나 → 학생 화면</span>
+                      <span className="shrink-0 text-[10px] text-white/50">
+                        {formatTime(message.createdAt)}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 break-words text-sm font-semibold leading-snug" dir="auto">
+                      <LinkifiedText
+                        text={message.koreanText}
+                        linkClassName="break-all font-semibold text-[#FFD9A8] underline underline-offset-2"
+                      />
+                    </p>
+                  </motion.div>
+                );
+              }
+
+              const message = entry.student;
               const highlighted =
                 Boolean(activeClassroomId) && message.classroomId === activeClassroomId;
+              const isTyped = message.kind === 'text';
+              // 타이핑 메시지는 원문=한국어인 경우가 대부분(한국어 입력·URL) — 같은 글을 두 줄로 겹쳐 보이지 않게 한다.
+              const showSourceLine = message.sourceText.trim() !== message.koreanText.trim();
               return (
                 <motion.div
-                  key={message.id}
+                  key={entry.key}
                   layout
                   initial={{ opacity: 0, scale: 0.96, y: 6 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.96 }}
                   transition={{ duration: 0.18 }}
-                  className={`rounded-xl px-3 py-2 ring-1 ${
+                  className={`max-w-[85%] self-start rounded-xl rounded-bl-sm px-3 py-2 ring-1 ${
                     highlighted
                       ? 'bg-[#FFF5E9] ring-[#EADBC8]'
                       : 'bg-[#FBFBFA] ring-[#EFEDE7]'
                   }`}
                 >
                   <div className="flex items-baseline justify-between gap-2">
-                    <span className="truncate text-xs text-[#A89F94]" dir="auto">
-                      {message.sourceText}
-                    </span>
+                    {showSourceLine ? (
+                      <span className="truncate text-xs text-[#A89F94]" dir="auto">
+                        {message.sourceText}
+                      </span>
+                    ) : (
+                      <span />
+                    )}
                     <span className="shrink-0 text-[10px] text-[#C4BBB0]">
                       {formatTime(message.createdAt)}
                     </span>
                   </div>
                   <div className="mt-0.5 flex items-center gap-1.5">
-                    <span className="shrink-0 rounded-full bg-[#F3F2EE] px-1.5 py-0.5 text-[10px] font-semibold text-[#8B7E74]">
-                      ({labelForSourceLang(message.sourceLang)})
+                    <span className="flex shrink-0 items-center gap-1 rounded-full bg-[#F3F2EE] px-1.5 py-0.5 text-[10px] font-semibold text-[#8B7E74]">
+                      {isTyped ? (
+                        <>
+                          <Keyboard className="h-3 w-3" /> 입력
+                        </>
+                      ) : (
+                        <>({labelForSourceLang(message.sourceLang)})</>
+                      )}
                     </span>
                     {message.classroomName && (
                       <span className="truncate text-[10px] text-[#B7AEA3]">
@@ -215,8 +363,8 @@ export const TeacherVoiceChat: React.FC<TeacherVoiceChatProps> = ({
                       </span>
                     )}
                   </div>
-                  <p className="mt-1 text-sm font-bold leading-snug text-[#4A3728]">
-                    {message.koreanText}
+                  <p className="mt-1 break-words text-sm font-bold leading-snug text-[#4A3728]" dir="auto">
+                    <LinkifiedText text={message.koreanText} />
                   </p>
                   {message.translationOk === false && (
                     <p className="mt-0.5 text-[10px] text-[#C08A5A]">(번역 불가 — 원문)</p>
@@ -227,6 +375,26 @@ export const TeacherVoiceChat: React.FC<TeacherVoiceChatProps> = ({
           </AnimatePresence>
         )}
       </div>
+
+      {/* 학생 화면으로 보내는 채팅 입력 — 링크(제출 폼·자료 등)를 붙여 넣으면 학생 채팅 패널에서 바로 클릭해 열 수 있다. */}
+      <form onSubmit={handleSendChat} className="flex items-center gap-2 border-t border-[#F0EDE7] p-2">
+        <input
+          type="text"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder="학생 화면으로 보내기 (링크 가능)"
+          maxLength={2000}
+          className="min-w-0 flex-1 rounded-xl bg-[#F7F5F1] px-3 py-2 text-sm text-[#4A3728] outline-none ring-1 ring-transparent placeholder:text-[#C4BBB0] focus:ring-[#EADBC8]"
+        />
+        <button
+          type="submit"
+          disabled={!draft.trim() || sending}
+          aria-label="학생 화면으로 보내기"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#8B5E3C] text-white transition-opacity disabled:opacity-40"
+        >
+          <Send className="h-4 w-4" />
+        </button>
+      </form>
     </div>
   );
 };
