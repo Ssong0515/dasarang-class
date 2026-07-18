@@ -125,8 +125,12 @@ interface ClassroomDashboardProps {
     classroomId: string,
     classroomName: string,
     date: string,
-    publishedContentIds: string[]
+    publishedContentIds: string[],
+    /** undefined = 이론 공개 상태 유지, null = 이론 잠금, 객체 = 그 이론 슬라이드 공개 */
+    publishedTheory?: { url: string; label?: string } | null
   ) => Promise<void>;
+  /** 이론 슬라이드 학생 공개 전 Drive 권한을 '링크 있는 모든 사용자 보기'로 전환 (결과물 승인과 같은 패턴). */
+  onShareTheorySlide?: (url: string) => Promise<{ ok?: boolean }>;
   /** 수업 종료: 학생 화면을 잠그고 '오늘 수업 끝!' 안내를 모든 학생 화면에 띄운다. */
   onEndLesson?: (classroomId: string, classroomName: string, date: string) => Promise<void>;
   /** 이론 행 동기화 — 반 이론 폴더에서 제목과 맞는 pptx를 구글 슬라이드로 변환해 slideUrl을 돌려준다. */
@@ -496,6 +500,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   onSaveContent,
   onSetContentTimer,
   onUpdatePublishedLesson,
+  onShareTheorySlide,
   onEndLesson,
   onSyncTheorySlide,
   onUpdateClassroom,
@@ -754,13 +759,22 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const recordedPracticeContents = currentDateRecordedContents.filter(
     (content) => Boolean(content.html?.trim()) && !content.slideUrl?.trim()
   );
-  // 예제(참고 자료, kind:reference)는 학생 공개 대상이 아니라 강사 미리보기 전용이다.
-  // 목록에는 그대로 나오되(예제 버튼) 공개 계산·전체공개/잠금 대상에서는 제외한다.
+  // 예제(참고 자료, kind:reference)도 학생에게 공개할 수 있다(학생 화면의 실습칸을 덮는 방식, 한 번에 하나).
+  // 다만 '전체 공개'·공개 카운트 같은 실습 단위 계산에서는 여전히 제외한다(예제는 전용 토글로만).
   const isPublishableContent = (content: LessonContent) => content.kind !== 'reference';
   const publishablePracticeContents = recordedPracticeContents.filter(isPublishableContent);
   const publishedPracticeCount = publishablePracticeContents.filter((content) =>
     publishedContentIdSet.has(content.id)
   ).length;
+  // 학생 화면 페이지 번호 — 공개 목록(publishedContentIds) 순서 그대로 1페이지, 2페이지…로 매겨진다.
+  // 학생 페이지도 같은 목록·같은 순서로 번호를 만들므로 교사가 "N페이지 보세요"라고 부를 수 있다.
+  const publishedPageNumberById = new Map(
+    (currentPublishedLesson?.publishedContentIds || []).map((contentId, index) => [
+      contentId,
+      index + 1,
+    ])
+  );
+  const publishedPageCount = publishedPageNumberById.size;
   const calendarDays = getDaysInMonth(viewMonth);
   const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
   const previewColorMeta = getClassroomColorMeta(settingsDraft.color);
@@ -1418,13 +1432,23 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       window.alert('이론·실습 중 하나는 켜져 있어야 합니다.');
       return;
     }
-    // 실습을 빼는 날은 학생에게 공개돼 있던 실습도 조용히 모두 잠근다.
+    // 실습을 빼는 날은 학생에게 공개돼 있던 실습(예제 포함)도 조용히 모두 잠근다.
     if (
       !next.showPractice &&
       onUpdatePublishedLesson &&
       (currentPublishedLesson?.publishedContentIds?.length ?? 0) > 0
     ) {
       void onUpdatePublishedLesson(classroom.id, classroom.name, selectedDate, []);
+    }
+    // 이론을 빼는 날은 공개 중이던 이론 슬라이드도 잠근다(실습 공개는 유지).
+    if (!next.showTheory && onUpdatePublishedLesson && currentPublishedLesson?.publishedTheory) {
+      void onUpdatePublishedLesson(
+        classroom.id,
+        classroom.name,
+        selectedDate,
+        currentPublishedLesson?.publishedContentIds || [],
+        null
+      );
     }
     onSaveDateRecord({ ...base, ...next });
   };
@@ -1931,16 +1955,72 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     void onUpdatePublishedLesson(classroom.id, classroom.name, selectedDate, next);
   };
 
+  // 예제 공개 토글 — 예제는 학생 화면의 실습칸을 같이 쓰므로 한 번에 하나만: 다른 예제가 켜져 있으면 교체한다.
+  // (공개 목록에 실습과 같이 담기고, 학생 쪽에서 kind:reference로 구분해 실습칸에 띄운다.)
+  const handleToggleExamplePublish = (content: LessonContent) => {
+    if (!onUpdatePublishedLesson) {
+      return;
+    }
+    const current = currentPublishedLesson?.publishedContentIds || [];
+    const next = current.includes(content.id)
+      ? current.filter((contentId) => contentId !== content.id)
+      : [
+          ...current.filter(
+            (contentId) => assignedContentsById.get(contentId)?.kind !== 'reference'
+          ),
+          content.id,
+        ];
+    void onUpdatePublishedLesson(classroom.id, classroom.name, selectedDate, next);
+  };
+
+  // 이론 슬라이드 공개 토글 — 한 번에 하나만(다른 덱을 켜면 교체). 공개 전에 Drive 권한을
+  // '링크 있는 모든 사용자 보기'로 전환해 학생 임베드에 권한 오류가 안 뜨게 한다.
+  const [isTheoryPublishBusy, setIsTheoryPublishBusy] = useState(false);
+  const handleToggleTheoryPublish = async (slideUrl: string, label: string) => {
+    if (!onUpdatePublishedLesson || isTheoryPublishBusy) {
+      return;
+    }
+    const currentIds = currentPublishedLesson?.publishedContentIds || [];
+    const isPublished = currentPublishedLesson?.publishedTheory?.url === slideUrl;
+    if (isPublished) {
+      void onUpdatePublishedLesson(classroom.id, classroom.name, selectedDate, currentIds, null);
+      return;
+    }
+    setIsTheoryPublishBusy(true);
+    try {
+      if (onShareTheorySlide) {
+        try {
+          await onShareTheorySlide(slideUrl);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : '슬라이드 권한 전환에 실패했습니다.';
+          const proceed = window.confirm(
+            `슬라이드 접근 권한을 자동으로 열지 못했습니다.\n(${message})\n\n그래도 공개할까요? 학생 화면에 권한 오류가 보일 수 있어요.`
+          );
+          if (!proceed) return;
+        }
+      }
+      await onUpdatePublishedLesson(classroom.id, classroom.name, selectedDate, currentIds, {
+        url: slideUrl,
+        label,
+      });
+    } finally {
+      setIsTheoryPublishBusy(false);
+    }
+  };
+
   const handlePublishAllPractice = () => {
     if (!onUpdatePublishedLesson) {
       return;
     }
-    void onUpdatePublishedLesson(
-      classroom.id,
-      classroom.name,
-      selectedDate,
-      publishablePracticeContents.map((content) => content.id)
-    );
+    // 이미 공개돼 있던 예제(kind:reference)는 그대로 두고, 실습만 전부 공개 목록에 채운다.
+    const current = currentPublishedLesson?.publishedContentIds || [];
+    const missingPracticeIds = publishablePracticeContents
+      .map((content) => content.id)
+      .filter((contentId) => !current.includes(contentId));
+    void onUpdatePublishedLesson(classroom.id, classroom.name, selectedDate, [
+      ...current,
+      ...missingPracticeIds,
+    ]);
   };
 
   const handleUnpublishAll = () => {
@@ -2329,13 +2409,15 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     //  아직 안 묶인 실습은 '이론과 묶이지 않은 실습' 영역에 나오고, 거기서 담기 대상 이론으로 옮긴다.)
     const useGroupedLayout = showTheorySection && effectiveTheoryPrompts.length > 0;
 
-    // 공개/잠그기 버튼 (실습 전용). 예제(kind:reference)는 이 버튼을 쓰지 않고 '예제' 버튼(강사 미리보기)만 노출한다.
+    // 공개/잠그기 버튼 (실습 전용). 예제(kind:reference)는 예제 공개 토글(한 번에 하나, 교체)을 따로 쓴다.
+    // 공개 중이면 학생 화면 페이지 번호(Np)를 함께 보여 교사가 "N페이지 보세요"라고 부를 수 있게 한다.
     const renderPublishButton = (content: LessonContent) => {
       const isPublished = publishedContentIdSet.has(content.id);
+      const pageNumber = publishedPageNumberById.get(content.id);
       return (
         <button
           onClick={() => handleTogglePublishContent(content)}
-          title={isPublished ? '잠그기' : '공개'}
+          title={isPublished ? `잠그기 (학생 화면 ${pageNumber}페이지)` : '공개'}
           aria-label={isPublished ? '잠그기' : '공개'}
           className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-4 py-2 text-xs font-bold transition-all max-[639px]:px-2.5 ${
             isPublished
@@ -2347,6 +2429,11 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
             <>
               <EyeOff size={14} />
               <span className="max-[639px]:hidden">잠그기</span>
+              {pageNumber !== undefined && (
+                <span className="rounded-full bg-white/70 px-1.5 py-0.5 text-[10px] font-bold tabular-nums">
+                  {pageNumber}p
+                </span>
+              )}
             </>
           ) : (
             <>
@@ -2408,7 +2495,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               title={
                 practice
                   ? '실습을 켜면 학생에게 공개할 수 있어요'
-                  : '예제(참고 자료)는 학생 화면에 공개하지 않아요 (강사 공용 화면 전용)'
+                  : '이 항목엔 실습이 없어요 — 예제는 오른쪽 예제 공개 버튼으로 공개해요'
               }
               className={disabledActionCls}
             >
@@ -2464,7 +2551,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
             <button
               type="button"
               onClick={() => setPreviewContent(example)}
-              title={`${example.title} 예제 보기 (공용 화면 전용, 학생 노트북엔 안 나감)`}
+              title={`${example.title} 예제 보기 (강사 공용 화면 미리보기)`}
               aria-label="예제 보기"
               className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-[#EAD9BF] bg-[#FFF5E9] px-3 text-xs font-bold text-[#8B5E3C] transition-all hover:border-[#8B5E3C] hover:bg-[#FFEFD8] max-[639px]:px-2"
             >
@@ -2483,6 +2570,33 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               <span className="max-[639px]:hidden">예제</span>
             </button>
           )}
+          {/* 예제 공개 — 학생 화면의 실습칸에 예제를 띄운다(한 번에 하나, 다른 예제를 켜면 교체).
+              실습이 공개돼 있으면 예제가 그 칸을 덮고, 예제를 잠그면 실습이 다시 보인다. */}
+          {example &&
+            showPracticeSection &&
+            (() => {
+              const isExamplePublished = publishedContentIdSet.has(example.id);
+              const examplePageNumber = publishedPageNumberById.get(example.id);
+              return (
+                <button
+                  type="button"
+                  onClick={() => handleToggleExamplePublish(example)}
+                  title={
+                    isExamplePublished
+                      ? `예제 잠그기 (학생 화면 ${examplePageNumber}페이지 — 잠그면 실습이 다시 보여요)`
+                      : '예제 공개 — 학생 실습칸에 예제를 띄워요 (실습을 덮음, 한 번에 하나)'
+                  }
+                  aria-label={isExamplePublished ? '예제 잠그기' : '예제 공개'}
+                  className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-xs font-bold transition-all ${
+                    isExamplePublished
+                      ? 'bg-[#FDECEC] text-[#B42318] hover:bg-[#FAD4D1]'
+                      : 'border border-[#EAD9BF] bg-white text-[#8B5E3C] hover:bg-[#FFF5E9]'
+                  }`}
+                >
+                  {isExamplePublished ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              );
+            })()}
         </>
       );
     };
@@ -2517,7 +2631,12 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     }) => {
       const primary = unit.practice ?? unit.example!;
       const isExampleOnly = !unit.practice;
-      const isPublished = unit.practice ? publishedContentIdSet.has(unit.practice.id) : false;
+      // 실습이 있으면 실습 공개 상태, 예제뿐이면 예제 공개 상태로 행을 강조한다.
+      const isPublished = unit.practice
+        ? publishedContentIdSet.has(unit.practice.id)
+        : unit.example
+          ? publishedContentIdSet.has(unit.example.id)
+          : false;
       return (
         <div
           key={unit.key}
@@ -2554,7 +2673,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       groupCtx?: { promptIndex: number; index: number; count: number }
     ) => {
       const isReference = content.kind === 'reference';
-      const isPublished = isPublishableContent(content) && publishedContentIdSet.has(content.id);
+      // 예제(kind:reference)도 공개될 수 있으므로 행 강조는 공개 목록만 본다.
+      const isPublished = publishedContentIdSet.has(content.id);
       // 편집(수정) 모드 관련: 지금 수정 중인 이론이 이 행이 속한 그룹인지 / 어떤 이론이든 수정 중인지.
       const isEditing = activePromptIndex !== null;
       const rowInEditingGroup = Boolean(groupCtx) && groupCtx!.promptIndex === activePromptIndex;
@@ -3484,6 +3604,48 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                                 )}
                               </div>
                               <div className="flex shrink-0 items-center gap-1.5">
+                                {/* 이론 공개 — 이 덱의 슬라이드를 학생 화면에 띄운다(한 번에 하나, 다른 덱을 켜면 교체).
+                                    이론만 켜면 학생 화면 전체, 실습·예제와 같이 켜면 반반 분할. 공개 전 Drive 권한을 자동으로 연다. */}
+                                {(() => {
+                                  const canPublishTheory =
+                                    hasSlide && isEmbeddableSlideUrl(promptSlideUrl);
+                                  const isTheoryPublished =
+                                    canPublishTheory &&
+                                    currentPublishedLesson?.publishedTheory?.url === promptSlideUrl;
+                                  const theoryLabel =
+                                    prompt.label?.trim() || `이론 ${promptIndex + 1}`;
+                                  return (
+                                    <button
+                                      type="button"
+                                      disabled={!canPublishTheory || isTheoryPublishBusy}
+                                      onClick={() =>
+                                        void handleToggleTheoryPublish(promptSlideUrl, theoryLabel)
+                                      }
+                                      title={
+                                        !hasSlide
+                                          ? '슬라이드 링크를 먼저 붙여야 학생에게 공개할 수 있어요'
+                                          : !isEmbeddableSlideUrl(promptSlideUrl)
+                                            ? '이 링크는 화면에 끼워 넣을 수 없어요(구글 슬라이드/드라이브 링크만 공개 가능)'
+                                            : isTheoryPublished
+                                              ? '이론 잠그기 — 학생 화면에서 이론이 내려가요'
+                                              : '이론 공개 — 학생 화면에 이 슬라이드가 떠요 (실습과 같이 켜면 반반 분할)'
+                                      }
+                                      aria-label={isTheoryPublished ? '이론 잠그기' : '이론 공개'}
+                                      className={`inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-xs font-bold transition-all max-[639px]:px-2 ${
+                                        !canPublishTheory
+                                          ? 'cursor-not-allowed border border-[#EEEBE5] bg-[#F7F6F3] text-[#C7C0B5]'
+                                          : isTheoryPublished
+                                            ? 'bg-[#FDECEC] text-[#B42318] hover:bg-[#FAD4D1]'
+                                            : 'bg-[#8B5E3C] text-white hover:bg-[#724D31]'
+                                      } ${isTheoryPublishBusy ? 'opacity-60' : ''}`}
+                                    >
+                                      {isTheoryPublished ? <EyeOff size={14} /> : <Eye size={14} />}
+                                      <span className="max-[639px]:hidden">
+                                        {isTheoryPublished ? '이론 잠그기' : '이론 공개'}
+                                      </span>
+                                    </button>
+                                  );
+                                })()}
                                 {showPracticeSection && (
                                   <button
                                     type="button"
@@ -3742,8 +3904,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                     <div className="space-y-2">
                       {recordedPracticeContents.map((content, index) => {
                         const isReference = content.kind === 'reference';
-                        const isPublished =
-                          isPublishableContent(content) && publishedContentIdSet.has(content.id);
+                        // 예제(kind:reference)도 공개될 수 있으므로 행 강조는 공개 목록만 본다.
+                        const isPublished = publishedContentIdSet.has(content.id);
                         // 이론 프롬프트(복사·수정)는 시수 순서(index)로 매칭. 자료 링크는 콘텐츠에 묶여 별도.
                         const matchedPrompt = effectiveTheoryPrompts[index];
                         const isCopied = copiedPromptIndex === index;
@@ -3815,6 +3977,44 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                                 {onSaveContent &&
                                   (hasSlide ? (
                                     <>
+                                      {/* 이론 공개 — 이 행에 묶인 이론 슬라이드를 학생 화면에 띄운다(한 번에 하나, 교체). */}
+                                      {isEmbeddableSlideUrl(promptSlideUrl) &&
+                                        (() => {
+                                          const isTheoryPublished =
+                                            currentPublishedLesson?.publishedTheory?.url ===
+                                            promptSlideUrl;
+                                          return (
+                                            <button
+                                              type="button"
+                                              disabled={isTheoryPublishBusy}
+                                              onClick={() =>
+                                                void handleToggleTheoryPublish(
+                                                  promptSlideUrl,
+                                                  content.title
+                                                )
+                                              }
+                                              title={
+                                                isTheoryPublished
+                                                  ? '이론 잠그기 — 학생 화면에서 이론이 내려가요'
+                                                  : '이론 공개 — 학생 화면에 이 슬라이드가 떠요 (실습과 같이 켜면 반반 분할)'
+                                              }
+                                              aria-label={
+                                                isTheoryPublished ? '이론 잠그기' : '이론 공개'
+                                              }
+                                              className={`inline-flex h-8 w-8 items-center justify-center rounded-xl transition-all ${
+                                                isTheoryPublished
+                                                  ? 'bg-[#FDECEC] text-[#B42318] hover:bg-[#FAD4D1]'
+                                                  : 'bg-[#8B5E3C] text-white hover:bg-[#724D31]'
+                                              } ${isTheoryPublishBusy ? 'opacity-60' : ''}`}
+                                            >
+                                              {isTheoryPublished ? (
+                                                <EyeOff size={14} />
+                                              ) : (
+                                                <Eye size={14} />
+                                              )}
+                                            </button>
+                                          );
+                                        })()}
                                       <a
                                         href={toSlidePresentUrl(promptSlideUrl)}
                                         target="_blank"
@@ -6063,7 +6263,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
         </div>
       )}
 
-      {/* 수업기록 콘텐츠 빠른 미리보기 */}
+      {/* 수업기록 콘텐츠 빠른 미리보기 — 오늘 수업 콘텐츠(실습·예제)를 닫지 않고 ◀ ▶로 앞뒤 넘겨볼 수 있다.
+          공개된 항목이면 학생 화면 페이지 번호를 같이 보여 "N페이지 보세요"라고 부를 수 있다. */}
       {livePreviewContent && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-3 sm:p-4"
@@ -6077,8 +6278,46 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               <h3 className="flex min-w-0 items-center gap-2 text-base font-bold text-[#4A3728]">
                 <Eye size={18} className="shrink-0 text-[#8B5E3C]" />
                 <span className="truncate">{livePreviewContent.title}</span>
+                {publishedPageNumberById.has(livePreviewContent.id) && (
+                  <span className="shrink-0 rounded-full bg-[#EEF7F0] px-2 py-0.5 text-[10px] font-bold text-[#2D7A4D] tabular-nums">
+                    학생 화면 {publishedPageNumberById.get(livePreviewContent.id)}/{publishedPageCount}p
+                  </span>
+                )}
               </h3>
               <div className="flex shrink-0 items-center gap-2">
+                {(() => {
+                  const previewIndex = recordedPracticeContents.findIndex(
+                    (content) => content.id === livePreviewContent.id
+                  );
+                  if (previewIndex === -1 || recordedPracticeContents.length < 2) return null;
+                  return (
+                    <span className="inline-flex items-center overflow-hidden rounded-xl border border-[#E5E3DD] bg-white">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewContent(recordedPracticeContents[previewIndex - 1])}
+                        disabled={previewIndex <= 0}
+                        title="이전 콘텐츠"
+                        aria-label="이전 콘텐츠"
+                        className="inline-flex h-9 w-8 items-center justify-center text-[#8B7E74] transition-all hover:bg-[#F7F6F3] hover:text-[#8B5E3C] disabled:cursor-not-allowed disabled:text-[#DAD5CC]"
+                      >
+                        <ChevronLeft size={16} />
+                      </button>
+                      <span className="px-1.5 text-xs font-bold text-[#8B7E74] tabular-nums">
+                        {previewIndex + 1}/{recordedPracticeContents.length}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setPreviewContent(recordedPracticeContents[previewIndex + 1])}
+                        disabled={previewIndex >= recordedPracticeContents.length - 1}
+                        title="다음 콘텐츠"
+                        aria-label="다음 콘텐츠"
+                        className="inline-flex h-9 w-8 items-center justify-center text-[#8B7E74] transition-all hover:bg-[#F7F6F3] hover:text-[#8B5E3C] disabled:cursor-not-allowed disabled:text-[#DAD5CC]"
+                      >
+                        <ChevronRight size={16} />
+                      </button>
+                    </span>
+                  );
+                })()}
                 {/* 예제(kind:reference)이고 번역 사전(__DSR_TR__)이 있으면 — 강사가 공용 화면에서 여러 언어를
                     골라 한 화면 병기로 크게 띄울 수 있는 '번역 병기' 창 전체화면 버튼. */}
                 {livePreviewContent.kind === 'reference' &&

@@ -501,6 +501,11 @@ export default function App() {
       ...(fileId ? { fileId } : {}),
     });
 
+  // 이론 슬라이드를 학생에게 공개하기 전에 Drive 파일을 '링크 있는 모든 사용자 보기'로 전환한다.
+  // (결과물 승인과 같은 패턴 — 학생 계정에 권한이 없으면 임베드 iframe에 권한 오류가 뜨기 때문.)
+  const handleShareTheorySlide = (url: string) =>
+    postAdminRequest<{ ok?: boolean }>('api/drive/share-slide', { url });
+
   const handleAddStudentAccess = async (rawEmail: string, memo: string) => {
     if (!user || !isAdmin) return;
 
@@ -1038,6 +1043,18 @@ export default function App() {
                 ? Object.fromEntries(
                     Object.entries(data.practiceTimers).filter(([, value]) => typeof value === 'string')
                   )
+                : undefined,
+            // 공개 중인 이론 슬라이드. 빼먹으면 스냅샷마다 사라져 학생 이론 화면이 꺼진다.
+            publishedTheory:
+              data.publishedTheory &&
+              typeof data.publishedTheory === 'object' &&
+              typeof data.publishedTheory.url === 'string'
+                ? {
+                    url: data.publishedTheory.url,
+                    ...(typeof data.publishedTheory.label === 'string'
+                      ? { label: data.publishedTheory.label }
+                      : {}),
+                  }
                 : undefined,
           } satisfies PublishedLesson;
         });
@@ -1878,11 +1895,13 @@ export default function App() {
   };
 
   // 강사가 수업 진행 중 실습 블록을 학생에게 공개/해제. 공개된 콘텐츠 id 목록 전체를 받아 덮어쓴다.
+  // publishedTheory: undefined = 기존 이론 공개 상태 유지, null = 이론 공개 해제, 객체 = 그 이론으로 공개.
   const handleUpdatePublishedLesson = async (
     classroomId: string,
     classroomName: string,
     date: string,
-    publishedContentIds: string[]
+    publishedContentIds: string[],
+    publishedTheory?: { url: string; label?: string } | null
   ) => {
     if (!user) return;
 
@@ -1890,8 +1909,12 @@ export default function App() {
     try {
       const lessonRef = doc(db, PUBLISHED_LESSONS_COLLECTION, lessonId);
 
-      // 공개된 게 하나도 없으면 문서를 지워 학생 화면에서 깔끔히 사라지게 한다.
-      if (publishedContentIds.length === 0) {
+      // 이론 공개 상태 결정 — 넘겨받지 않은 호출(실습 토글 등)에서는 기존 값을 보존한다(full setDoc이라 빼먹으면 사라짐).
+      const existingTheory = publishedLessons.find((lesson) => lesson.id === lessonId)?.publishedTheory;
+      const nextTheory = publishedTheory === undefined ? existingTheory : publishedTheory ?? undefined;
+
+      // 공개된 게 하나도 없으면(실습·예제·이론 모두) 문서를 지워 학생 화면에서 깔끔히 사라지게 한다.
+      if (publishedContentIds.length === 0 && !nextTheory) {
         await deleteDoc(lessonRef);
         return;
       }
@@ -1921,6 +1944,7 @@ export default function App() {
         ownerUid: user.uid,
         updatedAt: new Date().toISOString(),
         ...(Object.keys(practiceTimers).length > 0 ? { practiceTimers } : {}),
+        ...(nextTheory ? { publishedTheory: nextTheory } : {}),
       };
       await setDoc(lessonRef, nextLesson);
     } catch (error) {
@@ -2185,6 +2209,7 @@ export default function App() {
               onUpdatePublishedLesson={handleUpdatePublishedLesson}
               onEndLesson={handleEndLesson}
               onSyncTheorySlide={handleSyncTheorySlide}
+              onShareTheorySlide={handleShareTheorySlide}
               onUpdateClassroom={handleUpdateClassroom}
               onDeleteClassroom={handleDeleteClassroom}
               onListCalendarClasses={handleListCalendarClasses}

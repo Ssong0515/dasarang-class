@@ -202,6 +202,12 @@ export interface PublishedLesson {
    * 잠그면(공개 해제) 엔트리가 제거되므로 다시 공개하면 타이머가 리셋된다.
    */
   practiceTimers?: Record<string, string>;
+  /**
+   * 학생에게 공개 중인 이론 슬라이드(한 번에 하나). 교사가 이론 덱의 [공개]를 누르면
+   * 그 덱의 slideUrl(임베드 URL)·라벨이 여기 복사된다 — 학생은 publishedLessons만 읽으므로
+   * URL을 문서에 직접 담아야 한다. 이론만 켜면 학생 화면 전체, 실습·예제와 같이 켜면 반반 분할.
+   */
+  publishedTheory?: { url: string; label?: string };
 }
 
 /**

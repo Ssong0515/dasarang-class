@@ -4,6 +4,8 @@ import {
   ArrowRight,
   Languages,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   FileText,
   ArrowLeft,
   BookOpen,
@@ -348,7 +350,10 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   const [activeClassroomId, setActiveClassroomId] = useState<string | null>(
     getInitialActiveClassroomId
   );
-  const [selectedContent, setSelectedContent] = useState<LessonContent | null>(null);
+  // 지금 보고 있는 실습칸 페이지(공개 목록 순서 = 페이지 번호). 교사가 새로 공개하면 그 페이지로 자동 이동하고,
+  // 학생은 ◀ ▶·번호 칩으로 공개된 페이지 안에서 자유롭게 앞뒤로 오갈 수 있다.
+  const [currentPageId, setCurrentPageId] = useState<string | null>(null);
+  const prevPageIdsRef = useRef<string[] | null>(null);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [contentDropdownPosition, setContentDropdownPosition] = useState<ContentDropdownPosition | null>(null);
   // 강사 미리보기 전용: 이 날짜 기준으로 '공개된 실습'을 본다. 실제 학생(isAdmin=false)은 항상 실제 오늘만 본다.
@@ -563,6 +568,78 @@ export const StudentPage: React.FC<StudentPageProps> = ({
       .flatMap((lesson) => lesson.publishedContentIds)
       .filter((contentId) => !expiredTimerContentIds.has(contentId))
   );
+  // 오늘 공개 중인 이론 슬라이드(한 번에 하나) — 여러 반이 공개했다면 가장 최근 것.
+  // 이론만 켜지면 화면 전체, 실습·예제와 같이 켜지면 좌우(모바일은 위아래) 반반으로 나온다.
+  const publishedTheory =
+    publishedLessons
+      .filter((lesson) => lesson.date === gatingDateString && lesson.publishedTheory?.url)
+      .sort((a, b) => String(a.updatedAt).localeCompare(String(b.updatedAt)))
+      .map((lesson) => lesson.publishedTheory!)
+      .pop() ?? null;
+  // 실습칸 페이지 목록 — 공개 목록 순서 그대로 1,2,3…페이지(대시보드와 같은 번호라 교사가 "N페이지"로 부른다).
+  // 타이머가 만료된 실습은 목록에서 빼지 않고 '잠김 페이지'로 남겨 뒤 페이지 번호가 밀리지 않게 한다.
+  const orderedPublishedContentIds: string[] = [];
+  publishedLessons
+    .filter((lesson) => lesson.date === gatingDateString)
+    .sort((a, b) => String(a.updatedAt).localeCompare(String(b.updatedAt)))
+    .flatMap((lesson) => lesson.publishedContentIds)
+    .forEach((contentId) => {
+      if (!orderedPublishedContentIds.includes(contentId)) {
+        orderedPublishedContentIds.push(contentId);
+      }
+    });
+  const practicePages = orderedPublishedContentIds.flatMap((contentId) => {
+    const content = contents.find((candidate) => candidate.id === contentId);
+    return content ? [{ content, locked: expiredTimerContentIds.has(contentId) }] : [];
+  });
+  const currentPageIndex = practicePages.findIndex((page) => page.content.id === currentPageId);
+  const currentPage = currentPageIndex >= 0 ? practicePages[currentPageIndex] : null;
+
+  // 교사 따라가기 — 교사가 새 페이지를 공개하면(예제 공개=실습 덮기 포함) 전원 그 페이지로 이동한다.
+  // 학생이 다른 페이지를 둘러보는 중에도 새 공개가 오면 이동하고, 보던 페이지가 잠기면 최근 공개 페이지로 돌아온다.
+  const unlockedPageIdsKey = practicePages
+    .filter((page) => !page.locked)
+    .map((page) => page.content.id)
+    .join('|');
+  useEffect(() => {
+    const currentIds = unlockedPageIdsKey ? unlockedPageIdsKey.split('|') : [];
+    const prev = prevPageIdsRef.current;
+    prevPageIdsRef.current = currentIds;
+    if (currentIds.length === 0) {
+      setCurrentPageId(null);
+      return;
+    }
+    if (prev === null) {
+      // 첫 로드(늦게 접속 포함): 가장 마지막에 공개된 페이지 = 교사의 최근 액션.
+      setCurrentPageId(currentIds[currentIds.length - 1]);
+      return;
+    }
+    const added = currentIds.filter((contentId) => !prev.includes(contentId));
+    if (added.length > 0) {
+      setCurrentPageId(added[added.length - 1]);
+      return;
+    }
+    setCurrentPageId((current) =>
+      current && currentIds.includes(current) ? current : currentIds[currentIds.length - 1]
+    );
+  }, [unlockedPageIdsKey]);
+
+  // ◀ ▶ 페이지 이동 — 잠긴(타이머 만료) 페이지는 건너뛴다.
+  const movePage = (direction: 1 | -1) => {
+    let index = currentPageIndex >= 0 ? currentPageIndex : direction === 1 ? -1 : practicePages.length;
+    while (true) {
+      index += direction;
+      if (index < 0 || index >= practicePages.length) return;
+      if (!practicePages[index].locked) {
+        setCurrentPageId(practicePages[index].content.id);
+        return;
+      }
+    }
+  };
+  const hasUnlockedBefore = practicePages.some((page, index) => index < currentPageIndex && !page.locked);
+  const hasUnlockedAfter =
+    currentPageIndex >= 0 &&
+    practicePages.some((page, index) => index > currentPageIndex && !page.locked);
   // 화면에 띄울 카운트다운 — 아직 안 끝난(공개 중) 타이머 중 가장 빨리 끝나는 것.
   const runningTimerEndsAt =
     Object.entries(activePracticeTimers)
@@ -653,25 +730,32 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   );
   const visibleContentIds = new Set(visibleContents.map((content) => content.id));
   const visibleAssignedContentIds = visibleContentIds;
-  // 공개된 실습이 하나뿐이면 카테고리 선택 없이 바로 보여주고, 둘 이상일 때만 카테고리 UI를 쓴다.
+  // 카테고리 드롭다운 UI는 공개 페이지가 둘 이상일 때만 쓴다(페이저와 함께 빠른 점프용).
   const hasMultipleVisible = visibleContents.length >= 2;
-  const singleVisibleContent = visibleContents.length === 1 ? visibleContents[0] : null;
 
-  // 'dsr-fit-viewport' 마커가 든 실습(코딩반 타이핑 미션 등)은 위아래 페이지 스크롤 없이
+  // 'dsr-fit-viewport' 마커가 든 실습(코딩반 타이핑 미션 등)과 예제(한 화면 설계)는 위아래 페이지 스크롤 없이
   // 남은 화면 높이에 iframe을 딱 맞춰 꽉 채운다. 마커 없는 기존 콘텐츠는 종전대로 자연 높이 + 스크롤.
-  const fitCandidateContent = singleVisibleContent ?? selectedContent;
+  const fitCandidateContent = currentPage && !currentPage.locked ? currentPage.content : null;
   const isFitViewport = Boolean(
     (!SHOW_CLASSROOM_SELECTION || activeClassroomId) &&
-      fitCandidateContent?.html?.includes('dsr-fit-viewport')
+      (fitCandidateContent?.html?.includes('dsr-fit-viewport') ||
+        fitCandidateContent?.kind === 'reference')
   );
+  // 이론이 공개 중이면(단독·분할 모두) 화면을 뷰포트에 꽉 채우는 셸로 전환한다.
+  const isSplitView = Boolean(publishedTheory) && practicePages.length > 0;
+  const isFillLayout = Boolean(publishedTheory) || isFitViewport;
 
   // 결과물 저장 대상 반 결정 — 학생은 반을 직접 고르지 않으므로(전체 공개 정책) '오늘 공개된 수업'에서 역으로 찾는다.
   // 우선순위: (1) 강사가 직접 고른 반(미리보기), (2) 지금 보고 있는 실습을 공개한 반,
   //          (3) 가장 최근에 공개한 반. Drive 폴더가 연결된 반을 우선하되, 후보가 있으면 폴더 없는 반이라도 잡아
   //          서버가 "Drive 폴더 미연결"이라는 구체적 에러를 돌려주도록 한다.
-  const viewedContentId = singleVisibleContent?.id ?? selectedContent?.id ?? null;
+  const viewedContentId = currentPage?.content.id ?? null;
   const todaysPublishedLessons = [...publishedLessons]
-    .filter((lesson) => lesson.date === gatingDateString && lesson.publishedContentIds.length > 0)
+    .filter(
+      (lesson) =>
+        lesson.date === gatingDateString &&
+        (lesson.publishedContentIds.length > 0 || lesson.publishedTheory)
+    )
     .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
   // 저장 폴더는 모든 반이 공유 폴더로 동일하지만, 게시물(결과물 갤러리)의 반 구분은 중요하다.
   // 그래서 한 묶음(tier)에서 가장 최근 공개한 반을 고르되, '지금 보고 있는 실습을 공개한 반'을 항상 우선해
@@ -700,14 +784,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
     }))
     .filter((group) => group.items.length > 0);
 
-  // 강사가 실시간으로 잠그면, 열어 두던 실습을 즉시 닫는다.
-  useEffect(() => {
-    if (selectedContent && !visibleContentIds.has(selectedContent.id)) {
-      setSelectedContent(null);
-    }
-    // visibleContentIds는 publishedLessons에서 파생 → publishedLessons 변화가 트리거
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedContent?.id, publishedLessons]);
+  // (강사가 실시간으로 잠그면 위 '교사 따라가기' 효과가 보던 페이지를 최근 공개 페이지로 되돌린다.)
 
   const closeContentDropdown = () => {
     setOpenDropdown(null);
@@ -726,14 +803,12 @@ export const StudentPage: React.FC<StudentPageProps> = ({
 
   const applyHomeViewState = () => {
     setActiveClassroomId(null);
-    setSelectedContent(null);
     closeContentDropdown();
     setIsLangOpen(false);
   };
 
   const applyClassroomViewState = (classroomId: string) => {
     setActiveClassroomId(classroomId);
-    setSelectedContent(null);
     closeContentDropdown();
     setIsLangOpen(false);
   };
@@ -805,13 +880,6 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   }, []);
 
   useEffect(() => {
-    if (selectedContent && !visibleContentIds.has(selectedContent.id)) {
-      setSelectedContent(null);
-      closeContentDropdown();
-    }
-  }, [selectedContent, visibleContentIds]);
-
-  useEffect(() => {
     if (!openDropdown) {
       setContentDropdownPosition(null);
     }
@@ -863,8 +931,8 @@ export const StudentPage: React.FC<StudentPageProps> = ({
     <div
       className={`bg-[#FBFBFA] font-sans text-[#4A3728] ${
         embeddedInAdminShell
-          ? `flex min-h-0 flex-1 flex-col ${isFitViewport ? 'overflow-hidden' : 'overflow-y-auto'}`
-          : isFitViewport
+          ? `flex min-h-0 flex-1 flex-col ${isFillLayout ? 'overflow-hidden' : 'overflow-y-auto'}`
+          : isFillLayout
             ? 'flex h-screen flex-col overflow-hidden'
             : 'min-h-screen'
       }`}
@@ -978,7 +1046,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
               {contentsByCategory.map((group) => {
                 const isDropdownOpen = openDropdown === group.category.id;
                 const hasSelectedContent = Boolean(
-                  selectedContent && group.items.some((item) => item.id === selectedContent.id)
+                  currentPageId && group.items.some((item) => item.id === currentPageId)
                 );
                 const menuId = `student-content-menu-${group.category.id}`;
 
@@ -1030,12 +1098,12 @@ export const StudentPage: React.FC<StudentPageProps> = ({
                           style={{ maxHeight: contentDropdownPosition.maxHeight }}
                         >
                           {group.items.map((content) => {
-                            const isActive = selectedContent?.id === content.id;
+                            const isActive = currentPageId === content.id;
                             return (
                               <button
                                 key={content.id}
                                 onClick={() => {
-                                  setSelectedContent(content);
+                                  setCurrentPageId(content.id);
                                   closeContentDropdown();
                                 }}
                                 className={`flex w-full items-center gap-3 px-5 py-3.5 text-left transition-all ${
@@ -1128,69 +1196,122 @@ export const StudentPage: React.FC<StudentPageProps> = ({
       ) : (
         <main
           className={
-            isFitViewport
+            isFillLayout
               ? 'flex min-h-0 w-full flex-1 flex-col px-3 pb-3 pt-3 sm:px-4'
               : 'w-full px-4 pb-8 pt-6 sm:px-6 lg:px-8 xl:px-10 2xl:px-12'
           }
         >
-          {visibleContents.length > 0 ? (
-            singleVisibleContent ? (
-              <motion.div
-                key={singleVisibleContent.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={isFitViewport ? 'min-h-0 flex-1' : undefined}
-              >
-                {isFitViewport ? (
-                  <StudentContentPreviewFrame
-                    html={singleVisibleContent.html ?? ''}
-                    title={singleVisibleContent.title}
-                    autoHeight={false}
-                    reviewMode={Boolean(isAdmin)}
-                    className="h-full w-full overflow-hidden rounded-[24px] border border-[#E5E3DD] bg-white shadow-sm"
+          {publishedTheory || practicePages.length > 0 ? (
+            // 교사가 켠 것에 따라 화면 구성이 바뀐다: 이론만=전체, 이론+실습(예제)=반반, 실습/예제만=전체.
+            <div
+              className={`flex min-h-0 flex-1 gap-3 ${
+                isSplitView ? 'flex-col lg:flex-row' : 'flex-col'
+              }`}
+            >
+              {/* 이론 패널 — 공개된 이론 슬라이드 임베드. 슬라이드 자체 ◀ ▶로 앞뒤 장을 넘겨볼 수 있다. */}
+              {publishedTheory && (
+                <div
+                  className={`min-h-0 flex-1 overflow-hidden rounded-[24px] border border-[#E5E3DD] bg-white shadow-sm ${
+                    isSplitView ? 'lg:basis-1/2' : ''
+                  }`}
+                >
+                  <iframe
+                    src={publishedTheory.url}
+                    title={publishedTheory.label || '이론 슬라이드'}
+                    className="h-full w-full border-0"
+                    allowFullScreen
                   />
-                ) : (
-                  <StudentContentCard
-                    content={singleVisibleContent}
-                    showDescriptionToggle={false}
-                  />
-                )}
-              </motion.div>
-            ) : selectedContent ? (
-              <motion.div
-                key={selectedContent.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={isFitViewport ? 'min-h-0 flex-1' : undefined}
-              >
-                {isFitViewport ? (
-                  <StudentContentPreviewFrame
-                    html={selectedContent.html ?? ''}
-                    title={selectedContent.title}
-                    autoHeight={false}
-                    reviewMode={Boolean(isAdmin)}
-                    className="h-full w-full overflow-hidden rounded-[24px] border border-[#E5E3DD] bg-white shadow-sm"
-                  />
-                ) : (
-                  <StudentContentCard
-                    content={selectedContent}
-                    showDescriptionToggle={false}
-                  />
-                )}
-              </motion.div>
-            ) : (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="w-full max-w-none rounded-[32px] border border-[#E5E3DD] bg-white p-10 text-center sm:p-16"
-              >
-                <FileText size={48} className="mx-auto mb-4 text-[#E5E3DD]" />
-                <p className="mb-2 text-lg font-bold text-[#8B7E74]">
-                  위의 카테고리를 클릭하여 콘텐츠를 선택하세요
-                </p>
-                <p className="text-sm text-[#A89F94]">학습 자료가 여기에 표시됩니다</p>
-              </motion.div>
-            )
+                </div>
+              )}
+
+              {/* 실습/예제 칸 — 공개 목록 순서 = 페이지 번호. 예제가 공개되면 이 칸의 기본 페이지가 예제가 된다. */}
+              {practicePages.length > 0 && (
+                <div
+                  className={`flex min-h-0 flex-1 flex-col gap-2 ${isSplitView ? 'lg:basis-1/2' : ''}`}
+                >
+                  {practicePages.length > 1 && (
+                    <div className="flex flex-wrap items-center justify-center gap-1.5 rounded-2xl border border-[#E5E3DD] bg-white px-3 py-2 shadow-sm">
+                      <button
+                        type="button"
+                        onClick={() => movePage(-1)}
+                        disabled={!hasUnlockedBefore}
+                        aria-label="이전 페이지"
+                        className="flex h-8 w-8 items-center justify-center rounded-xl text-[#8B7E74] transition-all hover:bg-[#F3F2EE] hover:text-[#4A3728] disabled:cursor-not-allowed disabled:text-[#DAD5CC]"
+                      >
+                        <ChevronLeft size={18} />
+                      </button>
+                      {practicePages.map((page, index) => (
+                        <button
+                          key={page.content.id}
+                          type="button"
+                          onClick={() => setCurrentPageId(page.content.id)}
+                          disabled={page.locked}
+                          title={
+                            page.locked
+                              ? `${index + 1}페이지 · ${page.content.title} (시간 종료로 잠김)`
+                              : `${index + 1}페이지 · ${page.content.title}`
+                          }
+                          className={`flex h-8 min-w-8 items-center justify-center rounded-xl px-2 text-sm font-bold tabular-nums transition-all ${
+                            index === currentPageIndex
+                              ? 'bg-[#8B5E3C] text-white shadow'
+                              : page.locked
+                                ? 'cursor-not-allowed bg-[#F3F2EE] text-[#C8BFB8]'
+                                : 'bg-[#F7F4EF] text-[#6C6258] hover:bg-[#EEE7DD]'
+                          }`}
+                        >
+                          {page.locked ? <Lock size={12} /> : index + 1}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => movePage(1)}
+                        disabled={!hasUnlockedAfter}
+                        aria-label="다음 페이지"
+                        className="flex h-8 w-8 items-center justify-center rounded-xl text-[#8B7E74] transition-all hover:bg-[#F3F2EE] hover:text-[#4A3728] disabled:cursor-not-allowed disabled:text-[#DAD5CC]"
+                      >
+                        <ChevronRight size={18} />
+                      </button>
+                      {currentPage && (
+                        <span className="ml-1 hidden max-w-[18rem] truncate text-xs font-bold text-[#8B7E74] sm:inline">
+                          {currentPageIndex + 1}/{practicePages.length} · {currentPage.content.title}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {currentPage && !currentPage.locked ? (
+                    <motion.div
+                      key={currentPage.content.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className={isFillLayout ? 'min-h-0 flex-1' : undefined}
+                    >
+                      {isFillLayout ? (
+                        <StudentContentPreviewFrame
+                          html={currentPage.content.html ?? ''}
+                          title={currentPage.content.title}
+                          autoHeight={false}
+                          reviewMode={Boolean(isAdmin)}
+                          className="h-full w-full overflow-hidden rounded-[24px] border border-[#E5E3DD] bg-white shadow-sm"
+                        />
+                      ) : (
+                        <StudentContentCard
+                          content={currentPage.content}
+                          showDescriptionToggle={false}
+                        />
+                      )}
+                    </motion.div>
+                  ) : (
+                    <div className="flex min-h-[12rem] flex-1 flex-col items-center justify-center rounded-[24px] border border-[#E5E3DD] bg-white p-8 text-center">
+                      <Lock size={28} className="mb-3 text-[#A89F94]" />
+                      <p className="text-sm font-bold text-[#8B7E74]">
+                        실습 시간이 끝났어요 — 선생님 화면을 보세요 👀
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           ) : (
             <motion.section
               initial={{ opacity: 0, y: 20 }}
@@ -1348,7 +1469,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
         </div>
       )}
 
-      {!isFitViewport && (
+      {!isFillLayout && (
         <footer className="mt-20 border-t border-[#E5E3DD] py-12 text-center">
           <p className="mb-4 text-sm text-[#8B7E74]">© 2024 다사랑 교실. {currentT.rights}</p>
           {!isAdmin && onLogin && (

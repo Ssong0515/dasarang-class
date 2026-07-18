@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { ADMIN_EMAIL, getAdminDb, getFirebaseAdminApp, verifyAdminIdToken, verifyStudentOrAdminIdToken } from './server/firebaseAdmin';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
-import { getStudentWorkFile, uploadStudentWork } from './server/googleDriveUpload';
+import { getDriveClient, getStudentWorkFile, uploadStudentWork } from './server/googleDriveUpload';
 import {
   syncNotebookLmPptxFolder,
   validateNotebookLmSyncPayload,
@@ -427,6 +427,29 @@ async function startServer() {
       const message = error instanceof Error ? error.message : 'NotebookLM folder sync failed.';
       const statusCode = /required|not a folder/i.test(message) ? 400 : 500;
       res.status(statusCode).json({ error: message });
+    }
+  });
+
+  // 이론 슬라이드 학생 공개 전 권한 전환 — Drive/슬라이드 파일을 '링크 있는 모든 사용자 보기'로 만든다.
+  // (학생 계정엔 파일 권한이 없어서, 공개 시 이걸 안 하면 학생 임베드 iframe에 권한 오류가 뜬다.)
+  app.post(withBasePath(APP_BASE_PATH, '/api/drive/share-slide'), requireAdmin, async (req, res) => {
+    try {
+      const url = typeof req.body?.url === 'string' ? req.body.url.trim() : '';
+      const fileIdMatch =
+        url.match(/\/presentation\/d\/([^/?#]+)/) ?? url.match(/\/file\/d\/([^/?#]+)/);
+      if (!fileIdMatch) {
+        res.status(400).json({ error: '구글 슬라이드/드라이브 링크가 아니라 권한을 자동으로 열 수 없습니다.' });
+        return;
+      }
+      await getDriveClient().permissions.create({
+        fileId: fileIdMatch[1],
+        requestBody: { role: 'reader', type: 'anyone' },
+        supportsAllDrives: true,
+      });
+      res.json({ ok: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '슬라이드 권한 전환에 실패했습니다.';
+      res.status(500).json({ error: message });
     }
   });
 
