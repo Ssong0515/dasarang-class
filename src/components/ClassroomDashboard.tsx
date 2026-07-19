@@ -2546,18 +2546,47 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 </button>
               </span>
             ) : null)}
-          {/* 예제 — 예제 있으면 활성 (공용 화면 미리보기) */}
+          {/* 예제 — 이 버튼 하나가 곧 '학생 실습칸 덮기' 토글이다(눈 버튼 없이). 누르면 학생 화면 실습칸을
+              이 예제로 덮고(한 번에 하나, 다른 예제를 켜면 교체), 다시 누르면 내려 실습이 보인다.
+              실습 영역이 꺼져 있으면 덮을 칸이 없어 강사 미리보기만 연다. */}
           {example ? (
-            <button
-              type="button"
-              onClick={() => setPreviewContent(example)}
-              title={`${example.title} 예제 보기 (강사 공용 화면 미리보기)`}
-              aria-label="예제 보기"
-              className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-[#EAD9BF] bg-[#FFF5E9] px-3 text-xs font-bold text-[#8B5E3C] transition-all hover:border-[#8B5E3C] hover:bg-[#FFEFD8] max-[639px]:px-2"
-            >
-              <FileText size={14} />
-              <span className="max-[639px]:hidden">예제</span>
-            </button>
+            showPracticeSection ? (
+              (() => {
+                const isExamplePublished = publishedContentIdSet.has(example.id);
+                const examplePageNumber = publishedPageNumberById.get(example.id);
+                return (
+                  <button
+                    type="button"
+                    onClick={() => handleToggleExamplePublish(example)}
+                    title={
+                      isExamplePublished
+                        ? `예제 내리기 (학생 화면 ${examplePageNumber}페이지 — 내리면 실습이 다시 보여요)`
+                        : `${example.title} — 누르면 학생 실습칸을 이 예제로 덮어요 (한 번에 하나)`
+                    }
+                    aria-label={isExamplePublished ? '예제 내리기' : '예제 띄우기'}
+                    className={`inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-xs font-bold transition-all max-[639px]:px-2 ${
+                      isExamplePublished
+                        ? 'border border-[#B42318] bg-[#FDECEC] text-[#B42318] hover:bg-[#FAD4D1]'
+                        : 'border border-[#EAD9BF] bg-[#FFF5E9] text-[#8B5E3C] hover:border-[#8B5E3C] hover:bg-[#FFEFD8]'
+                    }`}
+                  >
+                    <FileText size={14} />
+                    <span className="max-[639px]:hidden">{isExamplePublished ? '예제 내리기' : '예제'}</span>
+                  </button>
+                );
+              })()
+            ) : (
+              <button
+                type="button"
+                onClick={() => setPreviewContent(example)}
+                title={`${example.title} 예제 보기 (실습 영역이 꺼져 있어 미리보기만)`}
+                aria-label="예제 보기"
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-[#EAD9BF] bg-[#FFF5E9] px-3 text-xs font-bold text-[#8B5E3C] transition-all hover:border-[#8B5E3C] hover:bg-[#FFEFD8] max-[639px]:px-2"
+              >
+                <FileText size={14} />
+                <span className="max-[639px]:hidden">예제</span>
+              </button>
+            )
           ) : (
             <button
               type="button"
@@ -2570,33 +2599,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               <span className="max-[639px]:hidden">예제</span>
             </button>
           )}
-          {/* 예제 공개 — 학생 화면의 실습칸에 예제를 띄운다(한 번에 하나, 다른 예제를 켜면 교체).
-              실습이 공개돼 있으면 예제가 그 칸을 덮고, 예제를 잠그면 실습이 다시 보인다. */}
-          {example &&
-            showPracticeSection &&
-            (() => {
-              const isExamplePublished = publishedContentIdSet.has(example.id);
-              const examplePageNumber = publishedPageNumberById.get(example.id);
-              return (
-                <button
-                  type="button"
-                  onClick={() => handleToggleExamplePublish(example)}
-                  title={
-                    isExamplePublished
-                      ? `예제 잠그기 (학생 화면 ${examplePageNumber}페이지 — 잠그면 실습이 다시 보여요)`
-                      : '예제 공개 — 학생 실습칸에 예제를 띄워요 (실습을 덮음, 한 번에 하나)'
-                  }
-                  aria-label={isExamplePublished ? '예제 잠그기' : '예제 공개'}
-                  className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-xs font-bold transition-all ${
-                    isExamplePublished
-                      ? 'bg-[#FDECEC] text-[#B42318] hover:bg-[#FAD4D1]'
-                      : 'border border-[#EAD9BF] bg-white text-[#8B5E3C] hover:bg-[#FFF5E9]'
-                  }`}
-                >
-                  {isExamplePublished ? <EyeOff size={14} /> : <Eye size={14} />}
-                </button>
-              );
-            })()}
         </>
       );
     };
