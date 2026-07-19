@@ -513,6 +513,9 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   // 수업기록 칩을 누르면 콘텐츠로 이동하지 않고 바로 미리보기 모달을 띄운다.
   const [previewContent, setPreviewContent] = useState<LessonContent | null>(null);
+  // 미리보기 모달 ◀ ▶ '단계 이동' 신호(콘텐츠 안에서 실습 단계를 앞뒤로 건너뛴다). seq가 바뀔 때만
+  // iframe에 dir을 전달한다(StudentContentPreviewFrame.reviewNav). 콘텐츠가 바뀌면 seq를 0으로 되돌린다.
+  const [reviewNav, setReviewNav] = useState<{ seq: number; dir: number }>({ seq: 0, dir: 1 });
   // 예제(kind:reference) '번역 병기' 창 전체화면 오버레이 대상. 미리보기 모달 위에 뜬다.
   const [annotateContent, setAnnotateContent] = useState<LessonContent | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>(categories[0]?.id || '');
@@ -714,6 +717,10 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const livePreviewContent = previewContent
     ? assignedContentsById.get(previewContent.id) ?? previewContent
     : null;
+  // 미리보기 대상이 바뀌면(또는 닫히면) 단계 이동 신호를 초기화 — 새 iframe에 이전 콘텐츠의 방향이 새어들지 않게.
+  useEffect(() => {
+    setReviewNav({ seq: 0, dir: 1 });
+  }, [previewContent?.id]);
   const contentsByCategory = useMemo(() => {
     const grouped = new Map<string, LessonContent[]>();
     for (const content of assignedContents) {
@@ -6287,39 +6294,32 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 )}
               </h3>
               <div className="flex shrink-0 items-center gap-2">
-                {(() => {
-                  const previewIndex = recordedPracticeContents.findIndex(
-                    (content) => content.id === livePreviewContent.id
-                  );
-                  if (previewIndex === -1 || recordedPracticeContents.length < 2) return null;
-                  return (
-                    <span className="inline-flex items-center overflow-hidden rounded-xl border border-[#E5E3DD] bg-white">
-                      <button
-                        type="button"
-                        onClick={() => setPreviewContent(recordedPracticeContents[previewIndex - 1])}
-                        disabled={previewIndex <= 0}
-                        title="이전 콘텐츠"
-                        aria-label="이전 콘텐츠"
-                        className="inline-flex h-9 w-8 items-center justify-center text-[#8B7E74] transition-all hover:bg-[#F7F6F3] hover:text-[#8B5E3C] disabled:cursor-not-allowed disabled:text-[#DAD5CC]"
-                      >
-                        <ChevronLeft size={16} />
-                      </button>
-                      <span className="px-1.5 text-xs font-bold text-[#8B7E74] tabular-nums">
-                        {previewIndex + 1}/{recordedPracticeContents.length}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setPreviewContent(recordedPracticeContents[previewIndex + 1])}
-                        disabled={previewIndex >= recordedPracticeContents.length - 1}
-                        title="다음 콘텐츠"
-                        aria-label="다음 콘텐츠"
-                        className="inline-flex h-9 w-8 items-center justify-center text-[#8B7E74] transition-all hover:bg-[#F7F6F3] hover:text-[#8B5E3C] disabled:cursor-not-allowed disabled:text-[#DAD5CC]"
-                      >
-                        <ChevronRight size={16} />
-                      </button>
-                    </span>
-                  );
-                })()}
+                {/* 콘텐츠 안 '단계 이동' — ◀ 이전 단계, ▶ 다음 단계로 건너뛰기. 콘텐츠와 콘텐츠 사이가
+                    아니라 한 실습 안에서 앞뒤로 움직인다(실습 HTML의 window.__reviewNav를 호출). 실습 HTML이
+                    있을 때만 띄운다(슬라이드·정적 예제는 넘길 단계가 없다). */}
+                {livePreviewContent.html?.trim() && !livePreviewContent.slideUrl?.trim() && (
+                  <span className="inline-flex items-center overflow-hidden rounded-xl border border-[#E5E3DD] bg-white">
+                    <button
+                      type="button"
+                      onClick={() => setReviewNav((s) => ({ seq: s.seq + 1, dir: -1 }))}
+                      title="이전 단계"
+                      aria-label="이전 단계"
+                      className="inline-flex h-9 w-8 items-center justify-center text-[#8B7E74] transition-all hover:bg-[#F7F6F3] hover:text-[#8B5E3C]"
+                    >
+                      <ChevronLeft size={16} />
+                    </button>
+                    <span className="px-2 text-xs font-bold text-[#8B7E74]">단계</span>
+                    <button
+                      type="button"
+                      onClick={() => setReviewNav((s) => ({ seq: s.seq + 1, dir: 1 }))}
+                      title="다음 단계로 건너뛰기"
+                      aria-label="다음 단계로 건너뛰기"
+                      className="inline-flex h-9 w-8 items-center justify-center text-[#8B7E74] transition-all hover:bg-[#F7F6F3] hover:text-[#8B5E3C]"
+                    >
+                      <ChevronRight size={16} />
+                    </button>
+                  </span>
+                )}
                 {/* 예제(kind:reference)이고 번역 사전(__DSR_TR__)이 있으면 — 강사가 공용 화면에서 여러 언어를
                     골라 한 화면 병기로 크게 띄울 수 있는 '번역 병기' 창 전체화면 버튼. */}
                 {livePreviewContent.kind === 'reference' &&
@@ -6375,6 +6375,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                     title={livePreviewContent.title?.trim() || '콘텐츠 미리보기'}
                     className="w-full"
                     reviewMode
+                    reviewNav={reviewNav}
                   />
                 </div>
               ) : (
