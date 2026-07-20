@@ -335,6 +335,27 @@ const calculateContentDropdownPosition = (button: HTMLElement): ContentDropdownP
   return { top, left, width, maxHeight };
 };
 
+// 뷰포트 폭 감지 — 넓으면(lg≈1024px+) 이론+실습/예제를 좌우로 채우고, 좁아지면(반쪽 등) 세로로 쌓아
+// 페이지 전체가 스크롤되게 한다. (Tailwind lg: 브레이크포인트와 같은 폭 기준이라 렌더 결과가 어긋나지 않는다.)
+const useMediaQuery = (query: string): boolean => {
+  const [matches, setMatches] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.matchMedia(query).matches : false
+  );
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia(query);
+    const handler = () => setMatches(mq.matches);
+    handler();
+    if (typeof mq.addEventListener === 'function') {
+      mq.addEventListener('change', handler);
+      return () => mq.removeEventListener('change', handler);
+    }
+    mq.addListener(handler);
+    return () => mq.removeListener(handler);
+  }, [query]);
+  return matches;
+};
+
 export const StudentPage: React.FC<StudentPageProps> = ({
   onBackToAdmin,
   onLogin,
@@ -769,6 +790,8 @@ export const StudentPage: React.FC<StudentPageProps> = ({
 
   // 'dsr-fit-viewport' 마커가 든 실습(코딩반 타이핑 미션 등)과 예제(한 화면 설계)는 위아래 페이지 스크롤 없이
   // 남은 화면 높이에 iframe을 딱 맞춰 꽉 채운다. 마커 없는 기존 콘텐츠는 종전대로 자연 높이 + 스크롤.
+  // 넓은 화면에서만 좌우 채움 분할, 좁아지면(반쪽 등) 세로로 쌓아 페이지 전체 스크롤 + 각 패널 자연 높이.
+  const isWide = useMediaQuery('(min-width: 1024px)');
   const fitCandidateContent = currentPage && !currentPage.locked ? currentPage.content : null;
   const isFitViewport = Boolean(
     (!SHOW_CLASSROOM_SELECTION || activeClassroomId) &&
@@ -965,8 +988,8 @@ export const StudentPage: React.FC<StudentPageProps> = ({
     <div
       className={`bg-[#FBFBFA] font-sans text-[#4A3728] ${
         embeddedInAdminShell
-          ? `flex min-h-0 flex-1 flex-col ${isFillLayout ? 'overflow-hidden' : 'overflow-y-auto'}`
-          : isFillLayout
+          ? `flex min-h-0 flex-1 flex-col ${isFillLayout && isWide ? 'overflow-hidden' : 'overflow-y-auto'}`
+          : isFillLayout && isWide
             ? 'flex h-screen flex-col overflow-hidden'
             : 'min-h-screen'
       }`}
@@ -1144,23 +1167,29 @@ export const StudentPage: React.FC<StudentPageProps> = ({
       ) : (
         <main
           className={
-            isFillLayout
+            isFillLayout && isWide
               ? 'flex min-h-0 w-full flex-1 flex-col px-3 pb-3 pt-3 sm:px-4'
-              : 'w-full px-4 pb-8 pt-6 sm:px-6 lg:px-8 xl:px-10 2xl:px-12'
+              : isFillLayout
+                ? 'w-full px-3 pb-6 pt-3 sm:px-4'
+                : 'w-full px-4 pb-8 pt-6 sm:px-6 lg:px-8 xl:px-10 2xl:px-12'
           }
         >
           {publishedTheory || practicePages.length > 0 ? (
             // 교사가 켠 것에 따라 화면 구성이 바뀐다: 이론만=전체, 이론+실습(예제)=반반, 실습/예제만=전체.
             <div
-              className={`flex min-h-0 flex-1 gap-3 ${
-                isSplitView ? 'flex-col lg:flex-row' : 'flex-col'
-              }`}
+              className={
+                isWide
+                  ? `flex min-h-0 flex-1 gap-3 ${isSplitView ? 'flex-row' : 'flex-col'}`
+                  : 'flex flex-col gap-3'
+              }
             >
               {/* 이론 패널 — 공개된 이론 슬라이드 임베드. 슬라이드 자체 ◀ ▶로 앞뒤 장을 넘겨볼 수 있다. */}
               {publishedTheory && (
                 <div
-                  className={`min-h-0 flex-1 overflow-hidden rounded-[24px] border border-[#E5E3DD] bg-white shadow-sm ${
-                    isSplitView ? 'lg:basis-1/2' : ''
+                  className={`overflow-hidden rounded-[24px] border border-[#E5E3DD] bg-white shadow-sm ${
+                    isWide
+                      ? `min-h-0 flex-1 ${isSplitView ? 'basis-1/2' : ''}`
+                      : 'aspect-video w-full'
                   }`}
                 >
                   <iframe
@@ -1175,7 +1204,11 @@ export const StudentPage: React.FC<StudentPageProps> = ({
               {/* 실습/예제 칸 — 공개 목록 순서 = 페이지 번호. 예제가 공개되면 이 칸의 기본 페이지가 예제가 된다. */}
               {practicePages.length > 0 && (
                 <div
-                  className={`flex min-h-0 flex-1 flex-col gap-2 ${isSplitView ? 'lg:basis-1/2' : ''}`}
+                  className={
+                    isWide
+                      ? `flex min-h-0 flex-1 flex-col gap-2 ${isSplitView ? 'basis-1/2' : ''}`
+                      : 'flex flex-col gap-2'
+                  }
                 >
                   {/* 단계 다시 보기 ◀ ▶ — '다시하기' 완료 화면까지 끝낸 학생만, 같은 실습을 단계별로 앞뒤로 되짚어 본다
                       (콘텐츠 간 이동 아님). '복습' 라벨은 뗐다(2026-07-20) — 화살표 버튼만 남긴다. */}
@@ -1209,16 +1242,18 @@ export const StudentPage: React.FC<StudentPageProps> = ({
                       key={currentPage.content.id}
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className={isFillLayout ? 'min-h-0 flex-1' : undefined}
+                      className={isFillLayout && isWide ? 'min-h-0 flex-1' : undefined}
                     >
                       {isFillLayout ? (
                         <StudentContentPreviewFrame
                           html={currentPage.content.html ?? ''}
                           title={currentPage.content.title}
-                          autoHeight={false}
+                          autoHeight={!isWide}
                           reviewMode={Boolean(isAdmin)}
                           reviewNav={reviewNav}
-                          className="h-full w-full overflow-hidden rounded-[24px] border border-[#E5E3DD] bg-white shadow-sm"
+                          className={`w-full overflow-hidden rounded-[24px] border border-[#E5E3DD] bg-white shadow-sm ${
+                            isWide ? 'h-full' : ''
+                          }`}
                         />
                       ) : (
                         <StudentContentCard
