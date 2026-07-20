@@ -561,6 +561,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   } | null>(null);
   // Drive 동기화 토큰 캐시 — 후보에서 다시 고를 때 OAuth 팝업이 또 뜨지 않도록 재사용한다(실패 시 비운다).
   const theoryDriveTokenRef = useRef<string | null>(null);
+  // 이론 공개 시 '별도 브라우저 창'에 슬라이드쇼로 띄우는 발표 창 핸들 — 재공개 시 같은 창 재사용, 내리면 닫는다.
+  const theoryWindowRef = useRef<Window | null>(null);
   // 좁은 폭(모바일/태블릿, <lg)에서는 날짜상태·캘린더·출석·메모를 타일+팝업으로 보여준다.
   const isNarrow = useMediaQuery(NARROW_MEDIA_QUERY);
   const isVeryNarrow = useMediaQuery(VERY_NARROW_MEDIA_QUERY);
@@ -1916,9 +1918,15 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     fileId?: string;
   }) => {
     if (!onSyncTheorySlide) return;
-    const folderId = classroom.theorySlideFolderId?.trim();
+    // 이론 ppt는 반별 폴더가 아니라 한 곳(공유 폴더)에 모아 두고 회차 제목으로 구별한다(2026-07-20).
+    // 빌드 env VITE_THEORY_SLIDE_FOLDER_ID를 우선 쓰고, 없으면 예전 반별 폴더(classroom.theorySlideFolderId)로 폴백.
+    const folderId =
+      (import.meta.env.VITE_THEORY_SLIDE_FOLDER_ID as string | undefined)?.trim() ||
+      classroom.theorySlideFolderId?.trim();
     if (!folderId) {
-      setTheorySyncError('먼저 설정 탭에서 이 반의 이론 슬라이드 폴더를 지정하세요.');
+      setTheorySyncError(
+        '이론 ppt 공유 폴더가 설정돼 있지 않아요 (VITE_THEORY_SLIDE_FOLDER_ID). 또는 설정 탭에서 이 반의 이론 폴더를 지정하세요.'
+      );
       return;
     }
     const clientId = import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID;
@@ -2038,7 +2046,30 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     const isPublished = currentPublishedLesson?.publishedTheory?.url === slideUrl;
     if (isPublished) {
       void onUpdatePublishedLesson(classroom.id, classroom.name, selectedDate, currentIds, null);
+      // 이론을 내리면 교사 발표 창도 닫는다.
+      try {
+        if (theoryWindowRef.current && !theoryWindowRef.current.closed) theoryWindowRef.current.close();
+      } catch {
+        /* 무시 */
+      }
+      theoryWindowRef.current = null;
       return;
+    }
+    // ★ 교사 발표 창 — 이론을 공개하는 순간 '별도 브라우저 창'에 슬라이드쇼(/present)로 크게 띄운다.
+    //   (예제처럼 앱 안 팝업이 아니라 다른 윈도우로 — 빔프로젝터/보조 모니터에 두고 발표용. 진짜 전체화면은 그 창에서 F11.)
+    //   ⚠️ 반드시 await 앞(=클릭 제스처 안)에서 열어야 팝업 차단에 안 걸린다. 교사는 슬라이드 소유자라 학생 공유 전에도 열린다.
+    try {
+      const presentUrl = toSlidePresentUrl(slideUrl);
+      const availW = typeof window !== 'undefined' && window.screen ? window.screen.availWidth : 1280;
+      const availH = typeof window !== 'undefined' && window.screen ? window.screen.availHeight : 800;
+      theoryWindowRef.current = window.open(
+        presentUrl,
+        'dasarang-theory-present', // 이름 지정 → 재공개 시 같은 창을 재사용(새 창을 계속 만들지 않음)
+        `popup=yes,width=${availW},height=${availH},left=0,top=0`
+      );
+      theoryWindowRef.current?.focus();
+    } catch {
+      /* 팝업 차단 등은 무시 — 학생 공개는 계속 진행 */
     }
     setIsTheoryPublishBusy(true);
     try {

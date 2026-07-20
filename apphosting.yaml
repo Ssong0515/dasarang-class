@@ -31,6 +31,11 @@ env:
   - variable: VITE_GOOGLE_OAUTH_CLIENT_ID
     value: 1049224228341-p1qe72is5mc7mosv31ba5fo000c5qqs4.apps.googleusercontent.com
 
+  # 이론 pptx를 모아두는 공유 Drive 폴더 ID (반별 폴더 대신 하나로 — 회차 제목으로 구별).
+  # ⚠️ 폴더 만든 뒤 그 폴더 URL의 <ID>로 아래 value를 채우고 재배포하세요. 비어 있으면 반별 폴더로 폴백합니다.
+  - variable: VITE_THEORY_SLIDE_FOLDER_ID
+    value: ""
+
   # ── 서버 전용 시크릿 (Secret Manager) ────────────────────────────
   # ChatGPT(GPT Actions)/Claude(MCP) 관리 API 키 — 배포 전 반드시 생성:
   #   firebase apphosting:secrets:set ADMIN_API_KEY
