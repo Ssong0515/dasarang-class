@@ -1970,10 +1970,18 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       return;
     }
     const current = currentPublishedLesson?.publishedContentIds || [];
-    const next = current.includes(content.id)
-      ? current.filter((contentId) => contentId !== content.id)
-      : [content.id];
+    const willPublish = !current.includes(content.id);
+    const next = willPublish
+      ? [content.id]
+      : current.filter((contentId) => contentId !== content.id);
     void onUpdatePublishedLesson(classroom.id, classroom.name, selectedDate, next);
+    // 예제를 학생에게 공개하면 교사 대시보드에도 같은 예제 미리보기를 함께 띄운다(공용 화면 제시용 —
+    // 이 모달에 '번역 병기' 크게 띄우기 버튼도 있다). 내릴 땐 그 예제를 보고 있을 때만 닫는다(다른 걸 보고 있으면 유지).
+    if (willPublish) {
+      setPreviewContent(content);
+    } else {
+      setPreviewContent((prev) => (prev?.id === content.id ? null : prev));
+    }
   };
 
   // 이론 슬라이드 공개 토글 — 한 번에 하나만(다른 덱을 켜면 교체). 공개 전에 Drive 권한을
