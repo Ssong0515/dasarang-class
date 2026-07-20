@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Classroom, LessonCategory, LessonContent, PublishedLesson } from '../types';
 import { resolveAppPath } from '../utils/appPaths';
+import { useEscToClose } from '../utils/useEscToClose';
 import { StudentContentCard, StudentContentPreviewFrame } from './StudentContentPreview';
 import { StudentVoiceButton, VOICE_LANG_CHANGED_EVENT } from './StudentVoiceButton';
 import { StudentSubtitleOverlay } from './StudentSubtitleOverlay';
@@ -721,6 +722,16 @@ export const StudentPage: React.FC<StudentPageProps> = ({
       .map((lesson) => lesson.endNoticeAt as string)
       .sort()
       .pop() || null;
+
+  // 팝업들 Esc로 닫기.
+  useEscToClose(isUploadModalOpen, () => {
+    setIsUploadModalOpen(false);
+    resetUploadModal();
+  });
+  useEscToClose(isEndNoticeOpen, () => {
+    setDismissedEndNoticeAt(activeEndNoticeAt);
+    setIsEndNoticeOpen(false);
+  });
   // 종료 안내 신호가 오면 자동으로 띄우고, 학생이 이미 닫은 신호(같은 시각)면 닫아 둔다.
   // 단, 종료 시각부터 10분이 지나면 띄우지 않는다 — 늦게 페이지를 연 학생에겐 안 뜨고, 떠 있던 안내도 시간이 되면 자동으로 닫힌다.
   useEffect(() => {

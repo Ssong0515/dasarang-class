@@ -2,6 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, FileText } from 'lucide-react';
 import { CurriculumSession } from '../types';
+import { useEscToClose } from '../utils/useEscToClose';
 
 interface SessionDetailModalProps {
   /** 표시할 회차. null이면 모달이 닫혀 있다. */
@@ -14,6 +15,7 @@ interface SessionDetailModalProps {
  * 대시보드 커리큘럼 탭과 커리큘럼 관리 페이지에서 공용으로 쓴다.
  */
 export const SessionDetailModal: React.FC<SessionDetailModalProps> = ({ session, onClose }) => {
+  useEscToClose(Boolean(session), onClose);
   return (
     <AnimatePresence>
       {session && (

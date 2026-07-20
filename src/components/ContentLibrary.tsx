@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useEscToClose } from '../utils/useEscToClose';
 import {
   Plus,
   FolderPlus,
@@ -311,6 +312,7 @@ export const ContentLibrary: React.FC<ContentLibraryProps> = ({
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [editorTab, setEditorTab] = useState<EditorTab>('edit');
   const [isFullscreenPreviewOpen, setIsFullscreenPreviewOpen] = useState(false);
+  useEscToClose(isFullscreenPreviewOpen, () => setIsFullscreenPreviewOpen(false));
   const [isSavingContent, setIsSavingContent] = useState(false);
   const [isPickingSlide, setIsPickingSlide] = useState(false);
   const [isPickingNotebookLmFolder, setIsPickingNotebookLmFolder] = useState(false);

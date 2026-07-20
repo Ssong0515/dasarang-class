@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useEscToClose } from '../utils/useEscToClose';
 import {
   LayoutGrid,
   BookOpen,
@@ -60,6 +61,8 @@ const MonthlyEarningsCalendar: React.FC<{
   const [mode, setMode] = useState<CalendarMode>('class');
   // '+N개 더'를 눌러 그날 수업 전체를 팝업으로 펼친 날짜 (null이면 닫힘).
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
+
+  useEscToClose(Boolean(expandedDate), () => setExpandedDate(null));
 
   const earnings = useMemo(
     () => buildMonthEarnings(classrooms, view.year, view.month),

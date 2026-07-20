@@ -86,6 +86,7 @@ import {
 } from '../utils/students';
 import { isAttendanceExcluded } from '../utils/attendance';
 import { formatSessionLabel } from '../utils/sessionLabel';
+import { useEscToClose } from '../utils/useEscToClose';
 import { deleteField } from '../firebase';
 import { formatWon, getSessionFee } from '../utils/fee';
 import { openDriveSlidePicker, openDriveFolderPicker, requestDriveSyncAccessToken } from '../utils/drivePicker';
@@ -422,6 +423,7 @@ const ResponsiveCardOrPopup: React.FC<{
   children,
 }) => {
   const [open, setOpen] = useState(false);
+  useEscToClose(open, () => setOpen(false)); // 조기 return 전에(훅 규칙) 호출 — 내부에서 open일 때만 리스너를 붙인다.
 
   if (!isNarrow) {
     return <div className={desktopClassName}>{children}</div>;
@@ -647,6 +649,15 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   const [activePromptIndex, setActivePromptIndex] = useState<number | null>(null);
   // 이 회차 커리큘럼 상세 팝업 열림 여부.
   const [showCurriculumDetail, setShowCurriculumDetail] = useState(false);
+
+  // 팝업/모달 Esc로 닫기 (SessionDetailModal·ReferenceAnnotationOverlay는 각자 처리).
+  useEscToClose(previewContent !== null, () => setPreviewContent(null));
+  useEscToClose(theorySyncPicker !== null, () => setTheorySyncPicker(null));
+  useEscToClose(editingPromptIndex !== null, () => setEditingPromptIndex(null));
+  useEscToClose(showLessonDesc, () => setShowLessonDesc(false));
+  useEscToClose(isEndLessonModalOpen, () => setIsEndLessonModalOpen(false));
+  useEscToClose(isLanguagePopupOpen, () => setIsLanguagePopupOpen(false));
+  useEscToClose(showCurriculumDetail, () => setShowCurriculumDetail(false));
   // 다른 반 수업 '복사해오기(덮어쓰기)' 드롭다운 열림 여부.
   const [isCopyPickerOpen, setIsCopyPickerOpen] = useState(false);
   // 복사해오기 1단계에서 고른 원본 클래스 id (null이면 클래스 목록을 먼저 보여준다).

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Plus, CalendarClock, Loader2, Search } from 'lucide-react';
 import { CalendarClassSummary } from '../types';
+import { useEscToClose } from '../utils/useEscToClose';
 
 const DOW_LABELS = ['월', '화', '수', '목', '금', '토'];
 
@@ -31,6 +32,8 @@ export const CreateClassroomModal: React.FC<CreateClassroomModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [creatingId, setCreatingId] = useState<string | null>(null);
+
+  useEscToClose(isOpen, onClose);
 
   useEffect(() => {
     if (!isOpen || !onListCalendarClasses) {
