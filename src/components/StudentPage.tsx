@@ -359,11 +359,11 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   // 학생은 ◀ ▶·번호 칩으로 공개된 페이지 안에서 자유롭게 앞뒤로 오갈 수 있다.
   const [currentPageId, setCurrentPageId] = useState<string | null>(null);
   const prevPageIdsRef = useRef<string[] | null>(null);
-  // 복습 ◀ ▶ 단계 이동 신호 — 현재 실습을 끝낸 학생이 그 실습 안 단계를 앞뒤로 되짚어 볼 때 쓴다.
+  // ◀ ▶ 단계 다시 보기 신호 — 실습을 끝까지 끝낸 학생이 그 실습 안 단계를 앞뒤로 되짚어 볼 때 쓴다.
   // seq가 바뀔 때만 iframe에 dir을 전달한다(StudentContentPreviewFrame.reviewNav). 페이지가 바뀌면 0으로.
   const [reviewNav, setReviewNav] = useState<{ seq: number; dir: number }>({ seq: 0, dir: 1 });
-  // 이 학생이 완료 화면까지 간(=다 끝낸) 실습 콘텐츠 id들. ◀ ▶·번호 칩은 공개된 실습을
-  // 전부 끝낸 학생에게만 열린다(그 전에는 교사 따라가기로만 이동).
+  // 이 학생이 완료 화면('다시하기')까지 간(=다 끝낸) 실습 콘텐츠 id들. 단계 다시 보기 ◀ ▶는
+  // 그 실습을 끝낸 학생에게만 열린다(그 전에는 교사 따라가기로만 이동).
   const [completedContentIds, setCompletedContentIds] = useState<ReadonlySet<string>>(
     () => new Set()
   );
@@ -688,15 +688,16 @@ export const StudentPage: React.FC<StudentPageProps> = ({
     return () => window.removeEventListener('message', handlePracticeDone);
   }, []);
 
-  // ◀ ▶ '복습' 단계 이동 — 콘텐츠 사이 이동이 아니라, 지금 보고 있는 그 실습 하나를 단계별로 되짚어 본다.
-  // 그 실습을 끝까지 끝낸 학생에게만 열린다(실습별 개별 개방). 예제(kind:reference)는 단계 개념이 없어 제외,
-  // 잠긴(타이머 만료) 실습도 제외. 강사 미리보기(isAdmin)는 확인용으로 항상 보인다.
+  // ◀ ▶ 단계 다시 보기 — 콘텐츠 사이 이동이 아니라, 지금 보고 있는 그 실습 하나를 단계별로 앞뒤로 되짚어 본다.
+  // ★ '다시하기' 완료 화면까지 끝낸 학생에게만 열린다(dasa-practice-done 수신 = completedContentIds).
+  //   강사 미리보기(isAdmin)도 예외 없이 실습을 끝내야 뜬다 — 실제 학생 경험과 똑같이 보이게(2026-07-20).
+  //   예제(kind:reference)는 단계 개념이 없어 제외, 잠긴(타이머 만료) 실습도 제외.
   // 콘텐츠 사이 이동은 두지 않는다 — 학생은 한 번에 실습 하나만 보고, 교사 공개(교사 따라가기)로만 바뀐다.
   const canReviewCurrent = Boolean(
     currentPage &&
       !currentPage.locked &&
       currentPage.content.kind !== 'reference' &&
-      (Boolean(isAdmin) || completedContentIds.has(currentPage.content.id))
+      completedContentIds.has(currentPage.content.id)
   );
   // 화면에 띄울 카운트다운 — 아직 안 끝난(공개 중) 타이머 중 가장 빨리 끝나는 것.
   const runningTimerEndsAt =
@@ -1201,10 +1202,10 @@ export const StudentPage: React.FC<StudentPageProps> = ({
                 <div
                   className={`flex min-h-0 flex-1 flex-col gap-2 ${isSplitView ? 'lg:basis-1/2' : ''}`}
                 >
-                  {/* 복습 ◀ ▶ — 그 실습을 끝낸 학생만, 같은 실습을 단계별로 앞뒤로 되짚어 본다(콘텐츠 간 이동 아님). */}
+                  {/* 단계 다시 보기 ◀ ▶ — '다시하기' 완료 화면까지 끝낸 학생만, 같은 실습을 단계별로 앞뒤로 되짚어 본다
+                      (콘텐츠 간 이동 아님). '복습' 라벨은 뗐다(2026-07-20) — 화살표 버튼만 남긴다. */}
                   {canReviewCurrent && (
                     <div className="flex flex-wrap items-center justify-center gap-1.5 rounded-2xl border border-[#E5E3DD] bg-white px-3 py-2 shadow-sm">
-                      <span className="mr-1 text-xs font-bold text-[#8B7E74]">🔁 복습</span>
                       <button
                         type="button"
                         onClick={() => setReviewNav((s) => ({ seq: s.seq + 1, dir: -1 }))}

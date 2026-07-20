@@ -128,8 +128,9 @@ interface ClassroomDashboardProps {
     /** undefined = 이론 공개 상태 유지, null = 이론 잠금, 객체 = 그 이론 슬라이드 공개 */
     publishedTheory?: { url: string; label?: string } | null
   ) => Promise<void>;
-  /** 이론 슬라이드 학생 공개 전 Drive 권한을 '링크 있는 모든 사용자 보기'로 전환 (결과물 승인과 같은 패턴). */
-  onShareTheorySlide?: (url: string) => Promise<{ ok?: boolean }>;
+  /** 이론 슬라이드 학생 공개 전 Drive 권한을 '링크 있는 모든 사용자 보기'로 전환 (결과물 승인과 같은 패턴).
+   *  이론 슬라이드는 교사 계정 소유라 소유자 OAuth 토큰(driveAccessToken)으로 공유해야 한다(서비스 계정은 403). */
+  onShareTheorySlide?: (url: string, driveAccessToken?: string) => Promise<{ ok?: boolean }>;
   /** 수업 종료: 학생 화면을 잠그고 '오늘 수업 끝!' 안내를 모든 학생 화면에 띄운다. */
   onEndLesson?: (classroomId: string, classroomName: string, date: string) => Promise<void>;
   /** 이론 행 동기화 — 반 이론 폴더에서 제목과 맞는 pptx를 구글 슬라이드로 변환해 slideUrl을 돌려준다. */
@@ -1992,8 +1993,20 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     try {
       if (onShareTheorySlide) {
         try {
-          await onShareTheorySlide(slideUrl);
+          // 이론 슬라이드는 교사 Drive 계정 소유라, 링크공개도 교사 OAuth 토큰으로 해야 한다(서비스 계정은 못 바꿈).
+          // 동기화 때 받아 둔 토큰을 재사용하고, 없으면(이전 세션에서 동기화했거나 수동 링크) 새로 한 번 받는다.
+          let token = theoryDriveTokenRef.current;
+          if (!token) {
+            const clientId = import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID;
+            if (clientId) {
+              token = await requestDriveSyncAccessToken(clientId, userEmail);
+              theoryDriveTokenRef.current = token;
+            }
+          }
+          await onShareTheorySlide(slideUrl, token ?? undefined);
         } catch (error) {
+          // 토큰 만료·거부 등으로 실패했을 수 있으니 캐시를 비워 다음 시도에 새 토큰을 받게 한다.
+          theoryDriveTokenRef.current = null;
           const message = error instanceof Error ? error.message : '슬라이드 권한 전환에 실패했습니다.';
           const proceed = window.confirm(
             `슬라이드 접근 권한을 자동으로 열지 못했습니다.\n(${message})\n\n그래도 공개할까요? 학생 화면에 권한 오류가 보일 수 있어요.`

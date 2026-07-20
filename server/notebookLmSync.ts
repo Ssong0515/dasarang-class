@@ -75,10 +75,23 @@ export const validateNotebookLmSyncPayload = (body: unknown): { folderId: string
   return { folderId, driveAccessToken };
 };
 
-const getDriveClientFromAccessToken = (accessToken: string) => {
+// 교사 OAuth 액세스 토큰으로 도는 Drive 클라이언트. 이론 슬라이드는 이 토큰으로 변환·생성되므로
+// 그 파일의 소유자도 교사 계정이다 — 공유(링크공개) 설정 변경도 반드시 이 소유자 토큰으로 해야 한다
+// (서비스 계정은 교사 소유 파일의 공유를 못 바꿔 403이 난다). server.ts의 /api/drive/share-slide가 재사용한다.
+export const getDriveClientFromAccessToken = (accessToken: string) => {
   const auth = new google.auth.OAuth2();
   auth.setCredentials({ access_token: accessToken });
   return google.drive({ version: 'v3', auth });
+};
+
+// 파일을 '링크가 있는 모든 사용자 보기(anyone/reader)'로 연다. 학생 계정엔 파일 권한이 없어서
+// 이걸 안 하면 학생 임베드 iframe에 구글 로그인·'액세스 권한 필요' 벽이 뜬다. 반드시 소유자(교사) 토큰 클라이언트로 호출.
+export const shareDriveFileAnyone = async (drive: DriveClient, fileId: string) => {
+  await drive.permissions.create({
+    fileId,
+    requestBody: { role: 'reader', type: 'anyone' },
+    supportsAllDrives: true,
+  });
 };
 
 const isGoogleApiErrorStatus = (error: unknown, statusCode: number) => {
@@ -230,6 +243,16 @@ const createConvertedPresentation = async (
 
   if (!response.data.id) {
     throw new Error('Drive did not return a converted presentation id.');
+  }
+
+  // 변환 직후 소유자(교사) 토큰으로 링크공개까지 해 둔다 — 나중에 학생 공개 시점에 서비스 계정이
+  // 교사 소유 파일의 공유를 못 바꾸는 문제(학생 화면 권한 벽)를 애초에 예방한다. 공유 실패해도 변환은 성공 처리.
+  try {
+    await shareDriveFileAnyone(drive, response.data.id);
+  } catch (error) {
+    console.warn(
+      `Converted presentation ${response.data.id} could not be shared as anyone-reader: ${getErrorMessage(error)}`
+    );
   }
 
   return {

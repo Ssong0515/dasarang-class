@@ -12,6 +12,7 @@ import {
   validateNotebookLmSyncPayload,
   syncTheorySlideFromFolder,
   validateTheorySlidePayload,
+  getDriveClientFromAccessToken,
 } from './server/notebookLmSync';
 import { createAdminApiRouter } from './server/adminApi/router';
 import { handleMcpDeleteRequest, handleMcpGetRequest, handleMcpPostRequest } from './server/adminApi/mcp';
@@ -432,16 +433,23 @@ async function startServer() {
 
   // 이론 슬라이드 학생 공개 전 권한 전환 — Drive/슬라이드 파일을 '링크 있는 모든 사용자 보기'로 만든다.
   // (학생 계정엔 파일 권한이 없어서, 공개 시 이걸 안 하면 학생 임베드 iframe에 권한 오류가 뜬다.)
+  // ★ 이론 슬라이드는 교사 Drive 계정이 소유하므로(변환 시 교사 OAuth 토큰 사용) 공유도 그 소유자 토큰으로 해야 한다 —
+  //   서비스 계정은 교사 소유 파일의 공유를 못 바꿔 403이 난다. driveAccessToken이 오면 소유자 클라이언트로, 없으면(구버전 호출) 서비스 계정으로 시도.
   app.post(withBasePath(APP_BASE_PATH, '/api/drive/share-slide'), requireAdmin, async (req, res) => {
     try {
       const url = typeof req.body?.url === 'string' ? req.body.url.trim() : '';
+      const driveAccessToken =
+        typeof req.body?.driveAccessToken === 'string' ? req.body.driveAccessToken.trim() : '';
       const fileIdMatch =
         url.match(/\/presentation\/d\/([^/?#]+)/) ?? url.match(/\/file\/d\/([^/?#]+)/);
       if (!fileIdMatch) {
         res.status(400).json({ error: '구글 슬라이드/드라이브 링크가 아니라 권한을 자동으로 열 수 없습니다.' });
         return;
       }
-      await getDriveClient().permissions.create({
+      const drive = driveAccessToken
+        ? getDriveClientFromAccessToken(driveAccessToken)
+        : getDriveClient();
+      await drive.permissions.create({
         fileId: fileIdMatch[1],
         requestBody: { role: 'reader', type: 'anyone' },
         supportsAllDrives: true,

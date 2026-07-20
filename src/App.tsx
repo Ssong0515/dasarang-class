@@ -503,8 +503,10 @@ export default function App() {
 
   // 이론 슬라이드를 학생에게 공개하기 전에 Drive 파일을 '링크 있는 모든 사용자 보기'로 전환한다.
   // (결과물 승인과 같은 패턴 — 학생 계정에 권한이 없으면 임베드 iframe에 권한 오류가 뜨기 때문.)
-  const handleShareTheorySlide = (url: string) =>
-    postAdminRequest<{ ok?: boolean }>('api/drive/share-slide', { url });
+  // ★ 이론 슬라이드는 교사 Drive 계정이 소유하므로, 공유도 교사 OAuth 토큰(driveAccessToken)으로 해야 한다 —
+  //   서비스 계정으론 교사 소유 파일의 공유를 못 바꿔 403이 난다(대시보드가 동기화 때 받아 둔 토큰을 넘긴다).
+  const handleShareTheorySlide = (url: string, driveAccessToken?: string) =>
+    postAdminRequest<{ ok?: boolean }>('api/drive/share-slide', { url, driveAccessToken });
 
   const handleAddStudentAccess = async (rawEmail: string, memo: string) => {
     if (!user || !isAdmin) return;
