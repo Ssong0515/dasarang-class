@@ -3607,7 +3607,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                     </p>
                     <div className="space-y-4">
                       {theoryGroups.map(({ prompt, promptIndex, contents }) => {
-                        const isCopied = copiedPromptIndex === promptIndex;
                         const isActiveTarget = activePromptIndex === promptIndex;
                         const promptSlideUrl = prompt.slideUrl?.trim() ?? '';
                         const hasSlide = promptSlideUrl.length > 0;
@@ -3624,8 +3623,9 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                                 : 'border-[#E5E3DD] bg-[#FBFAF8]'
                             }`}
                           >
-                            {/* 이론 헤더 — 이 덱(프롬프트·자료 링크)과 아래 실습들이 한 묶음 */}
-                            <div className="flex flex-col gap-2 px-1 pb-1 sm:flex-row sm:items-center sm:justify-between">
+                            {/* 이론 헤더 — 이 덱(프롬프트·자료 링크)과 아래 실습들이 한 묶음.
+                                px-4로 실습 카드(px-4)와 오른쪽 버튼 끝을 맞춘다(2026-07-20). */}
+                            <div className="flex flex-col gap-2 px-4 pb-2 sm:flex-row sm:items-center sm:justify-between">
                               <div className="flex min-w-0 items-center gap-2">
                                 <Presentation size={15} className="shrink-0 text-[#8B5E3C]" />
                                 {/* 이론 제목·커리큘럼 상세(!)는 위 회차 제목 옆으로 이동. 여기선 '이 수업 설명'을 연다. */}
@@ -3712,15 +3712,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                                     {isActiveTarget ? '완료' : '수정'}
                                   </button>
                                 )}
-                                <button
-                                  type="button"
-                                  onClick={() => handleCopyTheoryPrompt(prompt.prompt, promptIndex)}
-                                  title={isCopied ? '복사됨' : '이론 프롬프트 복사'}
-                                  aria-label="이론 프롬프트 복사"
-                                  className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[#E5E3DD] bg-white text-[#4A3728] transition-all hover:border-[#8B5E3C]"
-                                >
-                                  {isCopied ? <Check size={14} className="text-[#3A7D44]" /> : <Copy size={14} />}
-                                </button>
+                                {/* 프롬프트 복사 버튼은 제거(2026-07-20) — 복사는 프롬프트 보기(📄) 팝업 안 '복사' 버튼으로 한다. */}
                                 <button
                                   type="button"
                                   onClick={() => handleOpenPromptEditor(promptIndex)}
@@ -3753,18 +3745,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                                     )}
                                   </button>
                                 )}
-                                {hasSlide && (
-                                  <a
-                                    href={toSlidePresentUrl(promptSlideUrl)}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    title="이론 수업 자료 열기"
-                                    aria-label="이론 수업 자료 열기"
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[#CFE0FF] bg-[#EAF2FF] text-[#2F5EA8] transition-all hover:bg-[#D6E6FF]"
-                                  >
-                                    <ExternalLink size={14} />
-                                  </a>
-                                )}
+                                {/* 슬라이드 열기(링크) 버튼은 제거(2026-07-20) — '이론' 공개를 누르면 별도 창으로 슬라이드가 뜬다. */}
                                 <button
                                   type="button"
                                   onClick={() => handleRemoveTheoryPrompt(promptIndex)}
