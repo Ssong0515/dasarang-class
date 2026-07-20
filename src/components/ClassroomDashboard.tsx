@@ -3606,7 +3606,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                                               ? '이론 잠그기 — 학생 화면에서 이론이 내려가요'
                                               : '이론 공개 — 학생 화면에 이 슬라이드가 떠요 (실습과 같이 켜면 반반 분할)'
                                       }
-                                      aria-label={isTheoryPublished ? '이론 잠그기' : '이론 공개'}
+                                      aria-label={isTheoryPublished ? '이론 내리기' : '이론'}
                                       className={`inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-xs font-bold transition-all max-[639px]:px-2 ${
                                         !canPublishTheory
                                           ? 'cursor-not-allowed border border-[#EEEBE5] bg-[#F7F6F3] text-[#C7C0B5]'
@@ -3617,7 +3617,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                                     >
                                       {isTheoryPublished ? <EyeOff size={14} /> : <Eye size={14} />}
                                       <span className="max-[639px]:hidden">
-                                        {isTheoryPublished ? '이론 잠그기' : '이론 공개'}
+                                        {isTheoryPublished ? '이론 내리기' : '이론'}
                                       </span>
                                     </button>
                                   );
@@ -3975,7 +3975,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                                                   : '이론 공개 — 학생 화면에 이 슬라이드가 떠요 (실습과 같이 켜면 반반 분할)'
                                               }
                                               aria-label={
-                                                isTheoryPublished ? '이론 잠그기' : '이론 공개'
+                                                isTheoryPublished ? '이론 내리기' : '이론'
                                               }
                                               className={`inline-flex h-8 w-8 items-center justify-center rounded-xl transition-all ${
                                                 isTheoryPublished
