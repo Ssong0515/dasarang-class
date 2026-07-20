@@ -119,10 +119,6 @@ const TIMER_NOTICE_LANGS: { code: string; label: string; dir?: 'rtl' | 'ltr'; ti
   { code: 'tl', label: 'Tagalog', title: 'Tapos na ang oras!', line: 'Tingnan na ang screen ng guro 👀' },
 ];
 
-// 실습 완료 기록(localStorage 키 접두) — 실습 HTML이 완료 화면에서 보내는 {type:'dasa-practice-done'}
-// postMessage를 콘텐츠 id별로 남긴다. 새로고침해도 ◀ ▶ 이동 권한이 유지되게 하기 위함(기기 로컬).
-const PRACTICE_DONE_STORAGE_PREFIX = 'dsr_practice_done:';
-
 // 학생이 우하단 언어 버튼(StudentVoiceButton)에서 고른 언어(iso) — 같은 localStorage 키를 공유한다
 // (StudentSubtitleOverlay와 같은 패턴). 만료 정리는 StudentVoiceButton이 마운트 시 해 준다.
 const VOICE_LANG_STORAGE_KEY = 'dsr_voice_lang';
@@ -364,6 +360,9 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   const [reviewNav, setReviewNav] = useState<{ seq: number; dir: number }>({ seq: 0, dir: 1 });
   // 이 학생이 완료 화면('다시하기')까지 간(=다 끝낸) 실습 콘텐츠 id들. 단계 다시 보기 ◀ ▶는
   // 그 실습을 끝낸 학생에게만 열린다(그 전에는 교사 따라가기로만 이동).
+  // ★ 현재 세션 메모리에만 둔다(localStorage 영구 저장 안 함, 2026-07-20) — 새로고침하면 초기화되어
+  //   다른 학생·다른 날·교사 테스트의 완료가 같은 브라우저(공용/재사용 노트북)로 이월돼
+  //   '처음 하는 학생'에게 바가 뜨는 문제를 막는다. 완료는 오직 이 세션에서 완료 화면에 도달한 학생만.
   const [completedContentIds, setCompletedContentIds] = useState<ReadonlySet<string>>(
     () => new Set()
   );
@@ -637,25 +636,6 @@ export const StudentPage: React.FC<StudentPageProps> = ({
     );
   }, [unlockedPageIdsKey]);
 
-  // 완료 기록 복원 — 새로고침해도 이미 끝낸 실습은 localStorage에서 되살린다.
-  useEffect(() => {
-    const currentIds = unlockedPageIdsKey ? unlockedPageIdsKey.split('|') : [];
-    const stored = currentIds.filter((contentId) => {
-      try {
-        return window.localStorage.getItem(`${PRACTICE_DONE_STORAGE_PREFIX}${contentId}`) === '1';
-      } catch {
-        return false;
-      }
-    });
-    if (stored.length === 0) return;
-    setCompletedContentIds((prev) => {
-      if (stored.every((contentId) => prev.has(contentId))) return prev;
-      const next = new Set(prev);
-      stored.forEach((contentId) => next.add(contentId));
-      return next;
-    });
-  }, [unlockedPageIdsKey]);
-
   // 완료 신호 수신 — 실습 HTML이 완료 화면에서 {type:'dasa-practice-done'}을 postMessage로 보낸다.
   // 화면에 떠 있는 실습 iframe은 현재 페이지 하나뿐이라 currentPageId(ref)로 어느 실습인지 정한다.
   const currentPageIdRef = useRef<string | null>(null);
@@ -672,11 +652,6 @@ export const StudentPage: React.FC<StudentPageProps> = ({
       if (!data || data.type !== 'dasa-practice-done') return;
       const contentId = currentPageIdRef.current;
       if (!contentId) return;
-      try {
-        window.localStorage.setItem(`${PRACTICE_DONE_STORAGE_PREFIX}${contentId}`, '1');
-      } catch {
-        /* 저장 실패해도 이번 세션 상태로는 동작 */
-      }
       setCompletedContentIds((prev) => {
         if (prev.has(contentId)) return prev;
         const next = new Set(prev);
