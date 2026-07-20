@@ -45,7 +45,6 @@ import {
   Wallet,
   Coins,
   Languages,
-  ScanSearch,
   Timer,
   Minus,
 } from 'lucide-react';
@@ -1957,10 +1956,18 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
       return;
     }
     const current = currentPublishedLesson?.publishedContentIds || [];
-    const next = current.includes(content.id)
-      ? current.filter((contentId) => contentId !== content.id)
-      : [content.id];
+    const willPublish = !current.includes(content.id);
+    const next = willPublish
+      ? [content.id]
+      : current.filter((contentId) => contentId !== content.id);
     void onUpdatePublishedLesson(classroom.id, classroom.name, selectedDate, next);
+    // 예제와 동일하게 — 실습을 학생에게 공개하면 교사 대시보드에도 미리보기를 함께 띄우고,
+    // 내릴 땐 그 실습을 보고 있을 때만 닫는다(다른 걸 보고 있으면 유지).
+    if (willPublish) {
+      setPreviewContent(content);
+    } else {
+      setPreviewContent((prev) => (prev?.id === content.id ? null : prev));
+    }
   };
 
   // 예제 공개 토글 — 예제는 학생 오른쪽 칸을 실습과 번갈아 쓴다(한 번에 하나만). 예제를 열면 떠 있던
@@ -2406,26 +2413,32 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     //  아직 안 묶인 실습은 '이론과 묶이지 않은 실습' 영역에 나오고, 거기서 담기 대상 이론으로 옮긴다.)
     const useGroupedLayout = showTheorySection && effectiveTheoryPrompts.length > 0;
 
-    // 공개/잠그기 버튼 (실습 전용). 예제(kind:reference)는 예제 공개 토글(한 번에 하나, 교체)을 따로 쓴다.
+    // 실습 공개/내리기 버튼 (실습 전용, 예제 버튼과 짝을 이루는 '학생 공개(덮기) + 교사 미리보기 자동' 토글).
     // 공개 중이면 학생 화면 페이지 번호(Np)를 함께 보여 교사가 "N페이지 보세요"라고 부를 수 있게 한다.
+    // 미리보기는 handleTogglePublishContent가 공개 순간 함께 띄운다(별도 미리보기 버튼 없앰, 2026-07-20).
     const renderPublishButton = (content: LessonContent) => {
       const isPublished = publishedContentIdSet.has(content.id);
       const pageNumber = publishedPageNumberById.get(content.id);
       return (
         <button
+          type="button"
           onClick={() => handleTogglePublishContent(content)}
-          title={isPublished ? `잠그기 (학생 화면 ${pageNumber}페이지)` : '공개'}
-          aria-label={isPublished ? '잠그기' : '공개'}
-          className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-4 py-2 text-xs font-bold transition-all max-[639px]:px-2.5 ${
+          title={
             isPublished
-              ? 'bg-[#FDECEC] text-[#B42318] hover:bg-[#FAD4D1]'
-              : 'bg-[#8B5E3C] text-white hover:bg-[#724D31]'
+              ? `실습 내리기 (학생 화면 ${pageNumber}페이지)`
+              : `${content.title} — 누르면 학생에게 이 실습을 공개하고 교사 화면에도 미리보기가 떠요`
+          }
+          aria-label={isPublished ? '실습 내리기' : '실습'}
+          className={`inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-xs font-bold transition-all max-[639px]:px-2 ${
+            isPublished
+              ? 'border border-[#B42318] bg-[#FDECEC] text-[#B42318] hover:bg-[#FAD4D1]'
+              : 'border border-[#EAD9BF] bg-[#FFF5E9] text-[#8B5E3C] hover:border-[#8B5E3C] hover:bg-[#FFEFD8]'
           }`}
         >
           {isPublished ? (
             <>
               <EyeOff size={14} />
-              <span className="max-[639px]:hidden">잠그기</span>
+              <span className="max-[639px]:hidden">실습 내리기</span>
               {pageNumber !== undefined && (
                 <span className="rounded-full bg-white/70 px-1.5 py-0.5 text-[10px] font-bold tabular-nums">
                   {pageNumber}p
@@ -2435,17 +2448,17 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
           ) : (
             <>
               <Eye size={14} />
-              <span className="max-[639px]:hidden">공개</span>
+              <span className="max-[639px]:hidden">실습</span>
             </>
           )}
         </button>
       );
     };
 
-    // 콘텐츠 행 오른쪽 액션 — [미리보기]·[공개]·[예제] 세 버튼을 항상 함께 보인다.
+    // 콘텐츠 행 오른쪽 액션 — [⏱타이머]·[실습]·[예제] 순서로 보인다(2026-07-20, 별도 미리보기 버튼 없앰).
     // 한 개념(unit) = 실습(practice) + 예제(example). 있는 것만 활성, 없는 것은 회색(비활성).
-    //  · 미리보기·공개 = 실습(있으면). · 예제 = 예제(있으면, 눌러서 강사 공용 화면 미리보기).
-    // 개념에 실습·예제가 다 있으면 세 버튼 모두 활성 — 한 항목에 미리보기·공개·예제가 함께 산다.
+    //  · 타이머·실습 = 실습(있고 실습영역 켜졌을 때). · 예제 = 예제(있으면).
+    // ★ 실습·예제 버튼은 둘 다 '학생 공개(덮기) + 교사 미리보기 자동 표시' 토글이다(공개하면 교사 화면에도 미리보기가 뜬다).
     const disabledActionCls =
       'inline-flex h-8 shrink-0 cursor-not-allowed items-center gap-1.5 whitespace-nowrap rounded-xl border border-[#EEEBE5] bg-[#F7F6F3] px-3 text-xs font-bold text-[#C7C0B5] max-[639px]:px-2';
     const renderContentActionButtons = ({
@@ -2457,51 +2470,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     }) => {
       return (
         <>
-          {/* 미리보기 — 실습 있으면 활성 */}
-          {practice ? (
-            <button
-              type="button"
-              onClick={() => setPreviewContent(practice)}
-              title={`${practice.title} 미리보기`}
-              aria-label="미리보기"
-              className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-[#E5E3DD] bg-white px-3 text-xs font-bold text-[#8B7E74] transition-all hover:border-[#8B5E3C] hover:text-[#8B5E3C] max-[639px]:px-2"
-            >
-              <ScanSearch size={14} />
-              <span className="max-[639px]:hidden">미리보기</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              disabled
-              aria-label="미리보기"
-              title="이 항목엔 실습이 없어요 (예제만)"
-              className={disabledActionCls}
-            >
-              <ScanSearch size={14} />
-              <span className="max-[639px]:hidden">미리보기</span>
-            </button>
-          )}
-          {/* 공개 — 실습이 있고 실습 영역이 켜져 있을 때만 활성 */}
-          {practice && showPracticeSection ? (
-            renderPublishButton(practice)
-          ) : (
-            <button
-              type="button"
-              disabled
-              aria-label="공개"
-              title={
-                practice
-                  ? '실습을 켜면 학생에게 공개할 수 있어요'
-                  : '이 항목엔 실습이 없어요 — 예제는 오른쪽 예제 공개 버튼으로 공개해요'
-              }
-              className={disabledActionCls}
-            >
-              <Eye size={14} />
-              <span className="max-[639px]:hidden">공개</span>
-            </button>
-          )}
           {/* ⏱ 실습 타이머 — 공개 순간 시작될 카운트다운(분). 수업 준비 때 −/+로 미리 설정, 0 = 타이머 없음.
-              공개 중이고 타이머가 돌고 있으면 남은 시간을 보여준다. */}
+              공개 중이고 타이머가 돌고 있으면 남은 시간을 보여준다. (버튼 순서: 타이머 → 실습 → 예제) */}
           {practice &&
             showPracticeSection &&
             (publishedContentIdSet.has(practice.id) &&
@@ -2543,6 +2513,22 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                 </button>
               </span>
             ) : null)}
+          {/* 실습 — 예제처럼 '학생 공개(덮기) + 교사 미리보기 자동' 토글. 실습이 있고 실습 영역이 켜졌을 때만 활성.
+              누르면 학생 화면 실습칸을 이 실습으로 채우고(한 번에 하나, 교체) 교사 화면에도 미리보기가 뜬다. */}
+          {practice && showPracticeSection ? (
+            renderPublishButton(practice)
+          ) : (
+            <button
+              type="button"
+              disabled
+              aria-label="실습"
+              title={practice ? '실습을 켜면 학생에게 공개할 수 있어요' : '이 항목엔 실습이 없어요 (예제만)'}
+              className={disabledActionCls}
+            >
+              <Eye size={14} />
+              <span className="max-[639px]:hidden">실습</span>
+            </button>
+          )}
           {/* 예제 — 이 버튼 하나가 곧 '학생 실습칸 덮기' 토글이다(눈 버튼 없이). 누르면 학생 화면 실습칸을
               이 예제로 덮고(한 번에 하나, 다른 예제를 켜면 교체), 다시 누르면 내려 실습이 보인다.
               실습 영역이 꺼져 있으면 덮을 칸이 없어 강사 미리보기만 연다. */}
