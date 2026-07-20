@@ -359,6 +359,9 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   // 학생은 ◀ ▶·번호 칩으로 공개된 페이지 안에서 자유롭게 앞뒤로 오갈 수 있다.
   const [currentPageId, setCurrentPageId] = useState<string | null>(null);
   const prevPageIdsRef = useRef<string[] | null>(null);
+  // 복습 ◀ ▶ 단계 이동 신호 — 현재 실습을 끝낸 학생이 그 실습 안 단계를 앞뒤로 되짚어 볼 때 쓴다.
+  // seq가 바뀔 때만 iframe에 dir을 전달한다(StudentContentPreviewFrame.reviewNav). 페이지가 바뀌면 0으로.
+  const [reviewNav, setReviewNav] = useState<{ seq: number; dir: number }>({ seq: 0, dir: 1 });
   // 이 학생이 완료 화면까지 간(=다 끝낸) 실습 콘텐츠 id들. ◀ ▶·번호 칩은 공개된 실습을
   // 전부 끝낸 학생에게만 열린다(그 전에는 교사 따라가기로만 이동).
   const [completedContentIds, setCompletedContentIds] = useState<ReadonlySet<string>>(
@@ -659,6 +662,10 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   useEffect(() => {
     currentPageIdRef.current = currentPageId;
   }, [currentPageId]);
+  // 보고 있는 실습이 바뀌면 복습 단계 신호를 초기화 — 새 iframe에 이전 실습의 방향이 새어들지 않게.
+  useEffect(() => {
+    setReviewNav({ seq: 0, dir: 1 });
+  }, [currentPageId]);
   useEffect(() => {
     const handlePracticeDone = (event: MessageEvent) => {
       const data = event.data as { type?: unknown } | null;
@@ -681,30 +688,16 @@ export const StudentPage: React.FC<StudentPageProps> = ({
     return () => window.removeEventListener('message', handlePracticeDone);
   }, []);
 
-  // ◀ ▶ 페이지 이동 — 잠긴(타이머 만료) 페이지는 건너뛴다.
-  const movePage = (direction: 1 | -1) => {
-    let index = currentPageIndex >= 0 ? currentPageIndex : direction === 1 ? -1 : practicePages.length;
-    while (true) {
-      index += direction;
-      if (index < 0 || index >= practicePages.length) return;
-      if (!practicePages[index].locked) {
-        setCurrentPageId(practicePages[index].content.id);
-        return;
-      }
-    }
-  };
-  const hasUnlockedBefore = practicePages.some((page, index) => index < currentPageIndex && !page.locked);
-  const hasUnlockedAfter =
-    currentPageIndex >= 0 &&
-    practicePages.some((page, index) => index > currentPageIndex && !page.locked);
-  // ◀ ▶·번호 칩은 '다 끝낸 학생'에게만 — 공개 중(잠기지 않은) 실습을 전부 완료해야 열린다.
-  // 예제(kind:reference)는 완료 개념이 없어 제외, 잠긴 실습은 더 할 수 없어 제외.
-  // 아직인 학생은 교사 따라가기(새 공개 시 자동 이동)로만 움직인다. 강사 미리보기는 항상 보인다.
-  const hasFinishedAllPractices = practicePages.every(
-    (page) =>
-      page.locked || page.content.kind === 'reference' || completedContentIds.has(page.content.id)
+  // ◀ ▶ '복습' 단계 이동 — 콘텐츠 사이 이동이 아니라, 지금 보고 있는 그 실습 하나를 단계별로 되짚어 본다.
+  // 그 실습을 끝까지 끝낸 학생에게만 열린다(실습별 개별 개방). 예제(kind:reference)는 단계 개념이 없어 제외,
+  // 잠긴(타이머 만료) 실습도 제외. 강사 미리보기(isAdmin)는 확인용으로 항상 보인다.
+  // 콘텐츠 사이 이동은 두지 않는다 — 학생은 한 번에 실습 하나만 보고, 교사 공개(교사 따라가기)로만 바뀐다.
+  const canReviewCurrent = Boolean(
+    currentPage &&
+      !currentPage.locked &&
+      currentPage.content.kind !== 'reference' &&
+      (Boolean(isAdmin) || completedContentIds.has(currentPage.content.id))
   );
-  const showPageNav = practicePages.length > 1 && (Boolean(isAdmin) || hasFinishedAllPractices);
   // 화면에 띄울 카운트다운 — 아직 안 끝난(공개 중) 타이머 중 가장 빨리 끝나는 것.
   const runningTimerEndsAt =
     Object.entries(activePracticeTimers)
@@ -1294,53 +1287,30 @@ export const StudentPage: React.FC<StudentPageProps> = ({
                 <div
                   className={`flex min-h-0 flex-1 flex-col gap-2 ${isSplitView ? 'lg:basis-1/2' : ''}`}
                 >
-                  {showPageNav && (
+                  {/* 복습 ◀ ▶ — 그 실습을 끝낸 학생만, 같은 실습을 단계별로 앞뒤로 되짚어 본다(콘텐츠 간 이동 아님). */}
+                  {canReviewCurrent && (
                     <div className="flex flex-wrap items-center justify-center gap-1.5 rounded-2xl border border-[#E5E3DD] bg-white px-3 py-2 shadow-sm">
+                      <span className="mr-1 text-xs font-bold text-[#8B7E74]">🔁 복습</span>
                       <button
                         type="button"
-                        onClick={() => movePage(-1)}
-                        disabled={!hasUnlockedBefore}
-                        aria-label="이전 페이지"
-                        className="flex h-8 w-8 items-center justify-center rounded-xl text-[#8B7E74] transition-all hover:bg-[#F3F2EE] hover:text-[#4A3728] disabled:cursor-not-allowed disabled:text-[#DAD5CC]"
+                        onClick={() => setReviewNav((s) => ({ seq: s.seq + 1, dir: -1 }))}
+                        aria-label="이전 단계"
+                        title="이전 단계"
+                        className="flex h-8 items-center gap-1 rounded-xl px-3 text-sm font-bold text-[#8B7E74] transition-all hover:bg-[#F3F2EE] hover:text-[#4A3728]"
                       >
                         <ChevronLeft size={18} />
+                        이전 단계
                       </button>
-                      {practicePages.map((page, index) => (
-                        <button
-                          key={page.content.id}
-                          type="button"
-                          onClick={() => setCurrentPageId(page.content.id)}
-                          disabled={page.locked}
-                          title={
-                            page.locked
-                              ? `${index + 1}페이지 · ${page.content.title} (시간 종료로 잠김)`
-                              : `${index + 1}페이지 · ${page.content.title}`
-                          }
-                          className={`flex h-8 min-w-8 items-center justify-center rounded-xl px-2 text-sm font-bold tabular-nums transition-all ${
-                            index === currentPageIndex
-                              ? 'bg-[#8B5E3C] text-white shadow'
-                              : page.locked
-                                ? 'cursor-not-allowed bg-[#F3F2EE] text-[#C8BFB8]'
-                                : 'bg-[#F7F4EF] text-[#6C6258] hover:bg-[#EEE7DD]'
-                          }`}
-                        >
-                          {page.locked ? <Lock size={12} /> : index + 1}
-                        </button>
-                      ))}
                       <button
                         type="button"
-                        onClick={() => movePage(1)}
-                        disabled={!hasUnlockedAfter}
-                        aria-label="다음 페이지"
-                        className="flex h-8 w-8 items-center justify-center rounded-xl text-[#8B7E74] transition-all hover:bg-[#F3F2EE] hover:text-[#4A3728] disabled:cursor-not-allowed disabled:text-[#DAD5CC]"
+                        onClick={() => setReviewNav((s) => ({ seq: s.seq + 1, dir: 1 }))}
+                        aria-label="다음 단계"
+                        title="다음 단계"
+                        className="flex h-8 items-center gap-1 rounded-xl px-3 text-sm font-bold text-[#8B7E74] transition-all hover:bg-[#F3F2EE] hover:text-[#4A3728]"
                       >
+                        다음 단계
                         <ChevronRight size={18} />
                       </button>
-                      {currentPage && (
-                        <span className="ml-1 hidden max-w-[18rem] truncate text-xs font-bold text-[#8B7E74] sm:inline">
-                          {currentPageIndex + 1}/{practicePages.length} · {currentPage.content.title}
-                        </span>
-                      )}
                     </div>
                   )}
 
@@ -1357,12 +1327,14 @@ export const StudentPage: React.FC<StudentPageProps> = ({
                           title={currentPage.content.title}
                           autoHeight={false}
                           reviewMode={Boolean(isAdmin)}
+                          reviewNav={reviewNav}
                           className="h-full w-full overflow-hidden rounded-[24px] border border-[#E5E3DD] bg-white shadow-sm"
                         />
                       ) : (
                         <StudentContentCard
                           content={currentPage.content}
                           showDescriptionToggle={false}
+                          reviewNav={reviewNav}
                         />
                       )}
                     </motion.div>

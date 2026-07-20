@@ -576,16 +576,18 @@ const injectIframeMarkup = (html: string, styleTag: string, scriptTag: string) =
   return nextHtml;
 };
 
-// 교사 검토 화면(대시보드·콘텐츠 라이브러리 미리보기)에서만 head에 주입되는 검토 플래그 + 단계 이동 브리지.
-// 학생 화면에는 절대 주입하지 않는다. 번역 엔진이 __DASA_REVIEW__ 값으로 수동 🌐 버튼을 띄운다.
-//
-// ◀ ▶ '콘텐츠 안 단계 이동'(2026-07-19 복원): 미리보기 모달의 ▶는 실습의 다음 단계로 건너뛰고
-// ◀는 이전 단계로 되돌린다(콘텐츠와 콘텐츠 사이 이동이 아니라 '한 실습 안에서'의 이동). 부모가
-// postMessage({type:'dasa-review-nav', dir:+1|-1})를 보내면, 실습 HTML이 정의한
-// window.__reviewNav(dir)를 호출한다(dir>0=다음/건너뛰기, dir<0=이전). 옛 콘텐츠 호환:
-// __reviewNav가 없고 dir>0이면 예전 window.__reviewSkip()을 대신 호출한다.
-const reviewFlagScriptTag = `<script>
-  window.__DASA_REVIEW__ = true;
+// 교사 검토 화면(대시보드·콘텐츠 라이브러리 미리보기)에서만 head에 주입되는 검토 플래그.
+// 학생 화면에는 주입하지 않는다. 번역 엔진이 __DASA_REVIEW__ 값으로 수동 🌐 버튼을 띄우고 자동 번역을 끈다.
+const reviewFlagScriptTag = `<script>window.__DASA_REVIEW__=true;</script>`;
+
+// ◀ ▶ '한 실습 안 단계 이동' 브리지. 두 곳에서 쓴다:
+//  ① 교사 대시보드 미리보기 모달의 ◀ ▶(다음 단계로 건너뛰기 / 이전 단계),
+//  ② 학생 화면에서 그 실습을 끝낸 학생의 '복습' ◀ ▶(같은 실습을 단계별로 되짚어 보기).
+// 부모가 postMessage({type:'dasa-review-nav', dir:+1|-1})를 보내면 실습 HTML이 정의한
+// window.__reviewNav(dir)를 호출한다(dir>0=다음/건너뛰기, dir<0=이전). 옛 콘텐츠 호환: __reviewNav가
+// 없고 dir>0이면 예전 window.__reviewSkip()을 대신 호출한다. 메시지가 올 때만 동작하므로 일반 학생
+// 재생(부모가 아무 신호도 안 보냄)에 주입돼도 무해 — 그래서 검토 플래그와 무관하게(annotate 예제 제외) 항상 넣는다.
+const reviewNavBridgeScriptTag = `<script>
   (function () {
     window.addEventListener('message', function (e) {
       if (!e.data || e.data.type !== 'dasa-review-nav') return;
@@ -617,9 +619,12 @@ export const buildResponsiveSrcDoc = (
     : ENABLE_INLINE_TRANSLATE
       ? iframeTranslateScriptTag
       : '';
-  // 플래그는 실습 <script>보다 먼저 실행돼야 하므로 head 쪽에 넣는다.
+  // 플래그·브리지는 실습 <script>보다 먼저 실행돼야 하므로 head 쪽에 넣는다. 검토 플래그는 교사 화면에서만,
+  // 단계 이동 브리지는 예제 병기(annotate)를 제외하고 항상(학생 '복습' ◀▶도 이 브리지를 쓴다).
   const headTags =
-    (options?.review && !options?.annotate ? reviewFlagScriptTag : '') + iframeResponsiveStyleTag;
+    (options?.review && !options?.annotate ? reviewFlagScriptTag : '') +
+    (options?.annotate ? '' : reviewNavBridgeScriptTag) +
+    iframeResponsiveStyleTag;
 
   // 문서 '시작'이 doctype/html/body일 때만 완전한 문서로 취급한다. 문서 전체에서 <body> 등을
   // 찾으면 실습 <script>가 문자열로 조립하는 태그 모양 텍스트(저장용 문서 등)에 오판해서,
@@ -652,8 +657,8 @@ interface StudentContentPreviewFrameProps {
    *  자동 번역을 끈다(원문 검토용), false(학생 화면·학생 화면 미리보기)면 버튼 없이
    *  우하단 언어 버튼(localStorage/postMessage)을 따라 자동 치환. */
   reviewMode?: boolean;
-  /** 교사 검토 화면의 ◀ ▶ '단계 이동' 신호. seq가 바뀔 때마다 dir(+1=다음/건너뛰기, -1=이전)을
-   *  iframe 안 실습(window.__reviewNav)에 전달한다. seq=0(초기값)에는 아무것도 보내지 않는다. */
+  /** ◀ ▶ '단계 이동' 신호(교사 미리보기·학생 복습 공용). seq가 바뀔 때마다 dir(+1=다음/건너뛰기,
+   *  -1=이전)을 iframe 안 실습(window.__reviewNav)에 전달한다. seq=0(초기값)에는 아무것도 보내지 않는다. */
   reviewNav?: { seq: number; dir: number };
 }
 
@@ -668,14 +673,14 @@ export const StudentContentPreviewFrame: React.FC<StudentContentPreviewFrameProp
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const srcDoc = buildResponsiveSrcDoc(html, { review: reviewMode });
 
-  // 교사 검토 화면의 ◀ ▶ 단계 이동 — seq가 바뀔 때만 iframe 안 실습에 방향을 전달한다.
+  // ◀ ▶ 단계 이동 — seq가 바뀔 때만 iframe 안 실습에 방향을 전달한다(교사 미리보기·학생 복습 공용).
   useEffect(() => {
-    if (!reviewMode || !reviewNav || reviewNav.seq === 0) return;
+    if (!reviewNav || reviewNav.seq === 0) return;
     iframeRef.current?.contentWindow?.postMessage(
       { type: 'dasa-review-nav', dir: reviewNav.dir },
       '*'
     );
-  }, [reviewMode, reviewNav]);
+  }, [reviewNav]);
 
   useEffect(() => {
     if (!autoHeight) {
@@ -945,6 +950,8 @@ interface StudentContentCardProps {
   headerControls?: React.ReactNode;
   details?: React.ReactNode;
   showDescriptionToggle?: boolean;
+  /** 학생 '복습' ◀ ▶ 단계 이동 신호 — 내부 실습 iframe에 그대로 전달한다. */
+  reviewNav?: { seq: number; dir: number };
 }
 
 export const StudentContentCard: React.FC<StudentContentCardProps> = ({
@@ -953,6 +960,7 @@ export const StudentContentCard: React.FC<StudentContentCardProps> = ({
   headerControls,
   details,
   showDescriptionToggle = true,
+  reviewNav,
 }) => {
   const hasDescription = Boolean(content.description?.trim());
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
@@ -1034,6 +1042,7 @@ export const StudentContentCard: React.FC<StudentContentCardProps> = ({
           html={content.html}
           title={content.title}
           className="w-full rounded-b-[32px]"
+          reviewNav={reviewNav}
         />
       ) : null}
     </section>
