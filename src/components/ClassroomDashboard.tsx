@@ -1991,27 +1991,16 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     }
     setIsTheoryPublishBusy(true);
     try {
-      if (onShareTheorySlide) {
+      // 이론 슬라이드 링크공개(anyone/reader)는 소유자(교사) 토큰으로만 되는데, 이제 **동기화 시점에 자동으로 공유**되므로
+      // (notebookLmSync.createConvertedPresentation) 공개 때 굳이 OAuth 팝업을 새로 띄우지 않는다.
+      // 이 세션에 동기화하며 받아 둔 토큰이 있으면 그걸로 한 번 더 확실히 열어 두고(무해), 없으면 조용히 넘어간다.
+      // (배포 전 동기화한 옛 덱이 학생 화면에서 안 열리면 그 이론 행을 다시 동기화하면 공유된다.)
+      if (onShareTheorySlide && theoryDriveTokenRef.current) {
         try {
-          // 이론 슬라이드는 교사 Drive 계정 소유라, 링크공개도 교사 OAuth 토큰으로 해야 한다(서비스 계정은 못 바꿈).
-          // 동기화 때 받아 둔 토큰을 재사용하고, 없으면(이전 세션에서 동기화했거나 수동 링크) 새로 한 번 받는다.
-          let token = theoryDriveTokenRef.current;
-          if (!token) {
-            const clientId = import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID;
-            if (clientId) {
-              token = await requestDriveSyncAccessToken(clientId, userEmail);
-              theoryDriveTokenRef.current = token;
-            }
-          }
-          await onShareTheorySlide(slideUrl, token ?? undefined);
-        } catch (error) {
-          // 토큰 만료·거부 등으로 실패했을 수 있으니 캐시를 비워 다음 시도에 새 토큰을 받게 한다.
+          await onShareTheorySlide(slideUrl, theoryDriveTokenRef.current);
+        } catch {
+          // 공유 실패는 공개를 막지 않는다(동기화 시점 공유가 정본). 만료됐을 수 있는 토큰은 버려 다음 동기화에서 새로 받게 한다.
           theoryDriveTokenRef.current = null;
-          const message = error instanceof Error ? error.message : '슬라이드 권한 전환에 실패했습니다.';
-          const proceed = window.confirm(
-            `슬라이드 접근 권한을 자동으로 열지 못했습니다.\n(${message})\n\n그래도 공개할까요? 학생 화면에 권한 오류가 보일 수 있어요.`
-          );
-          if (!proceed) return;
         }
       }
       await onUpdatePublishedLesson(classroom.id, classroom.name, selectedDate, currentIds, {
