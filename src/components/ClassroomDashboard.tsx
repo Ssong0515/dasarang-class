@@ -37,7 +37,6 @@ import {
   EyeOff,
   Presentation,
   Lock,
-  Unlock,
   RefreshCw,
   Images,
   Copy,
@@ -1951,7 +1950,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   };
 
   // 실습 블록 하나를 학생에게 공개/잠금 토글 — Firestore 반영 즉시 학생 화면이 실시간으로 열린다.
-  // 학생 오른쪽 칸엔 실습·예제 중 하나만 뜨므로, 실습을 공개하면 떠 있던 예제(kind:reference)는 자동으로 닫는다.
+  // ★ 무조건 하나만 공개: 실습이든 예제든 새로 열면 떠 있던 나머지는 모두 닫힌다(학생 오른쪽 칸엔 하나만).
   const handleTogglePublishContent = (content: LessonContent) => {
     if (!onUpdatePublishedLesson) {
       return;
@@ -1959,12 +1958,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     const current = currentPublishedLesson?.publishedContentIds || [];
     const next = current.includes(content.id)
       ? current.filter((contentId) => contentId !== content.id)
-      : [
-          ...current.filter(
-            (contentId) => assignedContentsById.get(contentId)?.kind !== 'reference'
-          ),
-          content.id,
-        ];
+      : [content.id];
     void onUpdatePublishedLesson(classroom.id, classroom.name, selectedDate, next);
   };
 
@@ -2014,23 +2008,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     } finally {
       setIsTheoryPublishBusy(false);
     }
-  };
-
-  const handlePublishAllPractice = () => {
-    if (!onUpdatePublishedLesson) {
-      return;
-    }
-    // 실습을 전부 공개하면 떠 있던 예제(kind:reference)는 닫는다 — 오른쪽 칸엔 실습·예제 중 하나만.
-    const current = (currentPublishedLesson?.publishedContentIds || []).filter(
-      (contentId) => assignedContentsById.get(contentId)?.kind !== 'reference'
-    );
-    const missingPracticeIds = publishablePracticeContents
-      .map((content) => content.id)
-      .filter((contentId) => !current.includes(contentId));
-    void onUpdatePublishedLesson(classroom.id, classroom.name, selectedDate, [
-      ...current,
-      ...missingPracticeIds,
-    ]);
   };
 
   const handleUnpublishAll = () => {
@@ -3492,17 +3469,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                     </div>
                     {showPracticeSection && publishablePracticeContents.length > 0 && (
                       <>
-                        {/* 좁은 폭에선 아이콘만 — 색(초록 열림/빨강 잠금)으로 구분된다. */}
-                        <button
-                          onClick={handlePublishAllPractice}
-                          disabled={publishedPracticeCount === publishablePracticeContents.length}
-                          title="전체 공개"
-                          aria-label="전체 공개"
-                          className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl bg-[#EEF7F0] px-3 py-2 text-xs font-bold text-[#2D7A4D] transition-all hover:bg-[#DCEFE2] disabled:cursor-not-allowed disabled:opacity-50 max-[639px]:px-2.5"
-                        >
-                          <Unlock size={14} />
-                          <span className="max-[639px]:hidden">전체 공개</span>
-                        </button>
+                        {/* '전체 공개'는 제거(2026-07-20) — 실습·예제는 무조건 하나씩만 공개한다.
+                            '전체 잠금'은 지금 열려 있는 하나를 닫는 용도로 남긴다(좁은 폭에선 아이콘만). */}
                         <button
                           onClick={handleUnpublishAll}
                           disabled={(currentPublishedLesson?.publishedContentIds?.length ?? 0) === 0}
