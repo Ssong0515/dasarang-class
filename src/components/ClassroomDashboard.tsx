@@ -1951,20 +1951,8 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   };
 
   // 실습 블록 하나를 학생에게 공개/잠금 토글 — Firestore 반영 즉시 학생 화면이 실시간으로 열린다.
+  // 학생 오른쪽 칸엔 실습·예제 중 하나만 뜨므로, 실습을 공개하면 떠 있던 예제(kind:reference)는 자동으로 닫는다.
   const handleTogglePublishContent = (content: LessonContent) => {
-    if (!onUpdatePublishedLesson) {
-      return;
-    }
-    const current = currentPublishedLesson?.publishedContentIds || [];
-    const next = current.includes(content.id)
-      ? current.filter((contentId) => contentId !== content.id)
-      : [...current, content.id];
-    void onUpdatePublishedLesson(classroom.id, classroom.name, selectedDate, next);
-  };
-
-  // 예제 공개 토글 — 예제는 학생 화면의 실습칸을 같이 쓰므로 한 번에 하나만: 다른 예제가 켜져 있으면 교체한다.
-  // (공개 목록에 실습과 같이 담기고, 학생 쪽에서 kind:reference로 구분해 실습칸에 띄운다.)
-  const handleToggleExamplePublish = (content: LessonContent) => {
     if (!onUpdatePublishedLesson) {
       return;
     }
@@ -1977,6 +1965,19 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
           ),
           content.id,
         ];
+    void onUpdatePublishedLesson(classroom.id, classroom.name, selectedDate, next);
+  };
+
+  // 예제 공개 토글 — 예제는 학생 오른쪽 칸을 실습과 번갈아 쓴다(한 번에 하나만). 예제를 열면 떠 있던
+  // 실습·다른 예제는 모두 닫아 오른쪽 칸엔 이 예제만 남긴다. (학생 쪽에서 kind:reference로 구분해 실습칸에 띄운다.)
+  const handleToggleExamplePublish = (content: LessonContent) => {
+    if (!onUpdatePublishedLesson) {
+      return;
+    }
+    const current = currentPublishedLesson?.publishedContentIds || [];
+    const next = current.includes(content.id)
+      ? current.filter((contentId) => contentId !== content.id)
+      : [content.id];
     void onUpdatePublishedLesson(classroom.id, classroom.name, selectedDate, next);
   };
 
@@ -2019,8 +2020,10 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     if (!onUpdatePublishedLesson) {
       return;
     }
-    // 이미 공개돼 있던 예제(kind:reference)는 그대로 두고, 실습만 전부 공개 목록에 채운다.
-    const current = currentPublishedLesson?.publishedContentIds || [];
+    // 실습을 전부 공개하면 떠 있던 예제(kind:reference)는 닫는다 — 오른쪽 칸엔 실습·예제 중 하나만.
+    const current = (currentPublishedLesson?.publishedContentIds || []).filter(
+      (contentId) => assignedContentsById.get(contentId)?.kind !== 'reference'
+    );
     const missingPracticeIds = publishablePracticeContents
       .map((content) => content.id)
       .filter((contentId) => !current.includes(contentId));
