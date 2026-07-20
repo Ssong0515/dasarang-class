@@ -22,8 +22,8 @@ export const VOICE_LANG_OPTIONS: VoiceLangOption[] = [
   { label: 'English', stt: 'en-US', iso: 'en' },
 ];
 
-// '한국어(번역 없음)' 선택지 — 외국어를 골랐다가 되돌리고 싶은 학생용. VOICE_LANG_OPTIONS에 넣지 않는 이유:
-// 그 배열은 교사 방송 번역 대상·학생 언어 매핑의 단일 출처라 한국어가 섞이면 안 된다.
+// '한국어(번역 없음)' 선택지 — 2026-07-20 언어 피커에서 제거(사용자 요청). 상수와 아래 렌더 분기는 남겨 두어,
+// 제거 전에 이 값을 골라 localStorage에 저장해 둔 학생(3시간 TTL)이 그 세션 동안만 정상 렌더되게 한다(신규 선택은 불가).
 // 이 모드에선 번역 자막·마이크 없이 조용한 언어 버튼만 남는다(자막 오버레이는 iso 'ko' 번역이 없어 한국어 원문 폴백).
 export const KOREAN_LANG_OPTION: VoiceLangOption = { label: '한국어', stt: 'ko-KR', iso: 'ko' };
 
@@ -586,7 +586,7 @@ export const StudentVoiceButton: React.FC<StudentVoiceButtonProps> = ({
   );
 };
 
-// 언어 피커 팝업 (6개 옵션)
+// 언어 피커 팝업 (6개 언어 + 자막 끄기)
 const LangPicker: React.FC<{
   onChoose: (option: VoiceLangOption) => void;
   onClose: () => void;
@@ -614,15 +614,8 @@ const LangPicker: React.FC<{
           {option.label}
         </button>
       ))}
-      {/* 되돌리기용 한국어 — 외국어를 잘못 골랐던 학생이 번역·마이크를 끄는 선택지(자막은 한국어로 뜬다) */}
-      <button
-        type="button"
-        onClick={() => onChoose(KOREAN_LANG_OPTION)}
-        className="col-span-2 rounded-xl bg-white px-3 py-2 text-sm font-semibold text-[#8B7E74] ring-1 ring-[#EADBC8] transition-colors hover:bg-[#F9F7F3]"
-      >
-        한국어 · 번역 없음
-      </button>
-      {/* 자막 끄기 — 교사 방송 자막을 아예 안 받고 싶은 학생용(CC 취소선). 맨 끝에 둔다. */}
+      {/* 자막 끄기 — 교사 방송 자막을 아예 안 받고 싶은 학생용(CC 취소선). 맨 끝에 둔다.
+          ('한국어 · 번역 없음' 버튼은 2026-07-20 사용자 요청으로 제거 — 원문 그대로 보려면 자막 끄기나 미선택 상태.) */}
       <button
         type="button"
         onClick={() => onChoose(SUBTITLE_OFF_OPTION)}
