@@ -489,11 +489,13 @@ export const validateTheorySlidePayload = (body: unknown): SyncTheorySlideParams
 };
 
 // 제목/파일명을 느슨하게 비교하기 위한 정규화(공백·기호·확장자·'회차/시수' 토큰 제거, 소문자화).
+// ★ 2026-07-20: 앞에 붙는 숫자까지 포함해 "N회차/N차시/N시수/N교시"를 통째로 뗀다 — 앱 제목은 회차를
+//   빼고 매칭하는데(formatSessionLabel), 폴더의 ppt 파일명엔 "6회차."가 남아 있어도 매칭되게 하려는 것.
 const normalizeForMatch = (raw: string) =>
   raw
     .replace(/\.(pptx|pdf|key|ppt)$/i, '')
     .toLowerCase()
-    .replace(/회차|차시|시수|교시/g, '')
+    .replace(/\d*\s*(회차|차시|시수|교시)/g, '')
     .replace(/[\s_\-().]/g, '')
     .trim();
 
