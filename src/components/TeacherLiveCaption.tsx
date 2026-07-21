@@ -87,6 +87,10 @@ const FINAL_COALESCE_MS = 1200;
 // 단, 모은 게 이 길이를 넘으면(무정지 장문) 기다리지 않고 바로 번역해 지연을 막는다.
 const FINAL_COALESCE_MAX_CHARS = 120;
 
+// 아랫줄(실시간 임시 번역) 갱신 주기 — 진행 중 발화를 이 간격마다 최신 상태로 번역해 계속 바뀌며 보여준다.
+// 윗줄(완성 문장)이 늦게 뜨는 답답함을 이 즉시성으로 메운다. 너무 촘촘하면 번역 호출이 잦아지니 적당히.
+const LIVE_TRANSLATE_MS = 400;
+
 // 새 발화가 이 시간 동안 없으면 자막을 내린다(길이 비례 6~12초).
 const captionDurationMs = (text: string) => Math.min(12000, Math.max(6000, text.length * 120));
 
@@ -108,7 +112,8 @@ export const TeacherLiveCaption: React.FC = () => {
   const [targetIso, setTargetIso] = useState<string>(() => readStoredIso());
   const [langMenuOpen, setLangMenuOpen] = useState(false);
   const [koreanCaption, setKoreanCaption] = useState(''); // 실시간(미확정 포함) 한국어
-  const [translatedCaption, setTranslatedCaption] = useState(''); // 최근 확정 문장의 번역
+  const [translatedCaption, setTranslatedCaption] = useState(''); // 윗줄: 최근 확정 문장의 번역
+  const [liveTranslatedCaption, setLiveTranslatedCaption] = useState(''); // 아랫줄: 진행 중 발화의 실시간 임시 번역
   const [notice, setNotice] = useState<string | null>(null);
   // 이론 슬라이드 등이 네이티브 전체화면이면 그 요소(top layer) 위엔 일반 DOM이 안 보인다 →
   // 자막을 '전체화면 요소의 자식'으로 포털해 그 위에 뜨게 한다. iframe이 전체화면이면 자식을 못 넣으므로 body로 폴백.
@@ -133,6 +138,10 @@ export const TeacherLiveCaption: React.FC = () => {
   // 확정 조각 합치기용 — 모으는 버퍼와 그 타이머.
   const pendingFinalRef = useRef('');
   const finalBufferTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 아랫줄(실시간 임시 번역)용 — 스로틀 타이머·최신 원문·순번.
+  const liveThrottleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const livePendingSourceRef = useRef('');
+  const liveSeqRef = useRef(0);
 
   const currentLang = VOICE_LANG_OPTIONS.find((option) => option.iso === targetIso) ?? VOICE_LANG_OPTIONS[0];
 
@@ -142,6 +151,7 @@ export const TeacherLiveCaption: React.FC = () => {
       ? setTimeout(() => {
           setKoreanCaption('');
           setTranslatedCaption('');
+          setLiveTranslatedCaption('');
         }, captionDurationMs(basisText))
       : null;
   }, []);
@@ -164,12 +174,18 @@ export const TeacherLiveCaption: React.FC = () => {
     }
   }, []);
 
-  // 모아 둔 확정 조각을 한 문장으로 확정해 번역한다.
+  // 모아 둔 확정 조각을 한 문장으로 확정해 번역한다(윗줄). 이 문장은 윗줄로 확정되니 아랫줄(임시)은 비운다.
   const flushPendingFinal = useCallback(() => {
     if (finalBufferTimerRef.current) {
       clearTimeout(finalBufferTimerRef.current);
       finalBufferTimerRef.current = null;
     }
+    if (liveThrottleTimerRef.current) {
+      clearTimeout(liveThrottleTimerRef.current);
+      liveThrottleTimerRef.current = null;
+    }
+    livePendingSourceRef.current = '';
+    setLiveTranslatedCaption('');
     const text = pendingFinalRef.current.trim();
     pendingFinalRef.current = '';
     if (text) void handleFinal(text);
@@ -189,6 +205,36 @@ export const TeacherLiveCaption: React.FC = () => {
     finalBufferTimerRef.current = setTimeout(flushPendingFinal, FINAL_COALESCE_MS);
   }, [flushPendingFinal]);
 
+  // 아랫줄 — 진행 중 발화(source)를 지금 언어로 번역해 즉시 반영. 늦게 온 예전 결과가 최신을 덮지 않게 순번으로 가드.
+  const runLiveTranslate = useCallback(async (source: string) => {
+    const iso = targetIsoRef.current;
+    liveSeqRef.current += 1;
+    const seq = liveSeqRef.current;
+    try {
+      const translations = await translateFromKorean(source, [iso]);
+      if (seq !== liveSeqRef.current) return; // 더 최신 요청이 있으면 버림
+      setLiveTranslatedCaption(translations[iso] || '');
+    } catch {
+      /* 임시 번역 실패는 무시 */
+    }
+  }, []);
+
+  // 진행 중 발화를 스로틀(최대 LIVE_TRANSLATE_MS마다)로 번역 예약 — 계속 말하는 동안 아랫줄이 주기적으로 갱신된다.
+  const scheduleLiveTranslate = useCallback((source: string) => {
+    const text = source.trim();
+    livePendingSourceRef.current = text;
+    if (!text) {
+      setLiveTranslatedCaption('');
+      return;
+    }
+    if (liveThrottleTimerRef.current) return; // 이미 예약돼 있으면 최신 원문만 갱신하고 대기
+    liveThrottleTimerRef.current = setTimeout(() => {
+      liveThrottleTimerRef.current = null;
+      const latest = livePendingSourceRef.current.trim();
+      if (latest) void runLiveTranslate(latest);
+    }, LIVE_TRANSLATE_MS);
+  }, [runLiveTranslate]);
+
   const stopCaption = useCallback((nextNotice: string | null = null) => {
     isOnRef.current = false;
     if (flushTimerRef.current) {
@@ -203,7 +249,12 @@ export const TeacherLiveCaption: React.FC = () => {
       clearTimeout(finalBufferTimerRef.current);
       finalBufferTimerRef.current = null;
     }
+    if (liveThrottleTimerRef.current) {
+      clearTimeout(liveThrottleTimerRef.current);
+      liveThrottleTimerRef.current = null;
+    }
     pendingFinalRef.current = '';
+    livePendingSourceRef.current = '';
     flushingRef.current = false;
     interimSinceRef.current = 0;
     const recognition = recognitionRef.current;
@@ -226,6 +277,7 @@ export const TeacherLiveCaption: React.FC = () => {
     setIsOn(false);
     setKoreanCaption('');
     setTranslatedCaption('');
+    setLiveTranslatedCaption('');
     setNotice(nextNotice);
   }, []);
 
@@ -291,10 +343,13 @@ export const TeacherLiveCaption: React.FC = () => {
       } else {
         interimSinceRef.current = 0;
       }
-      // 한국어 자막은 실시간(확정+미확정)으로 갱신한다.
+      // 한국어 미리보기는 내부용(재번역·타이머 기준)으로만 추적한다.
       const previewText = (finalChunk + interim).trim();
       if (previewText) setKoreanCaption(previewText);
       clearCaptionSoon(previewText || koreanCaption);
+
+      // 아랫줄(실시간 임시 번역) — 진행 중인 문장(아직 안 합쳐진 확정분 + 미확정분)을 짧은 주기로 번역해 계속 갱신.
+      scheduleLiveTranslate(`${pendingFinalRef.current} ${interim}`.trim());
 
       if (interimTrimmed.length >= MAX_INTERIM_CHARS) flushRecognition();
     };
@@ -319,7 +374,7 @@ export const TeacherLiveCaption: React.FC = () => {
       /* InvalidStateError 등은 무시(다음 onend 사이클에서 회복) */
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bufferFinal, stopCaption, flushRecognition, clearCaptionSoon]);
+  }, [bufferFinal, scheduleLiveTranslate, stopCaption, flushRecognition, clearCaptionSoon]);
 
   const startCaption = useCallback(async () => {
     if (isOnRef.current) return;
@@ -381,6 +436,7 @@ export const TeacherLiveCaption: React.FC = () => {
       if (flushTimerRef.current) clearInterval(flushTimerRef.current);
       if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
       if (finalBufferTimerRef.current) clearTimeout(finalBufferTimerRef.current);
+      if (liveThrottleTimerRef.current) clearTimeout(liveThrottleTimerRef.current);
       const recognition = recognitionRef.current;
       if (recognition) {
         recognition.onend = null;
@@ -404,13 +460,25 @@ export const TeacherLiveCaption: React.FC = () => {
       {/* 자막 오버레이 — 상단 중앙(프로젝터). 선택 언어 번역을 크게, 한국어 원문을 그 아래 작게 병기.
           전체화면(이론 슬라이드 등) 요소가 있으면 그 요소 안으로 포털해 전체화면 위에도 뜨게 한다.
           z-[10005]: 학생 자막 계층과 동일(교사 화면엔 학생 자막이 없어 충돌 없음). */}
-      {isOn && translatedCaption && captionHost &&
+      {isOn && (translatedCaption || liveTranslatedCaption) && captionHost &&
         createPortal(
           <div className="pointer-events-none fixed inset-x-0 top-4 z-[10005] flex justify-center px-4">
             <div className="max-w-[92vw] rounded-2xl bg-black/90 px-6 py-4 text-center shadow-2xl sm:px-8 sm:py-5">
-              <p className="text-3xl font-bold leading-snug text-white sm:text-4xl" dir="auto">
-                {translatedCaption}
-              </p>
+              {/* 윗줄: 완성된 문장 번역(문장이 끝날 때마다 갱신) */}
+              {translatedCaption && (
+                <p className="text-3xl font-bold leading-snug text-white sm:text-4xl" dir="auto">
+                  {translatedCaption}
+                </p>
+              )}
+              {/* 아랫줄: 진행 중 발화의 실시간 임시 번역(계속 변동) — 옅고 조금 작게 표시해 '아직 확정 아님'을 나타냄 */}
+              {liveTranslatedCaption && (
+                <p
+                  className={`text-2xl font-medium leading-snug text-white/55 sm:text-3xl ${translatedCaption ? 'mt-1.5' : ''}`}
+                  dir="auto"
+                >
+                  {liveTranslatedCaption}
+                </p>
+              )}
             </div>
           </div>,
           captionHost
