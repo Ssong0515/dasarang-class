@@ -22,14 +22,17 @@ interface SlideEmbedProps {
 
 export const SlideEmbed: React.FC<SlideEmbedProps> = ({ slideUrl, title, roundedBottom = false, presentShortcut }) => {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const [isHovered, setIsHovered] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
 
   const handleFullscreen = () => {
-    const el = iframeRef.current;
-    if (!el) return;
-    if (el.requestFullscreen) {
-      void el.requestFullscreen();
+    // iframe이 아니라 iframe을 감싼 컨테이너를 전체화면으로 만든다 — 그래야 그 전체화면 요소 '안'에
+    // CC 자막 같은 오버레이(포털로 넣는 전체화면 요소의 자식)를 얹을 수 있다. iframe을 직접 전체화면하면
+    // 브라우저 top layer라 그 위에 아무것도 못 얹는다.
+    const el = containerRef.current;
+    if (el?.requestFullscreen) {
+      void el.requestFullscreen().catch(() => {});
     }
   };
 
@@ -95,10 +98,11 @@ export const SlideEmbed: React.FC<SlideEmbedProps> = ({ slideUrl, title, rounded
         </div>
       )}
       <div
+        ref={containerRef}
         className={
           isMaximized
             ? "maximized-slide-container fixed inset-0 z-[9999] bg-black flex items-center justify-center"
-            : `relative w-full overflow-hidden ${roundedBottom ? 'rounded-b-[32px]' : ''}`
+            : `dsr-slide-fs relative w-full overflow-hidden ${roundedBottom ? 'rounded-b-[32px]' : ''}`
         }
         style={isMaximized ? undefined : { paddingBottom: '56.25%' }}
         onMouseEnter={() => !isMaximized && setIsHovered(true)}

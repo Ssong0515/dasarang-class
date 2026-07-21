@@ -82,10 +82,16 @@ const ensureMic = async (): Promise<boolean> => {
 // TeacherVoiceChat의 채팅 전송도 같은 대상으로 번역하므로 export해 공유한다.
 export const BROADCAST_TARGET_CODES = ['ko', ...VOICE_LANG_OPTIONS.map((option) => option.iso)];
 
-// 긴 발화를 자막 크기로 끊어 보내기 위한 임계값. 교사가 쉼표 없이 길게 말해도 아래 조건이면 강제로 끊어 확정·전송하고 이어서 다시 인식한다.
-const MAX_INTERIM_CHARS = 60; // 확정 안 된 미리보기가 이 글자 수를 넘으면 끊는다.
-const MAX_INTERIM_MS = 6000; // 또는 확정 없이 이 시간(ms) 동안 이어지면 끊는다.
+// 긴 발화를 끊는 임계값. 값을 크게 잡아 문장 중간을 덜 자르고, 되도록 음성인식이 자연스러운 '쉼'에서
+// 스스로 확정(isFinal)하게 둔다 → 번역이 조각나지 않아 학생 자막이 더 매끄럽다. (아주 긴 무정지 발화만 강제로 끊음)
+const MAX_INTERIM_CHARS = 140; // 확정 안 된 미리보기가 이 글자 수를 넘으면 끊는다.
+const MAX_INTERIM_MS = 11000; // 또는 확정 없이 이 시간(ms) 동안 이어지면 끊는다.
 const FLUSH_CHECK_MS = 1500; // 시간 기반 끊기 점검 주기.
+
+// 확정 조각 합치기 — 한 문장이 여러 개의 짧은 isFinal로 쪼개져 오면(자연스러운 쉼마다) 잠깐 모았다가
+// 한 번에 번역·방송한다. 문장 단위로 번역해야 훨씬 매끄럽고, 방송 문서도 조각나지 않는다.
+const FINAL_COALESCE_MS = 1200; // 이 시간 동안 새 조각이 없으면 모은 걸 확정.
+const FINAL_COALESCE_MAX_CHARS = 120; // 단, 모은 게 이 길이를 넘으면 기다리지 않고 바로 보낸다.
 
 // 교사 미리보기 버블 자동 숨김 — 마지막 말이 화면에 계속 남지 않도록, 새 인식 이벤트가 이 시간 동안
 // 없으면 내린다. 학생 자막(StudentSubtitleOverlay)과 같은 길이 비례 계산(6~12초)을 써서 감각을 맞춘다.
@@ -120,6 +126,9 @@ export const TeacherBroadcastButton: React.FC<TeacherBroadcastButtonProps> = ({
   const flushTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // 미리보기 버블 자동 숨김 타이머 — 새 인식 이벤트마다 리셋되므로 말하는 중에는 사라지지 않는다.
   const previewHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 확정 조각 합치기용 — 모으는 버퍼와 그 타이머.
+  const pendingFinalRef = useRef('');
+  const finalBufferTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // onresult/onend 클로저가 항상 '최신' 값을 읽도록 ref에 보관(고정 스냅샷이 아니라 매번 최신값 참조).
   const ctxRef = useRef({ classroomId, classroomName, date });
@@ -153,6 +162,30 @@ export const TeacherBroadcastButton: React.FC<TeacherBroadcastButtonProps> = ({
     }
   }, []);
 
+  // 모아 둔 확정 조각을 한 문장으로 확정해 번역·방송한다.
+  const flushPendingFinal = useCallback(() => {
+    if (finalBufferTimerRef.current) {
+      clearTimeout(finalBufferTimerRef.current);
+      finalBufferTimerRef.current = null;
+    }
+    const text = pendingFinalRef.current.trim();
+    pendingFinalRef.current = '';
+    if (text) void sendBroadcast(text);
+  }, [sendBroadcast]);
+
+  // 새 확정 조각을 버퍼에 붙이고, 잠깐 기다렸다가(더 안 오면) 한 번에 방송한다.
+  const bufferFinal = useCallback((chunk: string) => {
+    const piece = chunk.trim();
+    if (!piece) return;
+    pendingFinalRef.current = `${pendingFinalRef.current} ${piece}`.trim();
+    if (pendingFinalRef.current.length >= FINAL_COALESCE_MAX_CHARS) {
+      flushPendingFinal();
+      return;
+    }
+    if (finalBufferTimerRef.current) clearTimeout(finalBufferTimerRef.current);
+    finalBufferTimerRef.current = setTimeout(flushPendingFinal, FINAL_COALESCE_MS);
+  }, [flushPendingFinal]);
+
   const stopBroadcast = useCallback((nextNotice: BroadcastNotice = null) => {
     isBroadcastingRef.current = false;
     if (flushTimerRef.current) {
@@ -163,6 +196,11 @@ export const TeacherBroadcastButton: React.FC<TeacherBroadcastButtonProps> = ({
       clearTimeout(previewHideTimerRef.current);
       previewHideTimerRef.current = null;
     }
+    if (finalBufferTimerRef.current) {
+      clearTimeout(finalBufferTimerRef.current);
+      finalBufferTimerRef.current = null;
+    }
+    pendingFinalRef.current = '';
     flushingRef.current = false;
     interimSinceRef.current = 0;
     const recognition = recognitionRef.current;
@@ -249,7 +287,7 @@ export const TeacherBroadcastButton: React.FC<TeacherBroadcastButtonProps> = ({
         }
       }
       const finalText = finalChunk.trim();
-      if (finalText) void sendBroadcast(finalText);
+      if (finalText) bufferFinal(finalText);
 
       const interimTrimmed = interim.trim();
       // 미확정 미리보기가 시작된 시각을 추적(시간 기반 끊기용).
@@ -296,7 +334,7 @@ export const TeacherBroadcastButton: React.FC<TeacherBroadcastButtonProps> = ({
     } catch {
       // 이미 시작된 상태의 InvalidStateError 등은 무시(다음 onend 사이클에서 회복).
     }
-  }, [sendBroadcast, stopBroadcast, flushRecognition]);
+  }, [bufferFinal, stopBroadcast, flushRecognition]);
 
   const startBroadcast = useCallback(async () => {
     if (isBroadcastingRef.current) return;
@@ -348,6 +386,7 @@ export const TeacherBroadcastButton: React.FC<TeacherBroadcastButtonProps> = ({
       isBroadcastingRef.current = false;
       if (flushTimerRef.current) clearInterval(flushTimerRef.current);
       if (previewHideTimerRef.current) clearTimeout(previewHideTimerRef.current);
+      if (finalBufferTimerRef.current) clearTimeout(finalBufferTimerRef.current);
       const recognition = recognitionRef.current;
       if (recognition) {
         recognition.onend = null;

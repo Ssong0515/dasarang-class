@@ -11,6 +11,7 @@ import { StudentShowcaseManager } from './components/StudentShowcaseManager';
 import { GoodLessonsManager } from './components/GoodLessonsManager';
 import { TeacherVoiceChat } from './components/TeacherVoiceChat';
 import { TeacherBroadcastButton } from './components/TeacherBroadcastButton';
+import { TeacherLiveCaption } from './components/TeacherLiveCaption';
 import {
   AssignCurriculumDatesResult,
   CalendarClassSummary,
@@ -2277,6 +2278,9 @@ export default function App() {
           date={broadcastTodayString}
         />
       )}
+      {/* 교사 로컬 CC — 켜면 교사가 말하는 걸 선택한 한 언어로 번역해 교사 화면(프로젝터) 상단에 자막으로 띄운다.
+          학생 방송과 달리 Firestore를 안 거치는 교사 전용 표시(둘은 마이크를 공유하므로 한 번에 하나만 켜는 게 좋다). */}
+      {user && isAdmin && <TeacherLiveCaption />}
     </ErrorBoundary>
   );
 }

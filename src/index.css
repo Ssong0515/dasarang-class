@@ -41,3 +41,14 @@ body.has-maximized-slide *:has(.maximized-slide-container) {
   contain: none !important;
 }
 
+/*
+  슬라이드 컨테이너(dsr-slide-fs)를 네이티브 전체화면으로 만들 때 — 평소엔 16:9 비율용 padding-bottom:56.25%가
+  걸려 있는데, 전체화면에선 이걸 없애야 iframe(absolute inset-0)이 화면을 꽉 채운다. 배경은 검정.
+  이 컨테이너를 (iframe이 아니라) 전체화면으로 두는 이유: 전체화면 요소의 자식으로 CC 자막을 얹기 위해.
+*/
+.dsr-slide-fs:fullscreen {
+  padding-bottom: 0 !important;
+  background: #000;
+}
+
+
