@@ -1038,7 +1038,6 @@ export default function App() {
               : [],
             ownerUid: data.ownerUid ?? '',
             updatedAt: data.updatedAt ?? '',
-            endNoticeAt: typeof data.endNoticeAt === 'string' ? data.endNoticeAt : undefined,
             // 실습 타이머 만료 시각(contentId → ISO). 빼먹으면 스냅샷마다 사라져 카운트다운·자동 잠금이 안 먹는다.
             practiceTimers:
               data.practiceTimers && typeof data.practiceTimers === 'object' && !Array.isArray(data.practiceTimers)
@@ -1956,34 +1955,6 @@ export default function App() {
     }
   };
 
-  // 교사가 대시보드에서 '수업 종료'를 누르면: 공개를 모두 닫아 잠그고(빈 목록), endNoticeAt 신호를 찍어
-  // 모든 학생 화면에 '오늘 수업 끝!' 안내를 띄운다. 문서를 지우지 않고 남겨야 학생이 신호를 받는다.
-  // (다시 공개하면 handleUpdatePublishedLesson이 새 문서로 덮어써 endNoticeAt가 자연히 해제된다.)
-  const handleEndLesson = async (
-    classroomId: string,
-    classroomName: string,
-    date: string
-  ) => {
-    if (!user) return;
-
-    const lessonId = getPublishedLessonId(classroomId, date);
-    try {
-      const nextLesson: PublishedLesson = {
-        id: lessonId,
-        classroomId,
-        classroomName,
-        date,
-        publishedContentIds: [],
-        ownerUid: user.uid,
-        updatedAt: new Date().toISOString(),
-        endNoticeAt: new Date().toISOString(),
-      };
-      await setDoc(doc(db, PUBLISHED_LESSONS_COLLECTION, lessonId), nextLesson);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `${PUBLISHED_LESSONS_COLLECTION}/${lessonId}`);
-    }
-  };
-
   const handleDeleteClassroomDateRecord = async (recordId: string) => {
     if (!user) return;
 
@@ -2211,7 +2182,6 @@ export default function App() {
               onSaveContent={handleSaveContent}
               onSetContentTimer={handleSetContentTimer}
               onUpdatePublishedLesson={handleUpdatePublishedLesson}
-              onEndLesson={handleEndLesson}
               onSyncTheorySlide={handleSyncTheorySlide}
               onShareTheorySlide={handleShareTheorySlide}
               onUpdateClassroom={handleUpdateClassroom}

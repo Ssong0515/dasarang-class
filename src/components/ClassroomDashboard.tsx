@@ -9,6 +9,7 @@ import {
   ClipboardList,
   MessageSquare,
   Clock,
+  Coffee,
   CheckCircle2,
   AlertCircle,
   Edit3,
@@ -91,6 +92,7 @@ import { deleteField } from '../firebase';
 import { formatWon, getSessionFee } from '../utils/fee';
 import { openDriveSlidePicker, openDriveFolderPicker, requestDriveSyncAccessToken } from '../utils/drivePicker';
 import { ReferenceAnnotationOverlay, SlideEmbed, StudentContentPreviewFrame } from './StudentContentPreview';
+import { CyclingNoticeCard, END_NOTICE_LANGS, BREAK_NOTICE_LANGS } from './LessonNoticeCard';
 import { SessionDetailModal } from './SessionDetailModal';
 import { ClassroomResultGallery } from './ClassroomResultGallery';
 
@@ -131,8 +133,6 @@ interface ClassroomDashboardProps {
   /** 이론 슬라이드 학생 공개 전 Drive 권한을 '링크 있는 모든 사용자 보기'로 전환 (결과물 승인과 같은 패턴).
    *  이론 슬라이드는 교사 계정 소유라 소유자 OAuth 토큰(driveAccessToken)으로 공유해야 한다(서비스 계정은 403). */
   onShareTheorySlide?: (url: string, driveAccessToken?: string) => Promise<{ ok?: boolean }>;
-  /** 수업 종료: 학생 화면을 잠그고 '오늘 수업 끝!' 안내를 모든 학생 화면에 띄운다. */
-  onEndLesson?: (classroomId: string, classroomName: string, date: string) => Promise<void>;
   /** 이론 행 동기화 — 반 이론 폴더에서 제목과 맞는 pptx를 구글 슬라이드로 변환해 slideUrl을 돌려준다. */
   onSyncTheorySlide?: (
     folderId: string,
@@ -502,7 +502,6 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   onSetContentTimer,
   onUpdatePublishedLesson,
   onShareTheorySlide,
-  onEndLesson,
   onSyncTheorySlide,
   onUpdateClassroom,
   onDeleteClassroom,
@@ -563,15 +562,14 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   } | null>(null);
   // Drive 동기화 토큰 캐시 — 후보에서 다시 고를 때 OAuth 팝업이 또 뜨지 않도록 재사용한다(실패 시 비운다).
   const theoryDriveTokenRef = useRef<string | null>(null);
-  // 이론 공개 시 '별도 브라우저 창'에 슬라이드쇼로 띄우는 발표 창 핸들 — 재공개 시 같은 창 재사용, 내리면 닫는다.
-  const theoryWindowRef = useRef<Window | null>(null);
   // 좁은 폭(모바일/태블릿, <lg)에서는 날짜상태·캘린더·출석·메모를 타일+팝업으로 보여준다.
   const isNarrow = useMediaQuery(NARROW_MEDIA_QUERY);
   const isVeryNarrow = useMediaQuery(VERY_NARROW_MEDIA_QUERY);
   // 이론 프롬프트 보기·수정 팝업: 열린 프롬프트 index와 편집 중 본문.
   const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null);
   const [promptDraft, setPromptDraft] = useState('');
-  const [isEndLessonModalOpen, setIsEndLessonModalOpen] = useState(false);
+  // 교사 화면(프로젝터 미러링)에 띄우는 '수업 종료'·'쉬는시간' 다국어 안내 카드. null = 안 뜸.
+  const [teacherNotice, setTeacherNotice] = useState<'end' | 'break' | null>(null);
 
   const [generationMessage, setGenerationMessage] = useState<string | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
@@ -655,7 +653,7 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
   useEscToClose(theorySyncPicker !== null, () => setTheorySyncPicker(null));
   useEscToClose(editingPromptIndex !== null, () => setEditingPromptIndex(null));
   useEscToClose(showLessonDesc, () => setShowLessonDesc(false));
-  useEscToClose(isEndLessonModalOpen, () => setIsEndLessonModalOpen(false));
+  useEscToClose(teacherNotice !== null, () => setTeacherNotice(null));
   useEscToClose(isLanguagePopupOpen, () => setIsLanguagePopupOpen(false));
   useEscToClose(showCurriculumDetail, () => setShowCurriculumDetail(false));
   // 다른 반 수업 '복사해오기(덮어쓰기)' 드롭다운 열림 여부.
@@ -1418,9 +1416,13 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     onUpdateClassroom(classroom.id, { sessionStates: states });
     // 완료로 바꾼 순간, 강사비가 잡혀 있으면 동전 띠링 + "+강사비" 떠오르기 효과를 낸다.
     if (next === 'done') {
-      // 완료하면 그날 공개돼 있던 실습을 조용히 모두 닫는다(학생 쪽 '수업 끝' 안내 없이 공개만 해제).
-      if (onUpdatePublishedLesson && (currentPublishedLesson?.publishedContentIds?.length ?? 0) > 0) {
-        void onUpdatePublishedLesson(classroom.id, classroom.name, selectedDate, []);
+      // 완료하면 그날 공개돼 있던 실습·예제·이론을 조용히 모두 닫는다(학생 쪽 안내 없이 공개만 해제).
+      // 이론(publishedTheory)까지 내리려면 다섯 번째 인자에 null을 넘겨야 한다(생략하면 이론이 보존됨).
+      const hasPublished =
+        (currentPublishedLesson?.publishedContentIds?.length ?? 0) > 0 ||
+        Boolean(currentPublishedLesson?.publishedTheory);
+      if (onUpdatePublishedLesson && hasPublished) {
+        void onUpdatePublishedLesson(classroom.id, classroom.name, selectedDate, [], null);
       }
       const fee = getSessionFee(classroom, states[currentSessionId]);
       if (fee > 0) {
@@ -2057,31 +2059,10 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     const isPublished = currentPublishedLesson?.publishedTheory?.url === slideUrl;
     if (isPublished) {
       void onUpdatePublishedLesson(classroom.id, classroom.name, selectedDate, currentIds, null);
-      // 이론을 내리면 교사 발표 창도 닫는다.
-      try {
-        if (theoryWindowRef.current && !theoryWindowRef.current.closed) theoryWindowRef.current.close();
-      } catch {
-        /* 무시 */
-      }
-      theoryWindowRef.current = null;
       return;
     }
-    // ★ 교사 발표 창 — 이론을 공개하는 순간 '별도 브라우저 창'에 슬라이드쇼(/present)로 크게 띄운다.
-    //   (예제처럼 앱 안 팝업이 아니라 다른 윈도우로 — 빔프로젝터/보조 모니터에 두고 발표용. 진짜 전체화면은 그 창에서 F11.)
-    //   ⚠️ 반드시 await 앞(=클릭 제스처 안)에서 열어야 팝업 차단에 안 걸린다. 교사는 슬라이드 소유자라 학생 공유 전에도 열린다.
-    try {
-      const presentUrl = toSlidePresentUrl(slideUrl);
-      const availW = typeof window !== 'undefined' && window.screen ? window.screen.availWidth : 1280;
-      const availH = typeof window !== 'undefined' && window.screen ? window.screen.availHeight : 800;
-      theoryWindowRef.current = window.open(
-        presentUrl,
-        'dasarang-theory-present', // 이름 지정 → 재공개 시 같은 창을 재사용(새 창을 계속 만들지 않음)
-        `popup=yes,width=${availW},height=${availH},left=0,top=0`
-      );
-      theoryWindowRef.current?.focus();
-    } catch {
-      /* 팝업 차단 등은 무시 — 학생 공개는 계속 진행 */
-    }
+    // 이론 발표는 별도 창을 열지 않는다 — 공개되면 강사 대시보드 안 이론 패널(SlideEmbed)이 뜨고,
+    // 거기서 F키로 전체화면 발표한다(미러링 단일 화면에서 Esc 한 번이면 다시 대시보드로 돌아옴).
     setIsTheoryPublishBusy(true);
     try {
       // 이론 슬라이드 링크공개(anyone/reader)는 소유자(교사) 토큰으로만 되는데, 이제 **동기화 시점에 자동으로 공유**되므로
@@ -2112,14 +2093,10 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
     void onUpdatePublishedLesson(classroom.id, classroom.name, selectedDate, []);
   };
 
-  // 수업 종료 = 학생 화면의 모든 공개를 닫아 잠근다. 날짜 기록·메모·출석은 유지(되돌릴 수 있음).
-  const handleEndLesson = () => {
-    if (!onEndLesson) {
-      return;
-    }
-    void onEndLesson(classroom.id, classroom.name, selectedDate);
-    setIsEndLessonModalOpen(false);
-  };
+  // 수업 종료·쉬는시간 = 교사 화면(프로젝터 미러링)에 다국어 안내 카드를 띄우는 것뿐. 학생 개별 화면·공개 콘텐츠는
+  // 건드리지 않는다(학생은 프로젝터로 이 카드를 본다). 공개를 실제로 다 닫는 건 회차를 '완료'로 바꿀 때만(setDateStatus).
+  const handleEndLesson = () => setTeacherNotice('end');
+  const handleBreakLesson = () => setTeacherNotice('break');
 
   const handleSaveMemo = () => {
     const base = currentDateRecord ?? createDateRecord();
@@ -3559,8 +3536,19 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                     )}
                     {showPracticeSection && (
                       <button
-                        onClick={() => setIsEndLessonModalOpen(true)}
-                        title="수업 종료"
+                        onClick={handleBreakLesson}
+                        title="쉬는시간 — 학생 화면에 '10분 쉬고 다시 시작' 안내가 뜹니다. 공개된 실습·이론은 그대로 유지돼요."
+                        aria-label="쉬는시간"
+                        className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl border border-[#E5D9C6] bg-white px-3 py-2 text-xs font-bold text-[#B45309] transition-all hover:bg-[#FFF7EE] max-[639px]:px-2.5"
+                      >
+                        <Coffee size={14} />
+                        <span className="max-[639px]:hidden">쉬는시간</span>
+                      </button>
+                    )}
+                    {showPracticeSection && (
+                      <button
+                        onClick={handleEndLesson}
+                        title="수업 종료 — 교사 화면(프로젝터)에 '오늘 수업 끝!' 다국어 안내를 띄웁니다. 공개된 실습·이론은 그대로예요(닫으려면 회차를 '완료'로)."
                         aria-label="수업 종료"
                         className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl border border-[#E5C9C6] bg-white px-3 py-2 text-xs font-bold text-[#B42318] transition-all hover:bg-[#FDECEC] max-[639px]:px-2.5"
                       >
@@ -3603,6 +3591,33 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                         </div>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {/* 이론 발표 패널 — 이론을 공개하면 여기(강사 대시보드 안)에 슬라이드가 뜬다. 별도 창을 안 열고,
+                    F키로 전체화면 발표 → Esc면 다시 이 대시보드로(미러링 단일 화면에서 예제·실습 공개 후 F로 복귀). */}
+                {currentPublishedLesson?.publishedTheory?.url && (
+                  <div className="mb-4 overflow-hidden rounded-2xl border border-[#8B5E3C] bg-white shadow-sm ring-1 ring-[#8B5E3C]/20">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#F3F2EE] bg-[#FFF7EE] px-4 py-2.5">
+                      <div className="flex min-w-0 items-center gap-2 text-sm font-bold text-[#4A3728]">
+                        <Presentation size={15} className="shrink-0 text-[#8B5E3C]" />
+                        <span className="truncate">
+                          {currentPublishedLesson.publishedTheory.label || '이론'} · 발표
+                        </span>
+                      </div>
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-[11px] font-bold text-[#8B5E3C] ring-1 ring-[#E5E3DD]">
+                        <kbd className="rounded bg-[#F3F2EE] px-1.5 py-0.5 font-mono text-[10px] text-[#4A3728]">F</kbd>
+                        전체화면
+                        <span className="text-[#C7C0B5]">·</span>
+                        <kbd className="rounded bg-[#F3F2EE] px-1.5 py-0.5 font-mono text-[10px] text-[#4A3728]">Esc</kbd>
+                        대시보드로
+                      </span>
+                    </div>
+                    <SlideEmbed
+                      slideUrl={currentPublishedLesson.publishedTheory.url}
+                      title={currentPublishedLesson.publishedTheory.label || '이론'}
+                      presentShortcut="f"
+                    />
                   </div>
                 )}
 
@@ -4120,47 +4135,23 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
               </div>
             )}
 
-            {isEndLessonModalOpen && (
-              <div
-                className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4"
-                onClick={(event) => {
-                  if (event.target === event.currentTarget) setIsEndLessonModalOpen(false);
-                }}
-              >
-                <div className="w-full max-w-md rounded-[28px] bg-white p-7 shadow-2xl">
-                  <div className="mb-4 flex items-center gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#FDECEC]">
-                      <Power size={20} className="text-[#B42318]" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-bold text-[#4A3728]">수업 종료</h3>
-                      <p className="text-xs text-[#8B7E74]">{selectedDate}</p>
-                    </div>
-                  </div>
-                  <p className="mb-6 text-sm leading-relaxed text-[#4A3728]">
-                    수업을 종료하면 <b>모든 학생 화면에 ‘오늘 수업 끝!’ 안내가 뜨고, 공개된 실습은 모두 잠깁니다.</b>
-                    <br />
-                    <span className="text-[#8B7E74]">
-                      수업 기록·메모·출석은 그대로 유지됩니다. 다시 공개하면 안내가 사라지고 이어서 진행할 수 있어요.
-                    </span>
-                  </p>
-                  <div className="flex justify-end gap-2">
-                    <button
-                      onClick={() => setIsEndLessonModalOpen(false)}
-                      className="rounded-2xl bg-[#F3F2EE] px-5 py-3 text-sm font-bold text-[#4A3728] transition-all hover:bg-[#EAE8E2]"
-                    >
-                      취소
-                    </button>
-                    <button
-                      onClick={handleEndLesson}
-                      className="inline-flex items-center gap-1.5 rounded-2xl bg-[#B42318] px-5 py-3 text-sm font-bold text-white transition-all hover:bg-[#8F1B12]"
-                    >
-                      <Power size={15} />
-                      수업 종료
-                    </button>
-                  </div>
-                </div>
-              </div>
+            {/* 교사 화면(프로젝터 미러링)에 띄우는 다국어 안내 카드 — 학생들이 프로젝터로 이 카드를 읽는다(교사가 읽는 창이 아님).
+                수업 종료=🎉 오늘 수업 끝!, 쉬는시간=☕ 10분 쉬고 다시 시작. 학생 개별 화면·공개 콘텐츠는 건드리지 않는다. */}
+            {teacherNotice === 'end' && (
+              <CyclingNoticeCard
+                emoji="🎉"
+                langs={END_NOTICE_LANGS}
+                onClose={() => setTeacherNotice(null)}
+                fullscreen
+              />
+            )}
+            {teacherNotice === 'break' && (
+              <CyclingNoticeCard
+                emoji="☕"
+                langs={BREAK_NOTICE_LANGS}
+                onClose={() => setTeacherNotice(null)}
+                fullscreen
+              />
             )}
 
             <button
@@ -6274,6 +6265,13 @@ export const ClassroomDashboard: React.FC<ClassroomDashboardProps> = ({
                   <span className="shrink-0 rounded-full bg-[#EEF7F0] px-2 py-0.5 text-[10px] font-bold text-[#2D7A4D] tabular-nums">
                     학생 화면 {publishedPageNumberById.get(livePreviewContent.id)}/{publishedPageCount}p
                   </span>
+                )}
+                {/* 실습 타이머 — 이 팝업이 실습 행의 카운트다운 칩을 가리므로, 팝업 위쪽에도 남은 시간을
+                    같이 띄워 교사가 학생과 같은 타이머를 확인할 수 있게 한다(공개 중 타이머가 있을 때만). */}
+                {currentPublishedLesson?.practiceTimers?.[livePreviewContent.id] && (
+                  <PracticeTimerCountdown
+                    endsAt={currentPublishedLesson.practiceTimers[livePreviewContent.id]}
+                  />
                 )}
               </h3>
               <div className="flex shrink-0 items-center gap-2">

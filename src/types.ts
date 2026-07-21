@@ -194,8 +194,6 @@ export interface PublishedLesson {
   publishedContentIds: string[];
   ownerUid: string;
   updatedAt: string;
-  /** 교사가 '수업 종료'를 누른 시각(ISO). 설정되면 학생 화면에 종료 안내가 뜬다. 다시 공개하면 새 문서로 덮여 해제된다. */
-  endNoticeAt?: string;
   /**
    * 공개 순간 시작된 실습 타이머의 만료 시각(contentId → ISO). 콘텐츠의 timerMinutes로 계산되어 기록되고,
    * 만료되면 학생 화면에서 그 실습이 잠기고 '선생님 화면을 보세요' 전환 카드가 뜬다.

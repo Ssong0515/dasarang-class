@@ -16,9 +16,11 @@ interface SlideEmbedProps {
   slideUrl: string;
   title: string;
   roundedBottom?: boolean;
+  // 지정하면(예: 'f') 이 키 하나로 슬라이드 전체화면을 토글한다. 강사 대시보드 이론 발표용 — 학생 화면엔 안 넘긴다.
+  presentShortcut?: string;
 }
 
-export const SlideEmbed: React.FC<SlideEmbedProps> = ({ slideUrl, title, roundedBottom = false }) => {
+export const SlideEmbed: React.FC<SlideEmbedProps> = ({ slideUrl, title, roundedBottom = false, presentShortcut }) => {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [isHovered, setIsHovered] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
@@ -30,6 +32,29 @@ export const SlideEmbed: React.FC<SlideEmbedProps> = ({ slideUrl, title, rounded
       void el.requestFullscreen();
     }
   };
+
+  // 강사 대시보드 전용 단축키(presentShortcut가 있을 때만) — 키 하나로 이론 전체화면 진입/해제 토글.
+  // 나가기는 브라우저 Esc가 기본으로도 처리하므로 iframe에 포커스가 있어도 확실히 빠져나온다.
+  useEffect(() => {
+    if (!presentShortcut) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // 메모·프롬프트 등 입력 중이거나 수식 키 조합이면 무시(타이핑과 충돌 방지).
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+      const el = document.activeElement as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || el?.isContentEditable) return;
+      if (e.key.toLowerCase() !== presentShortcut.toLowerCase()) return;
+      e.preventDefault();
+      if (document.fullscreenElement) {
+        void document.exitFullscreen().catch(() => {});
+      } else {
+        handleFullscreen();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presentShortcut]);
 
   useEffect(() => {
     if (isMaximized) {

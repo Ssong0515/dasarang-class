@@ -42,67 +42,6 @@ const getLocalDateString = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
-// 수업 종료 안내는 종료 시각부터 이 시간까지만 보여준다 — 이후에 페이지를 여는 학생에겐 뜨지 않고, 떠 있던 안내도 자동으로 닫힌다.
-const END_NOTICE_MAX_AGE_MS = 10 * 60 * 1000;
-
-// 수업 종료 안내 — 여러 나라 학생이라 언어를 특정할 수 없어 몇 초마다 순환 표시한다.
-const END_NOTICE_LANGS: { code: string; label: string; dir?: 'rtl' | 'ltr'; title: string; lines: string[] }[] = [
-  {
-    code: 'ko', label: '한국어', title: '오늘 수업 끝!',
-    lines: [
-      '오늘 수업은 여기서 마무리합니다.',
-      '모두 수고 많으셨습니다! 다음에 또 만나요.',
-      '이제 정리해도 좋습니다.',
-      '더 연습하고 싶은 학생은 10분 정도 자율 연습 가능합니다.',
-    ],
-  },
-  {
-    code: 'ru', label: 'Русский', title: 'Урок окончен!',
-    lines: [
-      'На этом сегодняшний урок заканчивается.',
-      'Все большие молодцы! Увидимся в следующий раз.',
-      'Теперь можно собираться.',
-      'Кто хочет ещё потренироваться — можно заниматься самостоятельно около 10 минут.',
-    ],
-  },
-  {
-    code: 'vi', label: 'Tiếng Việt', title: 'Hết giờ học rồi!',
-    lines: [
-      'Buổi học hôm nay kết thúc ở đây.',
-      'Các em đã làm rất tốt! Hẹn gặp lại lần sau.',
-      'Bây giờ các em có thể dọn dẹp.',
-      'Bạn nào muốn luyện tập thêm có thể tự học khoảng 10 phút.',
-    ],
-  },
-  {
-    code: 'zh', label: '中文', title: '今天的课结束啦！',
-    lines: [
-      '今天的课到这里就结束了。',
-      '大家都辛苦了！下次再见。',
-      '现在可以收拾东西了。',
-      '想多练习的同学可以自己再练大约 10 分钟。',
-    ],
-  },
-  {
-    code: 'en', label: 'English', title: 'Class is over!',
-    lines: [
-      "That's the end of today's class.",
-      'Great job, everyone! See you next time.',
-      'You can pack up now.',
-      'If you want more practice, you can study on your own for about 10 minutes.',
-    ],
-  },
-  {
-    code: 'ur', label: 'اردو', dir: 'rtl', title: 'آج کی کلاس ختم!',
-    lines: [
-      'آج کی کلاس یہیں ختم ہوتی ہے۔',
-      'سب نے بہت اچھا کام کیا! اگلی بار ملیں گے۔',
-      'اب آپ سامان سمیٹ سکتے ہیں۔',
-      'جو طالب علم مزید مشق کرنا چاہتے ہیں وہ تقریباً 10 منٹ خود سے مشق کر سکتے ہیں۔',
-    ],
-  },
-];
-
 // 실습 타이머 만료 후 전환 카드를 보여주는 시간 — 이 시간이 지나면(늦게 접속한 학생 포함) 카드가 뜨지 않는다.
 const TIMER_NOTICE_MAX_AGE_MS = 2 * 60 * 1000;
 
@@ -394,13 +333,9 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   const [previewDate, setPreviewDate] = useState(getLocalDateString(new Date()));
 
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [isEndNoticeOpen, setIsEndNoticeOpen] = useState(false);
-  const [endNoticeLang, setEndNoticeLang] = useState(0);
   // 실습 타이머용 현재 시각 — 타이머가 돌거나 방금 만료된 동안만 1초씩 갱신된다(아래 효과).
   const [timerNow, setTimerNow] = useState(() => Date.now());
   const [timerNoticeLang, setTimerNoticeLang] = useState(0);
-  // 이미 닫은 종료 안내의 endNoticeAt. 교사가 다시 종료(새 시각)하면 값이 달라져 안내가 다시 뜬다.
-  const [dismissedEndNoticeAt, setDismissedEndNoticeAt] = useState<string | null>(null);
   const [uploadStudentName, setUploadStudentName] = useState('');
   const [uploadTitle, setUploadTitle] = useState('');
   const [uploadAnonymous, setUploadAnonymous] = useState(false);
@@ -548,16 +483,6 @@ export const StudentPage: React.FC<StudentPageProps> = ({
     return () => window.removeEventListener('message', handleStudentWorkSave);
     // 저장 대상 반은 effectiveClassroomIdRef(ref)로 항상 최신값을 읽으므로 deps에 넣지 않는다.
   }, [getAuthToken]);
-
-  // 종료 안내가 열려 있는 동안 몇 초마다 언어를 바꾼다(읽을 수 있는 속도). 닫히면 멈추고 한국어로 초기화.
-  useEffect(() => {
-    if (!isEndNoticeOpen) return;
-    setEndNoticeLang(0);
-    const id = setInterval(() => {
-      setEndNoticeLang((i) => (i + 1) % END_NOTICE_LANGS.length);
-    }, 4500);
-    return () => clearInterval(id);
-  }, [isEndNoticeOpen]);
 
   const hasManagedHistoryEntryRef = useRef(false);
 
@@ -715,40 +640,11 @@ export const StudentPage: React.FC<StudentPageProps> = ({
       .sort()
       .pop() ?? null;
   const isTimerNoticeOpen = Boolean(recentTimerExpiryAt);
-  // 교사가 대시보드에서 '수업 종료'를 누르면 publishedLessons에 endNoticeAt가 찍힌다 → 모든 학생 화면에 종료 안내를 띄운다.
-  const activeEndNoticeAt =
-    publishedLessons
-      .filter((lesson) => lesson.date === gatingDateString && lesson.endNoticeAt)
-      .map((lesson) => lesson.endNoticeAt as string)
-      .sort()
-      .pop() || null;
-
   // 팝업들 Esc로 닫기.
   useEscToClose(isUploadModalOpen, () => {
     setIsUploadModalOpen(false);
     resetUploadModal();
   });
-  useEscToClose(isEndNoticeOpen, () => {
-    setDismissedEndNoticeAt(activeEndNoticeAt);
-    setIsEndNoticeOpen(false);
-  });
-  // 종료 안내 신호가 오면 자동으로 띄우고, 학생이 이미 닫은 신호(같은 시각)면 닫아 둔다.
-  // 단, 종료 시각부터 10분이 지나면 띄우지 않는다 — 늦게 페이지를 연 학생에겐 안 뜨고, 떠 있던 안내도 시간이 되면 자동으로 닫힌다.
-  useEffect(() => {
-    if (!activeEndNoticeAt || activeEndNoticeAt === dismissedEndNoticeAt) {
-      setIsEndNoticeOpen(false);
-      return;
-    }
-    const remainingMs =
-      END_NOTICE_MAX_AGE_MS - (Date.now() - new Date(activeEndNoticeAt).getTime());
-    if (remainingMs <= 0) {
-      setIsEndNoticeOpen(false);
-      return;
-    }
-    setIsEndNoticeOpen(true);
-    const timer = window.setTimeout(() => setIsEndNoticeOpen(false), remainingMs);
-    return () => window.clearTimeout(timer);
-  }, [activeEndNoticeAt, dismissedEndNoticeAt]);
 
   // 실습 타이머 1초 시계 — 타이머가 돌고 있거나 방금 만료(전환 카드 표시 중)인 동안만 돈다.
   // 멈추면 timerNow가 고정되지만, 만료 판정(endMs <= timerNow)은 이미 참이라 잠금 상태는 유지된다.
@@ -1463,7 +1359,6 @@ export const StudentPage: React.FC<StudentPageProps> = ({
           classroomId={effectiveClassroom?.id}
           classroomName={effectiveClassroom?.name}
           date={gatingDateString}
-          endNoticeAt={activeEndNoticeAt}
         />
       )}
 
@@ -1535,50 +1430,6 @@ export const StudentPage: React.FC<StudentPageProps> = ({
         </div>
       )}
 
-      {/* 수업 종료 안내 — 교사가 대시보드에서 '수업 종료'를 누르면 실시간 신호로 모든 학생 화면에 뜬다. 학생은 띄우거나 닫을 수만 있다. */}
-      {isEndNoticeOpen && (
-        <div
-          className="fixed inset-0 z-[110] flex cursor-pointer items-center justify-center bg-black/50 p-4"
-          onClick={() => {
-            setDismissedEndNoticeAt(activeEndNoticeAt);
-            setIsEndNoticeOpen(false);
-          }}
-          title="화면을 누르면 닫혀요"
-        >
-          <div className="w-full max-w-lg rounded-[28px] bg-white p-8 text-center shadow-2xl sm:p-12">
-            <div className="text-6xl">🎉</div>
-            <h2
-              className="mt-4 font-serif text-3xl font-bold text-[#141414]"
-              dir={END_NOTICE_LANGS[endNoticeLang].dir || 'ltr'}
-            >
-              {END_NOTICE_LANGS[endNoticeLang].title}
-            </h2>
-            <div
-              className="mt-6 min-h-[180px] space-y-3 text-xl font-medium leading-relaxed text-[#4A3728]"
-              dir={END_NOTICE_LANGS[endNoticeLang].dir || 'ltr'}
-            >
-              {END_NOTICE_LANGS[endNoticeLang].lines.map((line, idx) => (
-                <p key={idx} className={idx === END_NOTICE_LANGS[endNoticeLang].lines.length - 1 ? 'text-lg text-[#8B7E74]' : ''}>
-                  {line}
-                </p>
-              ))}
-            </div>
-            <div className="mt-7 flex flex-wrap items-center justify-center gap-2" dir="ltr">
-              {END_NOTICE_LANGS.map((lang, idx) => (
-                <span
-                  key={lang.code}
-                  className={`rounded-full px-3 py-1 text-xs font-bold transition-colors ${
-                    idx === endNoticeLang ? 'bg-[#8B5E3C] text-white' : 'bg-[#F3F2EE] text-[#A89F94]'
-                  }`}
-                >
-                  {lang.label}
-                </span>
-              ))}
-            </div>
-            <p className="mt-4 text-xs text-[#A89F94]">화면을 누르면 닫혀요 · Tap anywhere to close</p>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
