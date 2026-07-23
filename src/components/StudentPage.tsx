@@ -17,6 +17,7 @@ import {
 import { Classroom, LessonCategory, LessonContent, PublishedLesson } from '../types';
 import { resolveAppPath } from '../utils/appPaths';
 import { useEscToClose } from '../utils/useEscToClose';
+import { isPublishedLessonExpired } from '../utils/classroomDomain';
 import { StudentContentCard, StudentContentPreviewFrame } from './StudentContentPreview';
 import { StudentVoiceButton, VOICE_LANG_CHANGED_EVENT } from './StudentVoiceButton';
 import { StudentSubtitleOverlay } from './StudentSubtitleOverlay';
@@ -335,6 +336,9 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   // 실습 타이머용 현재 시각 — 타이머가 돌거나 방금 만료된 동안만 1초씩 갱신된다(아래 효과).
   const [timerNow, setTimerNow] = useState(() => Date.now());
+  // 공개 자동 만료(발행 후 3시간) 판정용 현재 시각 — 공개가 살아 있는 동안만 1분씩 갱신된다(아래 효과).
+  // 교사 앱이 꺼져 있어 문서가 남아 있어도, 이 값으로 학생 화면이 만료 즉시 스스로 잠긴다.
+  const [nowTs, setNowTs] = useState(() => Date.now());
   const [timerNoticeLang, setTimerNoticeLang] = useState(0);
   const [uploadStudentName, setUploadStudentName] = useState('');
   const [uploadTitle, setUploadTitle] = useState('');
@@ -506,9 +510,21 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   // 학생: 실제 오늘 공개분만. 강사 미리보기: previewDate 기준(테스트용 — 실제 학생 화면엔 영향 없음).
   const realTodayString = getLocalDateString(new Date());
   const gatingDateString = isAdmin ? previewDate : realTodayString;
+  // 공개 자동 만료 — 발행 후 3시간이 지난 공개는 교사가 끄지 않아도 학생 화면에서 전부 잠근다.
+  // 아래 게이팅은 전부 이 '살아 있는 공개'만 본다(만료분은 없는 것처럼 취급).
+  const livePublishedLessons = publishedLessons.filter(
+    (lesson) => !isPublishedLessonExpired(lesson, nowTs)
+  );
+  // 오늘 공개가 아직 살아 있는(만료 전) 게 하나라도 있으면 1분 시계를 돌려 만료 순간 화면이 저절로 잠기게 한다.
+  const hasPendingPublishExpiry = publishedLessons.some(
+    (lesson) =>
+      lesson.date === gatingDateString &&
+      ((lesson.publishedContentIds?.length ?? 0) > 0 || Boolean(lesson.publishedTheory?.url)) &&
+      !isPublishedLessonExpired(lesson, nowTs)
+  );
   // 실습 타이머(공개 순간 시작된 카운트다운) — 오늘 publishedLessons의 practiceTimers를 합쳐 본다.
   const activePracticeTimers: Record<string, string> = {};
-  publishedLessons
+  livePublishedLessons
     .filter((lesson) => lesson.date === gatingDateString && lesson.practiceTimers)
     .forEach((lesson) => {
       Object.entries(lesson.practiceTimers as Record<string, string>).forEach(([contentId, endsAt]) => {
@@ -522,7 +538,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
       .map(([contentId]) => contentId)
   );
   const publishedContentIdSet = new Set(
-    publishedLessons
+    livePublishedLessons
       .filter((lesson) => lesson.date === gatingDateString)
       .flatMap((lesson) => lesson.publishedContentIds)
       .filter((contentId) => !expiredTimerContentIds.has(contentId))
@@ -530,7 +546,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   // 오늘 공개 중인 이론 슬라이드(한 번에 하나) — 여러 반이 공개했다면 가장 최근 것.
   // 이론만 켜지면 화면 전체, 실습·예제와 같이 켜지면 좌우(모바일은 위아래) 반반으로 나온다.
   const publishedTheory =
-    publishedLessons
+    livePublishedLessons
       .filter((lesson) => lesson.date === gatingDateString && lesson.publishedTheory?.url)
       .sort((a, b) => String(a.updatedAt).localeCompare(String(b.updatedAt)))
       .map((lesson) => lesson.publishedTheory!)
@@ -538,7 +554,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   // 실습칸 페이지 목록 — 공개 목록 순서 그대로 1,2,3…페이지(대시보드와 같은 번호라 교사가 "N페이지"로 부른다).
   // 타이머가 만료된 실습은 목록에서 빼지 않고 '잠김 페이지'로 남겨 뒤 페이지 번호가 밀리지 않게 한다.
   const orderedPublishedContentIds: string[] = [];
-  publishedLessons
+  livePublishedLessons
     .filter((lesson) => lesson.date === gatingDateString)
     .sort((a, b) => String(a.updatedAt).localeCompare(String(b.updatedAt)))
     .flatMap((lesson) => lesson.publishedContentIds)
@@ -655,6 +671,14 @@ export const StudentPage: React.FC<StudentPageProps> = ({
     return () => clearInterval(id);
   }, [needsTimerTick]);
 
+  // 공개 자동 만료 시계 — 살아 있는 공개가 있는 동안만 1분씩 돈다. 만료 순간 한 번 더 갱신되면
+  // livePublishedLessons가 그 공개를 걸러 화면이 저절로 잠기고, 더는 살아 있는 공개가 없어 시계도 멈춘다.
+  useEffect(() => {
+    if (!hasPendingPublishExpiry) return;
+    const id = setInterval(() => setNowTs(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, [hasPendingPublishExpiry]);
+
   // 전환 카드 언어 — 학생이 언어 버튼으로 고른 언어가 카드에 있으면 그 언어로 바로 고정해 띄운다
   // (실습 병기 번역·교사 자막과 같은 감각). 미선택·자막 끄기('off') 등 카드에 없는 언어면
   // 종전대로 몇 초마다 순환한다(종료 안내와 같은 패턴). 카드가 떠 있는 중에 언어를 바꿔도 즉시 따라간다.
@@ -714,7 +738,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   //          (3) 가장 최근에 공개한 반. Drive 폴더가 연결된 반을 우선하되, 후보가 있으면 폴더 없는 반이라도 잡아
   //          서버가 "Drive 폴더 미연결"이라는 구체적 에러를 돌려주도록 한다.
   const viewedContentId = currentPage?.content.id ?? null;
-  const todaysPublishedLessons = [...publishedLessons]
+  const todaysPublishedLessons = [...livePublishedLessons]
     .filter(
       (lesson) =>
         lesson.date === gatingDateString &&

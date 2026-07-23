@@ -84,6 +84,7 @@ import {
   comparePreferredClassroomDateRecord,
   getClassroomDateRecordId,
   getPublishedLessonId,
+  isPublishedLessonExpired,
   sortClassroomDateRecords,
 } from './utils/classroomDomain';
 import {
@@ -1075,6 +1076,37 @@ export default function App() {
       unsubscribePublishedLessons();
     };
   }, [user, isAdmin, canAccessStudentPage]);
+
+  // 공개(이론·실습) 자동 꺼짐 — 발행 후 3시간이 지난 공개 문서를 교사 앱이 켜져 있는 동안 자동으로 내린다.
+  // 문서를 지우면 학생 화면이 즉시 잠기고 대시보드 LIVE 표시도 사라진다. 인터벌이 스냅샷마다
+  // 재생성되지 않도록 최신 목록은 ref로 참조한다. (읽는 시점 만료 판정은 별도로 학생 화면에도 적용돼,
+  // 교사 앱을 꺼둬도 학생은 만료 즉시 잠긴다.)
+  const publishedLessonsRef = useRef<PublishedLesson[]>([]);
+  useEffect(() => {
+    publishedLessonsRef.current = publishedLessons;
+  }, [publishedLessons]);
+  useEffect(() => {
+    if (!user || !isAdmin) return;
+    const sweepExpiredPublishedLessons = () => {
+      const now = Date.now();
+      publishedLessonsRef.current.forEach((lesson) => {
+        const hasContent =
+          (lesson.publishedContentIds?.length ?? 0) > 0 || Boolean(lesson.publishedTheory?.url);
+        if (hasContent && isPublishedLessonExpired(lesson, now)) {
+          deleteDoc(doc(db, PUBLISHED_LESSONS_COLLECTION, lesson.id)).catch((error) =>
+            handleFirestoreError(
+              error,
+              OperationType.DELETE,
+              `${PUBLISHED_LESSONS_COLLECTION}/${lesson.id}`
+            )
+          );
+        }
+      });
+    };
+    sweepExpiredPublishedLessons(); // 앱을 열자마자 한 번 — 밤새 켜둔 공개를 정리
+    const intervalId = setInterval(sweepExpiredPublishedLessons, 60_000);
+    return () => clearInterval(intervalId);
+  }, [user, isAdmin]);
 
   // dailyReviews 리스너는 isAdmin 변경에도 반응해야 하므로 별도 useEffect로 분리
   useEffect(() => {
@@ -2143,6 +2175,7 @@ export default function App() {
               classrooms={classroomsWithStudents}
               classroomDateRecords={classroomDateRecords}
               contents={contents}
+              publishedLessons={publishedLessons}
               onManageClassroom={handleManageClassroom}
               onGoToLibrary={() => handleTabChange('content-library')}
               onGoToMemo={() => handleTabChange('memo')}

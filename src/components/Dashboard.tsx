@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useEscToClose } from '../utils/useEscToClose';
+import { getPublishedLessonLiveState } from '../utils/classroomDomain';
 import {
   LayoutGrid,
   BookOpen,
@@ -17,7 +18,13 @@ import {
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { ClassroomDiagnosticsBanner } from './ClassroomDiagnosticsBanner';
-import { Classroom, ClassroomDateRecord, ClassroomLoadDiagnostics, LessonContent } from '../types';
+import {
+  Classroom,
+  ClassroomDateRecord,
+  ClassroomLoadDiagnostics,
+  LessonContent,
+  PublishedLesson,
+} from '../types';
 import {
   getClassroomCardColors,
   getClassroomIconComponent,
@@ -52,8 +59,9 @@ const MonthlyEarningsCalendar: React.FC<{
   classrooms: Classroom[];
   dateRecords: ClassroomDateRecord[];
   contents: LessonContent[];
+  publishedLessons: PublishedLesson[];
   onManageClassroom: (classroom: Classroom, date?: string) => void;
-}> = ({ classrooms, dateRecords, contents, onManageClassroom }) => {
+}> = ({ classrooms, dateRecords, contents, publishedLessons, onManageClassroom }) => {
   const [view, setView] = useState(() => {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() };
@@ -86,6 +94,42 @@ const MonthlyEarningsCalendar: React.FC<{
     }
     return map;
   }, [dateRecords]);
+
+  // 공개(LIVE) 판정에 쓰는 현재 시각. 공개 문서가 있으면 1분마다 갱신해,
+  // 자동 만료(발행 후 3시간)가 지나면 LIVE 배지가 별도 조작 없이 저절로 사라진다.
+  const [nowTs, setNowTs] = useState(() => Date.now());
+  const hasPublishedContent = useMemo(
+    () =>
+      publishedLessons.some(
+        (lesson) =>
+          (lesson.publishedContentIds?.length ?? 0) > 0 || Boolean(lesson.publishedTheory?.url)
+      ),
+    [publishedLessons]
+  );
+  useEffect(() => {
+    if (!hasPublishedContent) return;
+    const id = setInterval(() => setNowTs(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, [hasPublishedContent]);
+
+  // 지금 학생 화면에 이론/실습이 실제로 켜져 있는 회차 인덱스. key=`${classroomId}_${date}`.
+  // 내용이 있어도 자동 만료됐으면 제외된다(getPublishedLessonLiveState가 TTL을 함께 판정).
+  const liveByKey = useMemo(() => {
+    const map = new Map<string, { theory: boolean; practice: boolean }>();
+    for (const lesson of publishedLessons) {
+      const state = getPublishedLessonLiveState(lesson, nowTs);
+      if (state.any) {
+        map.set(`${lesson.classroomId}_${lesson.date}`, {
+          theory: state.theory,
+          practice: state.practice,
+        });
+      }
+    }
+    return map;
+  }, [publishedLessons, nowTs]);
+
+  const getLive = (classroomId: string, dateStr: string) =>
+    liveByKey.get(`${classroomId}_${dateStr}`);
 
   // 이론 준비 = 그날 기록에 이론 슬라이드 URL이 1개 이상.
   // 실습 준비 = 그날 기록한 콘텐츠 중 실습(html 있고 slideUrl 없음)이 1개 이상.
@@ -140,6 +184,11 @@ const MonthlyEarningsCalendar: React.FC<{
     const readiness = getReadiness(entry.classroomId, cell);
     const isDone = entry.status === 'done';
     const memoPresent = hasMemo(entry.classroomId, cell);
+    const live = getLive(entry.classroomId, cell);
+    const isLive = Boolean(live);
+    const liveLabel = live
+      ? [live.theory ? '이론' : null, live.practice ? '실습' : null].filter(Boolean).join('·')
+      : '';
     const statusLabel =
       entry.status === 'done' ? '완료' : entry.status === 'skipped' ? '건너뜀' : '예정';
     const inPopup = variant === 'popup';
@@ -152,13 +201,15 @@ const MonthlyEarningsCalendar: React.FC<{
           handleEntryClick(entry.classroomId, cell);
         }}
         title={
-          isDone
-            ? `${entry.classroomName} · 완료 / 메모 ${
-                memoPresent ? '있음' : '없음'
-              } (클릭하면 클래스로 이동)`
-            : `${entry.classroomName} · ${statusLabel} / 이론 ${
-                readiness.theoryReady ? '준비됨' : '준비안됨'
-              } · 실습 ${readiness.practiceReady ? '준비됨' : '준비안됨'} (클릭하면 클래스로 이동)`
+          isLive
+            ? `${entry.classroomName} · 🔴 지금 LIVE — ${liveLabel} 학생에게 공개 중 (클릭하면 클래스로 이동해 끌 수 있어요)`
+            : isDone
+              ? `${entry.classroomName} · 완료 / 메모 ${
+                  memoPresent ? '있음' : '없음'
+                } (클릭하면 클래스로 이동)`
+              : `${entry.classroomName} · ${statusLabel} / 이론 ${
+                  readiness.theoryReady ? '준비됨' : '준비안됨'
+                } · 실습 ${readiness.practiceReady ? '준비됨' : '준비안됨'} (클릭하면 클래스로 이동)`
         }
         className={`flex w-full min-w-0 items-center text-left transition-colors hover:bg-[#F3F2EE] ${
           inPopup
@@ -193,7 +244,22 @@ const MonthlyEarningsCalendar: React.FC<{
             {statusLabel}
           </span>
         )}
-        {isDone ? (
+        {isLive ? (
+          // 자동 만료(발행 후 3시간) 전까지 학생 화면에 켜져 있는 회차 — 끄는 걸 놓쳐도 여기서 바로 보인다.
+          // 준비/메모 배지보다 우선하며, 모바일에서도 항상 보이게 한다.
+          <span
+            className={`shrink-0 flex items-center font-extrabold text-[#D12E2E] ${
+              inPopup ? 'gap-1 rounded-md bg-[#FCE4E4] px-2 py-0.5 text-[10px]' : 'gap-0.5 rounded bg-[#FCE4E4] px-1 py-0.5 text-[8px]'
+            }`}
+          >
+            <span
+              className={`rounded-full bg-[#E23B3B] animate-pulse ${
+                inPopup ? 'h-2 w-2' : 'h-1.5 w-1.5'
+              }`}
+            />
+            LIVE
+          </span>
+        ) : isDone ? (
           <span
             className={`shrink-0 items-center gap-0.5 rounded px-1 font-bold ${
               inPopup ? 'flex text-[10px]' : 'hidden text-[8px] sm:flex'
@@ -375,15 +441,31 @@ const MonthlyEarningsCalendar: React.FC<{
           const dayNum = Number(cell.slice(8, 10));
           const day = earnings.byDate.get(cell);
           const isToday = cell === todayStr;
+          // LIVE(공개 중) 회차가 있는 날은 셀 자체를 빨갛게 강조하고, 그 회차를 맨 앞으로 올려
+          // '+N개 더'에 가려 놓치는 일이 없게 한다.
+          const dayEntries = day?.entries ?? [];
+          const orderedEntries =
+            dayEntries.length > 1
+              ? [...dayEntries].sort(
+                  (a, b) =>
+                    (liveByKey.has(`${b.classroomId}_${cell}`) ? 1 : 0) -
+                    (liveByKey.has(`${a.classroomId}_${cell}`) ? 1 : 0)
+                )
+              : dayEntries;
+          const dayHasLive = dayEntries.some((entry) =>
+            liveByKey.has(`${entry.classroomId}_${cell}`)
+          );
           return (
             <div
               key={cell}
               className={`flex min-h-[72px] min-w-0 flex-col overflow-hidden rounded-xl border p-1 transition-colors sm:p-1.5 ${
-                isToday
-                  ? 'border-[#2F5EA8] bg-[#EAF1FB]'
-                  : day
-                    ? 'border-[#ECEAE4] bg-white'
-                    : 'border-transparent'
+                dayHasLive
+                  ? 'border-[#E23B3B] bg-[#FDECEC]'
+                  : isToday
+                    ? 'border-[#2F5EA8] bg-[#EAF1FB]'
+                    : day
+                      ? 'border-[#ECEAE4] bg-white'
+                      : 'border-transparent'
               }`}
             >
               <span
@@ -397,16 +479,16 @@ const MonthlyEarningsCalendar: React.FC<{
               {/* 수업 달력: 클래스별 칩(이론·실습 준비 배지) — 클릭하면 해당 클래스로 이동 */}
               {day && mode === 'class' && (
                 <div className="mt-1 flex flex-col gap-0.5">
-                  {day.entries.slice(0, 3).map((entry, entryIndex) =>
+                  {orderedEntries.slice(0, 3).map((entry, entryIndex) =>
                     renderEntryChip(entry, cell, entryIndex)
                   )}
-                  {day.entries.length > 3 && (
+                  {orderedEntries.length > 3 && (
                     <button
                       type="button"
                       onClick={() => setExpandedDate(cell)}
                       className="rounded-md py-0.5 pl-1 text-left text-[9px] font-bold text-[#8B5E3C] transition-colors hover:bg-[#F3F2EE]"
                     >
-                      +{day.entries.length - 3}개 더
+                      +{orderedEntries.length - 3}개 더
                     </button>
                   )}
                 </div>
@@ -515,9 +597,15 @@ const MonthlyEarningsCalendar: React.FC<{
                     </button>
                   </div>
                   <div className="flex max-h-[60vh] flex-col gap-1.5 overflow-y-auto">
-                    {day.entries.map((entry, entryIndex) =>
-                      renderEntryChip(entry, expandedDate, entryIndex, 'popup')
-                    )}
+                    {[...day.entries]
+                      .sort(
+                        (a, b) =>
+                          (liveByKey.has(`${b.classroomId}_${expandedDate}`) ? 1 : 0) -
+                          (liveByKey.has(`${a.classroomId}_${expandedDate}`) ? 1 : 0)
+                      )
+                      .map((entry, entryIndex) =>
+                        renderEntryChip(entry, expandedDate, entryIndex, 'popup')
+                      )}
                   </div>
                 </motion.div>
               </motion.div>
@@ -555,6 +643,7 @@ interface DashboardProps {
   classrooms?: Classroom[];
   classroomDateRecords?: ClassroomDateRecord[];
   contents?: LessonContent[];
+  publishedLessons?: PublishedLesson[];
   classroomLoadDiagnostics?: ClassroomLoadDiagnostics;
   onManageClassroom: (classroom: Classroom, date?: string) => void;
   onGoToLibrary: () => void;
@@ -566,6 +655,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   classrooms: allClassrooms = [],
   classroomDateRecords = [],
   contents = [],
+  publishedLessons = [],
   classroomLoadDiagnostics,
   onManageClassroom,
   onGoToLibrary,
@@ -588,6 +678,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         classrooms={classrooms}
         dateRecords={classroomDateRecords}
         contents={contents}
+        publishedLessons={publishedLessons}
         onManageClassroom={onManageClassroom}
       />
     </main>
