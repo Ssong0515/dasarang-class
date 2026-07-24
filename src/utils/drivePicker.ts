@@ -37,22 +37,36 @@ async function loadGis(): Promise<void> {
   await loadScript('https://accounts.google.com/gsi/client');
 }
 
+// 같은 세션 동안 스코프별로 액세스 토큰을 캐시해, 버튼을 다시 눌러도 구글 창이 안 뜨게 한다.
+const tokenCache: Record<string, { token: string; expiresAt: number }> = {};
+
 async function getAccessToken(
   clientId: string,
   hintEmail?: string,
   scope = DRIVE_READONLY_SCOPE
 ): Promise<string> {
+  const cached = tokenCache[scope];
+  // 만료 1분 전까지는 캐시된 토큰을 그대로 재사용 (구글 호출 자체를 건너뜀)
+  if (cached && cached.expiresAt > Date.now() + 60_000) {
+    return cached.token;
+  }
   return new Promise((resolve, reject) => {
     const tokenClient = window.google.accounts.oauth2.initTokenClient({
       client_id: clientId,
       scope,
       hint: hintEmail,
+      // 빈 문자열 = 이미 권한을 준 계정이면 계정 선택 창 없이 조용히 토큰을 재발급.
+      // (권한을 한 번도 안 준 최초 1회에만 동의 창이 뜨고, 이후로는 바로 진행)
+      prompt: '',
       callback: (response: any) => {
         if (response.error) {
           reject(new Error(response.error_description || response.error));
           return;
         }
-        resolve(response.access_token as string);
+        const token = response.access_token as string;
+        const expiresInSec = Number(response.expires_in) || 3600;
+        tokenCache[scope] = { token, expiresAt: Date.now() + expiresInSec * 1000 };
+        resolve(token);
       },
     });
     tokenClient.requestAccessToken();
