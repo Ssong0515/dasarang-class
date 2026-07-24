@@ -18,6 +18,7 @@ import { Classroom, LessonCategory, LessonContent, PublishedLesson } from '../ty
 import { resolveAppPath } from '../utils/appPaths';
 import { useEscToClose } from '../utils/useEscToClose';
 import { isPublishedLessonExpired } from '../utils/classroomDomain';
+import { serverNow } from '../utils/serverTime';
 import { StudentContentCard, StudentContentPreviewFrame } from './StudentContentPreview';
 import { StudentVoiceButton, VOICE_LANG_CHANGED_EVENT } from './StudentVoiceButton';
 import { StudentSubtitleOverlay } from './StudentSubtitleOverlay';
@@ -335,10 +336,10 @@ export const StudentPage: React.FC<StudentPageProps> = ({
 
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   // 실습 타이머용 현재 시각 — 타이머가 돌거나 방금 만료된 동안만 1초씩 갱신된다(아래 효과).
-  const [timerNow, setTimerNow] = useState(() => Date.now());
+  const [timerNow, setTimerNow] = useState(() => serverNow());
   // 공개 자동 만료(발행 후 3시간) 판정용 현재 시각 — 공개가 살아 있는 동안만 1분씩 갱신된다(아래 효과).
   // 교사 앱이 꺼져 있어 문서가 남아 있어도, 이 값으로 학생 화면이 만료 즉시 스스로 잠긴다.
-  const [nowTs, setNowTs] = useState(() => Date.now());
+  const [nowTs, setNowTs] = useState(() => serverNow());
   const [timerNoticeLang, setTimerNoticeLang] = useState(0);
   const [uploadStudentName, setUploadStudentName] = useState('');
   const [uploadTitle, setUploadTitle] = useState('');
@@ -667,7 +668,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   const needsTimerTick = runningTimerEndsAt !== null || recentTimerExpiryAt !== null;
   useEffect(() => {
     if (!needsTimerTick) return;
-    const id = setInterval(() => setTimerNow(Date.now()), 1000);
+    const id = setInterval(() => setTimerNow(serverNow()), 1000);
     return () => clearInterval(id);
   }, [needsTimerTick]);
 
@@ -675,7 +676,7 @@ export const StudentPage: React.FC<StudentPageProps> = ({
   // livePublishedLessons가 그 공개를 걸러 화면이 저절로 잠기고, 더는 살아 있는 공개가 없어 시계도 멈춘다.
   useEffect(() => {
     if (!hasPendingPublishExpiry) return;
-    const id = setInterval(() => setNowTs(Date.now()), 60_000);
+    const id = setInterval(() => setNowTs(serverNow()), 60_000);
     return () => clearInterval(id);
   }, [hasPendingPublishExpiry]);
 

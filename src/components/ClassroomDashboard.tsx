@@ -88,6 +88,7 @@ import {
 import { isAttendanceExcluded } from '../utils/attendance';
 import { formatSessionLabel } from '../utils/sessionLabel';
 import { useEscToClose } from '../utils/useEscToClose';
+import { serverNow } from '../utils/serverTime';
 import { deleteField } from '../firebase';
 import { formatWon, getSessionFee } from '../utils/fee';
 import { openDriveSlidePicker, openDriveFolderPicker, requestDriveSyncAccessToken } from '../utils/drivePicker';
@@ -155,9 +156,9 @@ type Tab = 'dashboard' | 'results' | 'students' | 'curriculum' | 'settings';
 
 // 공개 중 실습 타이머의 남은 시간(교사용). 1초마다 자체 갱신 — 대시보드 전체를 리렌더하지 않고 이 칩만 다시 그린다.
 const PracticeTimerCountdown: React.FC<{ endsAt: string }> = ({ endsAt }) => {
-  const [now, setNow] = useState(() => Date.now());
+  const [now, setNow] = useState(() => serverNow());
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
+    const id = setInterval(() => setNow(serverNow()), 1000);
     return () => clearInterval(id);
   }, []);
   const totalSec = Math.max(0, Math.ceil((new Date(endsAt).getTime() - now) / 1000));

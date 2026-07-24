@@ -179,7 +179,24 @@ try{ parent.postMessage({ type:'dasa-practice-done' }, '*'); }catch(e){}
 - ★ **단계 이동 훅 `window.__reviewNav(dir)` 필수**(2026-07-19 복원, 2026-07-20 학생 복습에도 사용): 대시보드 실습 미리보기 모달의 ◀ ▶(강사·상시)와 학생 화면의 단계 다시 보기 ◀ ▶(완료한 학생) **둘 다** 이 훅을 쓴다 — 콘텐츠 사이가 아니라 **한 실습 안에서** 단계를 앞뒤로 넘긴다. 앱이 부모→iframe `postMessage({type:'dasa-review-nav', dir:+1|-1})`를 보내면 iframe의 브리지가 `window.__reviewNav(dir)`를 호출한다(옛 `window.__reviewSkip`은 dir>0 폴백으로만 남음).
   - `dir>0`(다음/건너뛰기): 현재 대기 단계를 **정상 속도로 실행**해 효과(색·자르기·정렬·애니메이션)를 보여주며 다음 단계로. 라운드 넘김 포함, 완료 화면까지. 인트로에서 첫 ▶는 실습 진입.
   - `dir<0`(이전): 인트로로 리셋한 뒤 애니메이션 없이 이전 단계까지 **빠르게 재생**(reviewFast).
-  - 구현: `var reviewFast=false; function afterDelay(ms,fn){ if(reviewFast){fn();} else {setTimeout(fn,ms);} }`로 단계 진행 setTimeout을 감싼다 → 뒤로 갈 땐 무애니 재생, 현재 forward 단계만 정상 속도. `reviewEnter()`(인트로→첫 단계)·한 단계 전진(기존 성공 경로 재사용)·`reviewGoto(n)`·busy 중 forward 무시. **절대 throw 금지, 학생 조작·`dasa-practice-done`에 영향 없음.** 타이핑·드래그 단계는 값·선택을 프로그램으로 채워 같은 성공 경로를 태운다.
+  - ★ **표준 드롭인 (타이핑/라운드 = 아키타입 A). 골격이 이러면 고민 말고 그대로 복사한다.** 실습 IIFE 맨 끝 `})();` **바로 앞**에 넣는다. `ri`(현재 라운드)·`ROUNDS`·`loadRound`·`nextRound`·`startGame`·`show`·화면 id `intro`/`game`/`end`를 쓴다(아키타입 A 표준 이름):
+    ```js
+    window.__reviewNav=function(dir){try{
+      if(!$('intro').classList.contains('hidden')){if(dir>0)startGame();return;}
+      if(!$('end').classList.contains('hidden')){if(dir<0){show('game');loadRound(ROUNDS.length-1);}return;}
+      if(dir>0)nextRound(); else if(ri>0)loadRound(ri-1);
+    }catch(e){}};
+    ```
+  - **단일 화면/캡스톤 (아키타입 D = 라운드 없음).** `intro`→`play` 2화면 + 씨드(`SEED`) 편집 + 완성 검사(`completed`) 구조라면: ▶=인트로에서 `start()`→(빈 씨드)→예시(`EXAMPLE`)를 채워 완성, ◀=씨드로 되돌리기→인트로. 스크립트 맨 끝 `</script>` 앞에 넣는다(화면·변수 이름은 실제 코드에 맞춘다):
+    ```js
+    window.__reviewNav=function(dir){try{
+      if(!$('intro').classList.contains('hidden')){if(dir>0)start();return;}
+      if(dir>0){if(!completed){$('code').value=EXAMPLE;onInput();}}
+      else{if(completed){$('code').value=SEED;onInput();}else{$('play').classList.add('hidden');$('intro').classList.remove('hidden');}}
+    }catch(e){}};
+    ```
+  - **애니메이션이 있는 다단계(색·자르기·정렬 등 효과 실습)만** 위 단순 골격 대신: `var reviewFast=false; function afterDelay(ms,fn){ if(reviewFast){fn();} else {setTimeout(fn,ms);} }`로 단계 진행 setTimeout을 감싸, `dir<0`이면 인트로 리셋 후 `reviewFast=true`로 이전 단계까지 무애니 재생하고 forward 한 단계만 정상 속도로 보여준다(`reviewEnter()`·한 단계 전진은 기존 성공 경로 재사용·`reviewGoto(n)`·busy 중 forward 무시). **절대 throw 금지, 학생 조작·`dasa-practice-done`에 영향 없음.** 타이핑·드래그 단계는 값·선택을 프로그램으로 채워 같은 성공 경로를 태운다.
+  - ⚠️ **생성 직후 반드시 확인**(빠뜨리면 대시보드 '단계' ◀▶ 버튼이 완전 무반응): 미리보기를 열고 콘솔에서 `typeof window.__reviewNav`가 `'function'`인지, `window.__reviewNav(1)`을 반복하면 인트로→각 라운드→완료 화면으로 넘어가고 `window.__reviewNav(-1)`로 되짚어지며 양 끝(첫 라운드·완료 화면)에서 조용히 멈추는지. **⛔ 실패 사례: 2026-07-24, 루틴이 4회차 표 만들기 실습 8개 전부에서 이 훅을 누락 → 강사 '단계' 버튼 전부 무반응.** 이 훅은 설명만 있고 코드가 없으면 늘 빠지니 위 드롭인을 실제로 붙였는지 함수 존재로 확인할 것.
   - (참고) 교사 미리보기에는 `window.__DASA_REVIEW__===true`도 주입되지만(수동 🌐 번역 버튼용) 이 값으로 별도 UI를 만들지 말 것.
   - **경계에서 조용히 멈춘다(2026-07-20)**: 앱은 첫/끝 단계에서 ◀ ▶를 회색·비활성으로 바꾸지 않는다 — 부모가 실습의 현재 단계 위치를 모르고, 위치를 보고받는 계약은 (복잡도 때문에) 두지 않기로 했다. 그러니 `__reviewNav`는 **양 끝에서 그냥 no-op**(첫 단계에서 dir<0, 완료 화면에서 dir>0이면 throw·에러 없이 그대로 머무름)이면 되고, 실습이 위치를 부모에 보고할 필요는 없다.
 
@@ -198,7 +215,8 @@ try{ parent.postMessage({ type:'dasa-practice-done' }, '*'); }catch(e){}
 - [ ] 막히는 곳이 없는가(항상 진행 가능, 실패해도 안내)?
 - [ ] 쉬운 짧은 한국어, 9~24세 톤(활기참), 큰 글씨인가? (번역은 학생 페이지 우하단 언어 버튼이 자동 처리 — 실습에 별도 번역 버튼 만들지 말 것)
 - [ ] 반 설정 병기 언어(`annotationLanguages`)용 **번역 사전(`window.__DSR_TR__`)을 `<head>`에 심었는가**([6.6])? (없으면 번역이 동작하지 않음. 런타임 번역 API 없음)
-- [ ] **완료 화면 도달 시 `dasa-practice-done` postMessage 한 줄**을 넣었는가([6.7])? 학생용 이동·건너뛰기 버튼(UI)을 직접 만들지 않았는가? **단계 이동 훅 `window.__reviewNav(dir)`([6.7], 강사 미리보기 + 학생 완료 후 복습 공용)를 넣었는가**(◀ 이전 / ▶ 다음, 양 끝에서 no-op, throw 없음)?
+- [ ] **완료 화면 도달 시 `dasa-practice-done` postMessage 한 줄**을 넣었는가([6.7])? 학생용 이동·건너뛰기 버튼(UI)을 직접 만들지 않았는가?
+- [ ] ★ **단계 이동 훅 `window.__reviewNav(dir)`를 실제로 붙였는가**([6.7] 표준 드롭인 복사)? — 설명만으로는 늘 빠진다. **콘솔에서 `typeof window.__reviewNav==='function'` 확인 + `(1)`/`(-1)`로 라운드가 앞뒤로 실제 이동하는지 눈으로 확인**했는가(양 끝 no-op, throw 없음)? 빠뜨리면 강사 미리보기·학생 복습의 ◀▶ '단계' 버튼이 완전히 죽는다.
 - [ ] **G·Claude 직접 사용 시수**라면 [4.5] 프롬프트 빌더인가 — 칩 클릭으로 **완성된 한국어 프롬프트** 조립 + **복사 버튼**(타자 0)? 자동 호출·전송은 안 했는가?
 - [ ] 민감 주제·실제 개인정보 요구가 없는가? **실제 학생 이름을 쓰지 않았는가**(예시 이름: 예제='다사랑', 실습 모델='선생님')?
 - [ ] **외부도구 회차의 완충 실습**이면: 실제 UI(버튼·메뉴 이름 그대로)를 재현한 3~5분 튜토리얼 시뮬레이션인가 — 조작을 직접 하고, 틀리면 무엇이 틀렸는지 짚고, 눌러야 할 곳을 가리키는가? 완료 화면 마지막에 전환 카드("🖥️ 이제 진짜 {도구}에서! 선생님 화면을 보세요", 병기 포함)를 다시 하기보다 크게 넣었는가? 주제가 단계 예제(주제 A)·최종 예제(주제 B)와 **다른 연습용 주제 C**인가(예: A=한국 생활 설문, B=소풍 설문 ↔ C=간식 설문)? `timerMinutes`(3~5)를 지정했는가?

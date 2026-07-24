@@ -87,6 +87,7 @@ import {
   isPublishedLessonExpired,
   sortClassroomDateRecords,
 } from './utils/classroomDomain';
+import { calibrateServerTime, serverNow } from './utils/serverTime';
 import {
   getVisibleStudents,
   isStudentDeleted,
@@ -1077,6 +1078,15 @@ export default function App() {
     };
   }, [user, isAdmin, canAccessStudentPage]);
 
+  // 서버시각 보정 — 기기(노트북) 시계가 틀어져 있어도 실습 타이머·자동 잠금·공개 만료가
+  // 모든 클라이언트에서 같은 '서버 기준 시각'(serverNow)으로 계산되도록 오프셋을 잰다.
+  // 교사·학생 공통(권한과 무관하게 마운트 시 1회 + 10분마다). 실패하면 로컬시계로 폴백.
+  useEffect(() => {
+    calibrateServerTime();
+    const id = setInterval(() => calibrateServerTime(), 10 * 60_000);
+    return () => clearInterval(id);
+  }, []);
+
   // 공개(이론·실습) 자동 꺼짐 — 발행 후 3시간이 지난 공개 문서를 교사 앱이 켜져 있는 동안 자동으로 내린다.
   // 문서를 지우면 학생 화면이 즉시 잠기고 대시보드 LIVE 표시도 사라진다. 인터벌이 스냅샷마다
   // 재생성되지 않도록 최신 목록은 ref로 참조한다. (읽는 시점 만료 판정은 별도로 학생 화면에도 적용돼,
@@ -1088,7 +1098,7 @@ export default function App() {
   useEffect(() => {
     if (!user || !isAdmin) return;
     const sweepExpiredPublishedLessons = () => {
-      const now = Date.now();
+      const now = serverNow();
       publishedLessonsRef.current.forEach((lesson) => {
         const hasContent =
           (lesson.publishedContentIds?.length ?? 0) > 0 || Boolean(lesson.publishedTheory?.url);
@@ -1967,7 +1977,7 @@ export default function App() {
         }
         const timerMinutes = contents.find((content) => content.id === contentId)?.timerMinutes;
         if (typeof timerMinutes === 'number' && timerMinutes > 0) {
-          practiceTimers[contentId] = new Date(Date.now() + timerMinutes * 60_000).toISOString();
+          practiceTimers[contentId] = new Date(serverNow() + timerMinutes * 60_000).toISOString();
         }
       });
 
